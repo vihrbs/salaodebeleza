@@ -1118,14 +1118,37 @@ function saveAg() {
   var hora = document.getElementById('ag-h').value;
   var svcs = Array.from(document.querySelectorAll('#ag-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
   if (!cli || !pro || !svcs.length) { toast('Preencha cliente, profissional e pelo menos 1 serviço','er'); return; }
-  apiFetch('/api/agendamentos',{method:'POST',body:{cliente_id:cli,profissional_id:pro,data_hora:data+'T'+hora+':00',servicos:svcs,observacoes:document.getElementById('ag-obs').value,origem:document.getElementById('ag-or').value}}).catch(function(){});
-  toast('Agendamento criado! ✅','ok'); closeM('m-ag'); loadDashTl(); loadAgenda(); loadKPIs();
+  var agBtn = document.querySelector('#m-ag .btnp');
+  agBtn.disabled=true; agBtn.textContent='Salvando...';
+  (DEMO ? Promise.resolve({id:'demo_'+Date.now()}) : apiFetch('/api/agendamentos',{method:'POST',body:{cliente_id:cli,profissional_id:pro,data_hora:data+'T'+hora+':00',servicos:svcs,observacoes:document.getElementById('ag-obs').value,origem:document.getElementById('ag-or').value}}))
+  .then(function(){
+    toast('Agendamento criado! ✅','ok');
+    closeM('m-ag');
+    document.getElementById('ag-obs').value='';
+    document.querySelectorAll('#ag-svcs .svc-pill.on').forEach(function(el){ el.classList.remove('on'); });
+    loadDashTl(); loadAgenda(); loadKPIs();
+  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ agBtn.disabled=false; agBtn.textContent='✅ Confirmar'; });
 }
 function saveCli() {
   var nome = document.getElementById('cli-n').value.trim();
   if (!nome) { toast('Nome obrigatório','er'); return; }
-  apiFetch('/api/clientes',{method:'POST',body:{nome:nome,telefone:document.getElementById('cli-t').value,email:document.getElementById('cli-e').value,observacoes:document.getElementById('cli-o').value,como_conheceu:document.getElementById('cli-k').value,data_nascimento:document.getElementById('cli-nasc').value||undefined}}).catch(function(){});
-  toast('Cliente cadastrado! ✅','ok'); closeM('m-cli'); loadClientes(); loadKPIs();
+  var btn = document.querySelector('#m-cli .btnp');
+  btn.disabled=true; btn.textContent='Salvando...';
+  var body = {nome:nome,telefone:document.getElementById('cli-t').value,email:document.getElementById('cli-e').value,observacoes:document.getElementById('cli-o').value,como_conheceu:document.getElementById('cli-k').value};
+  if (document.getElementById('cli-nasc').value) body.data_nascimento = document.getElementById('cli-nasc').value;
+  (DEMO ? Promise.resolve({id:'demo_'+Date.now(),nome:nome,telefone:body.telefone,email:body.email,historico_count:0,total_gasto:0,status:'novo',cor:COLS[Math.floor(Math.random()*COLS.length)]}) : apiFetch('/api/clientes',{method:'POST',body:body}))
+  .then(function(r){
+    toast('Cliente cadastrado! ✅','ok');
+    closeM('m-cli');
+    document.getElementById('cli-n').value='';
+    document.getElementById('cli-t').value='';
+    document.getElementById('cli-e').value='';
+    document.getElementById('cli-o').value='';
+    if (DEMO && r) { D.clis.push(r); CLIS=D.clis; renderCli(CLIS); } else { loadClientes(); }
+    loadKPIs();
+  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
 function saveLan() {
   var desc = document.getElementById('lan-d').value.trim();
@@ -1138,20 +1161,44 @@ function saveProd() {
   var nome = document.getElementById('p-n').value.trim();
   if (!nome) { toast('Nome obrigatório','er'); return; }
   apiFetch('/api/estoque',{method:'POST',body:{nome:nome,categoria:document.getElementById('p-c').value,fornecedor:document.getElementById('p-f').value,qtd_atual:parseFloat(document.getElementById('p-q').value)||0,qtd_minima:parseFloat(document.getElementById('p-m').value)||5,preco_custo:parseFloat(document.getElementById('p-p').value)||null}}).catch(function(){});
-  toast('Produto cadastrado! ✅','ok'); closeM('m-prod'); loadEst();
+  toast('Produto cadastrado! ✅','ok'); closeM('m-prod'); loadEst(); document.getElementById('p-n').value='';
 }
 function savePro() {
   var nome = document.getElementById('pr-n').value.trim();
   if (!nome) { toast('Nome obrigatório','er'); return; }
-  apiFetch('/api/profissionais',{method:'POST',body:{nome:nome,especialidade:document.getElementById('pr-e').value,telefone:document.getElementById('pr-t').value,comissao_pct:parseFloat(document.getElementById('pr-c').value)||40,cor_agenda:COR_SEL}}).catch(function(){});
-  toast('Profissional cadastrado! ✅','ok'); closeM('m-pro'); loadPros(); fillSelects();
+  var btn = document.querySelector('#m-pro .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  var body = {nome:nome, especialidade:document.getElementById('pr-e').value, telefone:document.getElementById('pr-t').value, comissao_pct:parseFloat(document.getElementById('pr-c').value)||40, cor_agenda:COR_SEL};
+  (DEMO ? Promise.resolve({nome:nome,especialidade:body.especialidade,comissao_pct:body.comissao_pct,cor_agenda:body.cor_agenda,total_servicos:0,faturado:0,id:'demo_'+Date.now()}) : apiFetch('/api/profissionais',{method:'POST',body:body}))
+  .then(function(r){
+    toast('Profissional cadastrado! ✅','ok');
+    closeM('m-pro');
+    document.getElementById('pr-n').value='';
+    document.getElementById('pr-e').value='';
+    document.getElementById('pr-t').value='';
+    document.getElementById('pr-c').value='40';
+    if (DEMO && r) { D.pros.push(r); PROS = D.pros; renderPros(PROS); } else { loadPros(); }
+    fillSelects();
+  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
 function saveSvc() {
   var nome  = document.getElementById('sv-n').value.trim();
   var preco = parseFloat(document.getElementById('sv-p').value);
   if (!nome || !preco) { toast('Nome e preço obrigatórios','er'); return; }
-  apiFetch('/api/servicos',{method:'POST',body:{nome:nome,categoria:document.getElementById('sv-c').value,duracao_min:parseInt(document.getElementById('sv-d').value)||60,preco:preco,comissao_pct:parseFloat(document.getElementById('sv-com').value)||40}}).catch(function(){});
-  toast('Serviço cadastrado! ✅','ok'); closeM('m-svc'); loadSvcs(); fillSelects();
+  var btn = document.querySelector('#m-svc .btnp');
+  btn.disabled=true; btn.textContent='Salvando...';
+  var body = {nome:nome, categoria:document.getElementById('sv-c').value, duracao_min:parseInt(document.getElementById('sv-d').value)||60, preco:preco, comissao_pct:parseFloat(document.getElementById('sv-com').value)||40};
+  (DEMO ? Promise.resolve({id:'demo_'+Date.now(),nome:nome,categoria:body.categoria,duracao_min:body.duracao_min,preco:preco,comissao_pct:body.comissao_pct,ativo:true}) : apiFetch('/api/servicos',{method:'POST',body:body}))
+  .then(function(r){
+    toast('Serviço cadastrado! ✅','ok');
+    closeM('m-svc');
+    document.getElementById('sv-n').value='';
+    document.getElementById('sv-p').value='';
+    if (DEMO && r) { D.svcs.push(r); SVCS=D.svcs; renderSvcs(SVCS); } else { loadSvcs(); }
+    fillSelects();
+  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
 function saveConfig() {
   apiFetch('/api/saloes/meu',{method:'PUT',body:{nome:document.getElementById('cfg-nome').value,telefone:document.getElementById('cfg-tel').value,whatsapp:document.getElementById('cfg-wpp').value,email:document.getElementById('cfg-email').value,endereco:document.getElementById('cfg-end').value}}).catch(function(){});
