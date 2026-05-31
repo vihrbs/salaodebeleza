@@ -9,9 +9,18 @@ app.use(express.json());
 
 // ── Supabase ─────────────────────────────────────────
 const { createClient } = require('@supabase/supabase-js');
+
+// Valida variáveis obrigatórias
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  console.error('ERRO: SUPABASE_URL e SUPABASE_SERVICE_KEY são obrigatórias!');
+  console.error('Configure as variáveis no Railway > Variables');
+  process.exit(1);
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
 const JWT_SECRET = process.env.JWT_SECRET || 'beleza_pro_secret_2026';
@@ -247,6 +256,7 @@ app.get('/api/agendamentos', auth, async (req, res) => {
   }
   if (profissional_id) q = q.eq('profissional_id', profissional_id);
   if (status)          q = q.eq('status', status);
+  if (req.query.cliente_id) q = q.eq('cliente_id', req.query.cliente_id);
 
   const { data: rows, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
@@ -432,6 +442,25 @@ app.put('/api/estoque/:id', auth, async (req, res) => {
   res.json(data);
 });
 
+// Movimentar estoque
+app.post('/api/estoque/:id/movimentar', auth, async (req, res) => {
+  const { tipo, quantidade, motivo } = req.body;
+  const { data: prod } = await supabase.from('produtos')
+    .select('qtd_atual, nome').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+  if (!prod) return res.status(404).json({ error: 'Produto não encontrado' });
+  const delta = tipo === 'entrada' ? Number(quantidade) : -Number(quantidade);
+  const nova  = Number(prod.qtd_atual) + delta;
+  if (nova < 0) return res.status(422).json({ error: 'Estoque insuficiente. Atual: ' + prod.qtd_atual });
+  await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
+  try {
+    await supabase.from('movimentacoes_estoque').insert({
+      salao_id: req.salao_id, produto_id: req.params.id,
+      tipo, quantidade, motivo, usuario_id: req.user.id
+    });
+  } catch(e) { /* tabela pode não existir, ignora */ }
+  res.json({ nova_quantidade: nova, produto: prod.nome });
+});
+
 // ═══════════════════════════════════════════════════
 // COMISSÕES
 // ═══════════════════════════════════════════════════
@@ -477,9 +506,10 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 // SALÃO
 // ═══════════════════════════════════════════════════
 app.get('/api/saloes/meu', auth, async (req, res) => {
-  const { data } = await supabase.from('saloes')
+  const { data, error } = await supabase.from('saloes')
     .select('*, planos(nome, features)').eq('id', req.salao_id).single();
-  res.json(data);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || {});
 });
 
 app.put('/api/saloes/meu', auth, async (req, res) => {
