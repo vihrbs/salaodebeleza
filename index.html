@@ -1057,8 +1057,7 @@ function renderEst(list) {
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
       '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Reposição registrada\',\'ok\')">+</button><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Editar\',\'inf\')">✏️</button></div></td>' +
-      '</tr>';
+'<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" title="Repor" onclick="event.stopPropagation();openMovModal(\''+p.id+'\',\''+p.nome+'\',\'entrada\')">+</button><button class="btnic btn btnsm" title="Usar" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\''+p.id+'\',\''+p.nome+'\',\'saida\')">−</button></div></td>' +      '</tr>';
   }).join('');
 }
 
