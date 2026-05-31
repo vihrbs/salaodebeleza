@@ -489,17 +489,36 @@ app.get('/api/comissoes', auth, async (req, res) => {
 });
 
 app.post('/api/comissoes/fechar', auth, async (req, res) => {
-  const { profissional_id, total_comissao } = req.body;
+  const { profissional_id, total_comissao, periodo_inicio, periodo_fim } = req.body;
   const now = new Date();
-  const ini = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  const fim = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
-  const { data, error } = await supabase.from('fechamentos_comissao')
-    .upsert({ salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
-              total_comissao: total_comissao || 0, status: 'pago', pago_em: new Date() },
-             { onConflict: 'salao_id,profissional_id,periodo_inicio' })
-    .select().single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  const ini = periodo_inicio || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const fim = periodo_fim    || new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
+
+  try {
+    // Verifica se já existe fechamento para este período
+    const { data: existing } = await supabase.from('fechamentos_comissao')
+      .select('id').eq('salao_id', req.salao_id)
+      .eq('profissional_id', profissional_id).eq('periodo_inicio', ini).maybeSingle();
+
+    let data, error;
+    if (existing) {
+      // Atualiza o existente
+      ({ data, error } = await supabase.from('fechamentos_comissao')
+        .update({ total_comissao: total_comissao || 0, status: 'pago', pago_em: new Date(), periodo_fim: fim })
+        .eq('id', existing.id).select().single());
+    } else {
+      // Insere novo
+      ({ data, error } = await supabase.from('fechamentos_comissao')
+        .insert({ salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
+                  total_comissao: total_comissao || 0, total_servicos: 0, total_bruto: 0,
+                  status: 'pago', pago_em: new Date() })
+        .select().single());
+    }
+    if (error) throw error;
+    res.json(data);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ═══════════════════════════════════════════════════
