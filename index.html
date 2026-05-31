@@ -546,6 +546,71 @@ tbody tr:hover{background:#F9FAFB}
 
 <div id="toasts"></div>
 
+<!-- Modal Perfil Cliente -->
+<div class="mov" id="m-cli-perfil">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt" id="cli-perfil-nome">Cliente</span><button class="mx" onclick="closeM('m-cli-perfil')">✕</button></div>
+    <div class="mb">
+      <div class="g2" style="margin-bottom:16px">
+        <div>
+          <div class="ct">Informações</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem">
+            <div><strong>Telefone:</strong> <span id="cp-tel">—</span></div>
+            <div><strong>E-mail:</strong> <span id="cp-email">—</span></div>
+            <div><strong>Nascimento:</strong> <span id="cp-nasc">—</span></div>
+            <div><strong>Como conheceu:</strong> <span id="cp-orig">—</span></div>
+            <div><strong>Observações:</strong> <span id="cp-obs">—</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="ct">Resumo</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="background:var(--bg);border-radius:var(--rs);padding:12px;text-align:center">
+              <div style="font-size:1.3rem;font-weight:800;color:var(--ac)" id="cp-visitas">0</div>
+              <div style="font-size:.7rem;color:var(--t2)">Visitas</div>
+            </div>
+            <div style="background:var(--bg);border-radius:var(--rs);padding:12px;text-align:center">
+              <div style="font-size:1.1rem;font-weight:800;color:var(--ac3)" id="cp-gasto">R$ 0</div>
+              <div style="font-size:.7rem;color:var(--t2)">Total gasto</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ct">Histórico de Visitas</div>
+      <div id="cp-historico"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-cli-perfil')">Fechar</button>
+      <button class="btn btnp" onclick="closeM('m-cli-perfil');openM('m-ag')">📅 Agendar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Movimentar Estoque -->
+<div class="mov" id="m-mov">
+  <div class="mbox md">
+    <div class="mh"><span class="mt" id="mov-title">Movimentar Estoque</span><button class="mx" onclick="closeM('m-mov')">✕</button></div>
+    <div class="mb">
+      <div style="padding:12px;background:var(--bg);border-radius:var(--rs);margin-bottom:14px;font-size:.82rem;font-weight:600" id="mov-prod-nome"></div>
+      <input type="hidden" id="mov-prod-id"/>
+      <input type="hidden" id="mov-tipo"/>
+      <div class="fg"><label class="fl">Quantidade</label><input type="number" class="fc" id="mov-qtd" value="1" min="1" step="0.5"/></div>
+      <div class="fg"><label class="fl">Motivo</label>
+        <select class="fc" id="mov-motivo">
+          <option value="uso_servico">Uso em serviço</option>
+          <option value="compra">Compra/Reposição</option>
+          <option value="perda">Perda/Vencimento</option>
+          <option value="ajuste">Ajuste de inventário</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-mov')">Cancelar</button>
+      <button class="btn btnp" id="mov-btn" onclick="salvarMov()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 // ── CONFIG ──────────────────────────────────────────────
@@ -1033,8 +1098,15 @@ function renderCom(list) {
 }
 
 function pagarCom(id, nome, val) {
-  apiFetch('/api/comissoes/fechar',{method:'POST',body:{profissional_id:id,total_comissao:val}}).catch(function(){});
-  toast('Comissão de ' + nome + ' marcada como paga!', 'ok'); loadCom();
+  var now = new Date();
+  var ini = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+  var fim = new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0];
+  apiFetch('/api/comissoes/fechar',{method:'POST',body:{
+    profissional_id:id, total_comissao:val,
+    periodo_inicio:ini, periodo_fim:fim
+  }})
+  .then(function(){ toast('Comissão de '+nome+' paga e salva! ✅','ok'); loadCom(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 function fecharCom(){ closeM('m-fcom'); toast('Comissões fechadas!','ok'); loadCom(); }
 
@@ -1201,8 +1273,22 @@ function saveSvc() {
   .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
 function saveConfig() {
-  apiFetch('/api/saloes/meu',{method:'PUT',body:{nome:document.getElementById('cfg-nome').value,telefone:document.getElementById('cfg-tel').value,whatsapp:document.getElementById('cfg-wpp').value,email:document.getElementById('cfg-email').value,endereco:document.getElementById('cfg-end').value}}).catch(function(){});
-  toast('Configurações salvas! ✅','ok');
+  var btn = document.querySelector('#page-config .btnp');
+  btn.disabled=true; btn.textContent='Salvando...';
+  var body = {
+    nome:     document.getElementById('cfg-nome').value,
+    telefone: document.getElementById('cfg-tel').value,
+    whatsapp: document.getElementById('cfg-wpp').value,
+    email:    document.getElementById('cfg-email').value,
+    endereco: document.getElementById('cfg-end').value
+  };
+  apiFetch('/api/saloes/meu',{method:'PUT',body:body})
+  .then(function(r){
+    toast('Configurações salvas! ✅','ok');
+    if(r && r.nome) document.getElementById('tb-salon').textContent = r.nome;
+  })
+  .catch(function(e){ toast('Erro ao salvar: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar Alterações'; });
 }
 function saveApi() {
   var url = (document.getElementById('cfg-api').value||'').trim().replace(/\/+$/,'');
@@ -1223,6 +1309,75 @@ function pickCor(el) {
   document.querySelectorAll('#cor-wrap div').forEach(function(e){ e.style.border='none'; });
   el.style.border = '3px solid ' + el.dataset.cor;
   COR_SEL = el.dataset.cor; document.getElementById('pr-cor').value = COR_SEL;
+}
+
+// ── CLIENTE MODAL ───────────────────────────────────────
+function openClientModal(tr) {
+  var raw = tr.getAttribute('data-cli');
+  if (!raw) return;
+  var c;
+  try { c = JSON.parse(raw); } catch(e) { return; }
+  document.getElementById('cli-perfil-nome').textContent = c.nome || '—';
+  document.getElementById('cp-tel').textContent   = c.telefone || '—';
+  document.getElementById('cp-email').textContent  = c.email    || '—';
+  document.getElementById('cp-nasc').textContent   = c.data_nascimento ? fdt(c.data_nascimento+'T12:00') : '—';
+  document.getElementById('cp-orig').textContent   = c.como_conheceu  || '—';
+  document.getElementById('cp-obs').textContent    = c.observacoes    || '—';
+  document.getElementById('cp-visitas').textContent = c.historico_count || 0;
+  document.getElementById('cp-gasto').textContent   = brl(c.total_gasto || 0);
+  openM('m-cli-perfil');
+  // Carrega histórico de agendamentos do cliente
+  var hist = document.getElementById('cp-historico');
+  hist.innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  apiFetch('/api/agendamentos?cliente_id=' + c.id + '&limit=20')
+  .then(function(r){
+    var list = r || [];
+    if (!list.length) { hist.innerHTML = '<div class="empty">Nenhum agendamento encontrado</div>'; return; }
+    hist.innerHTML = '<div style="display:flex;flex-direction:column;gap:4px">' +
+      list.map(function(a){
+        var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).join(', ') || '—';
+        return '<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--bg);border-radius:var(--rs);font-size:.78rem">' +
+          '<div style="min-width:80px;font-weight:600">' + fdt(a.data_hora) + '</div>' +
+          '<div style="flex:1;color:var(--t2)">' + sv + '</div>' +
+          '<span class="badge '+(SC[a.status]||'bg2')+'">' + (SL[a.status]||a.status) + '</span>' +
+          '<strong>' + brl(a.valor_total) + '</strong>' +
+          '</div>';
+      }).join('') + '</div>';
+  })
+  .catch(function(){ hist.innerHTML = '<div class="empty">Erro ao carregar histórico</div>'; });
+}
+
+// ── MOVIMENTAR ESTOQUE ───────────────────────────────────
+function openMovModal(id, nome, tipo) {
+  document.getElementById('mov-prod-id').value = id;
+  document.getElementById('mov-tipo').value    = tipo;
+  document.getElementById('mov-prod-nome').textContent = nome;
+  document.getElementById('mov-title').textContent = tipo === 'entrada' ? '📦 Repor Estoque' : '📤 Registrar Uso';
+  document.getElementById('mov-btn').textContent   = tipo === 'entrada' ? 'Confirmar Reposição' : 'Confirmar Uso';
+  var sel = document.getElementById('mov-motivo');
+  sel.innerHTML = tipo === 'entrada'
+    ? '<option value="compra">Compra/Reposição</option><option value="ajuste">Ajuste de inventário</option>'
+    : '<option value="uso_servico">Uso em serviço</option><option value="perda">Perda/Vencimento</option><option value="ajuste">Ajuste de inventário</option>';
+  document.getElementById('mov-qtd').value = '1';
+  openM('m-mov');
+}
+
+function salvarMov() {
+  var id   = document.getElementById('mov-prod-id').value;
+  var tipo = document.getElementById('mov-tipo').value;
+  var qtd  = parseFloat(document.getElementById('mov-qtd').value);
+  var mot  = document.getElementById('mov-motivo').value;
+  if (!qtd || qtd <= 0) { toast('Informe uma quantidade válida','er'); return; }
+  var btn = document.getElementById('mov-btn');
+  btn.disabled=true; btn.textContent='Salvando...';
+  apiFetch('/api/estoque/'+id+'/movimentar',{method:'POST',body:{tipo:tipo,quantidade:qtd,motivo:mot}})
+  .then(function(r){
+    toast(tipo==='entrada' ? 'Reposição registrada! ✅' : 'Uso registrado! ✅','ok');
+    closeM('m-mov');
+    loadEst();
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; });
 }
 
 // ── INIT ────────────────────────────────────────────────
