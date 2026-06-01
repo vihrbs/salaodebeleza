@@ -824,7 +824,7 @@ function loadAll() {
 // ── DASHBOARD ───────────────────────────────────────────
 function loadKPIs() {
   apiFetch('/api/dashboard/kpis').then(function(r){
-    var d = r || D.kpis;
+    var d = r || (DEMO ? D.kpis : {agendamentos_hoje:0,faturamento_hoje:0,clientes_ativos:0,novos_clientes_mes:0});
     document.getElementById('k1').textContent = d.agendamentos_hoje;
     document.getElementById('k2').textContent = brl(d.faturamento_hoje);
     document.getElementById('k3').textContent = d.clientes_ativos;
@@ -837,8 +837,8 @@ function loadKPIs() {
 
 function loadDashTl() {
   apiFetch('/api/dashboard/agenda-hoje').then(function(r){
-    renderTl(r && r.length ? r : D.ags);
-  }).catch(function(){ renderTl(D.ags); });
+    renderTl(r || []);
+  }).catch(function(){ renderTl(DEMO ? D.ags : []); });
 }
 
 function renderTl(list) {
@@ -867,8 +867,8 @@ function mudaStatus(id, status) {
 
 function loadTopSvc() {
   apiFetch('/api/dashboard/top-servicos').then(function(r){
-    renderTop(r && r.length ? r : D.top);
-  }).catch(function(){ renderTop(D.top); });
+    renderTop(r || []);
+  }).catch(function(){ renderTop(DEMO ? D.top : []); });
 }
 
 function renderTop(d) {
@@ -924,8 +924,8 @@ function loadAgenda() {
   if (data) params.set('data', data);
   if (pro)  params.set('profissional_id', pro);
   apiFetch('/api/agendamentos?' + params).then(function(r){
-    renderAgenda(r || D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); }));
-  }).catch(function(){ renderAgenda(D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); })); });
+    renderAgenda(r || (DEMO ? D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); }) : []));
+  }).catch(function(){ renderAgenda(DEMO ? D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); }) : []); });
 }
 
 function renderAgenda(list) {
@@ -952,11 +952,11 @@ function renderAgenda(list) {
 function loadClientes(q) {
   q = q || '';
   apiFetch('/api/clientes?q=' + encodeURIComponent(q) + '&limit=100').then(function(r){
-    var list = r ? (r.data||r) : D.clis.filter(function(c){ return !q || c.nome.toLowerCase().indexOf(q.toLowerCase())>=0; });
-    renderCli(list);
-    CLIS = list;
+    var list = r ? (r.data||r) : [];
+    if (!list.length && DEMO) list = D.clis.filter(function(c){ return !q || c.nome.toLowerCase().indexOf(q.toLowerCase())>=0; });
+    renderCli(list); CLIS = list;
   }).catch(function(){
-    var list = D.clis.filter(function(c){ return !q || c.nome.toLowerCase().indexOf(q.toLowerCase())>=0; });
+    var list = DEMO ? D.clis.filter(function(c){ return !q || c.nome.toLowerCase().indexOf(q.toLowerCase())>=0; }) : [];
     renderCli(list); CLIS = list;
   });
 }
@@ -984,7 +984,7 @@ function renderCli(list) {
 // ── FINANCEIRO ──────────────────────────────────────────
 function loadFin() {
   apiFetch('/api/financeiro/resumo').then(function(r){
-    var d = r || D.fin;
+    var d = r || (DEMO ? D.fin : {receita:0,despesa:0,lucro:0,apagar:0});
     document.getElementById('fr').textContent = brl(d.receita);
     document.getElementById('fd').textContent = brl(d.despesa);
     document.getElementById('fl').textContent = brl(d.lucro);
@@ -1034,10 +1034,11 @@ function renderLan(list) {
 function loadEst(q) {
   q = q || '';
   apiFetch('/api/estoque' + (q ? '?q='+encodeURIComponent(q) : '')).then(function(r){
-    var list = r || D.est.filter(function(p){ return !q || p.nome.toLowerCase().indexOf(q.toLowerCase())>=0; });
+    var list = r || [];
+    if (!list.length && DEMO) list = D.est.filter(function(p){ return !q || p.nome.toLowerCase().indexOf(q.toLowerCase())>=0; });
     renderEst(list);
   }).catch(function(){
-    renderEst(D.est.filter(function(p){ return !q || p.nome.toLowerCase().indexOf(q.toLowerCase())>=0; }));
+    renderEst(DEMO ? D.est.filter(function(p){ return !q || p.nome.toLowerCase().indexOf(q.toLowerCase())>=0; }) : []);
   });
 }
 
@@ -1055,7 +1056,7 @@ function renderEst(list) {
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
       '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="event.stopPropagation();openMovModal(\''+p.id+'\',\''+p.nome+'\',\'entrada\')">+</button><button class="btnic btn btnsm" style="color:red" onclick="event.stopPropagation();openMovModal(\''+p.id+'\',\''+p.nome+'\',\'saida\')">−</button></div></td>' +
+      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Reposição registrada\',\'ok\')">+</button><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Editar\',\'inf\')">✏️</button></div></td>' +
       '</tr>';
   }).join('');
 }
@@ -1063,8 +1064,8 @@ function renderEst(list) {
 // ── COMISSÕES ───────────────────────────────────────────
 function loadCom() {
   apiFetch('/api/comissoes').then(function(r){
-    renderCom(r && r.length ? r : D.com);
-  }).catch(function(){ renderCom(D.com); });
+    renderCom(r || []);
+  }).catch(function(){ renderCom(DEMO ? D.com : []); });
 }
 
 function renderCom(list) {
@@ -1111,8 +1112,8 @@ function fecharCom(){ closeM('m-fcom'); toast('Comissões fechadas!','ok'); load
 // ── PROFISSIONAIS ───────────────────────────────────────
 function loadPros() {
   apiFetch('/api/profissionais').then(function(r){
-    PROS = r && r.length ? r : D.pros; renderPros(PROS);
-  }).catch(function(){ PROS = D.pros; renderPros(D.pros); });
+    PROS = r || []; renderPros(PROS);
+  }).catch(function(){ PROS = DEMO ? D.pros : []; renderPros(PROS); });
 }
 
 function renderPros(list) {
@@ -1135,8 +1136,8 @@ function renderPros(list) {
 // ── SERVIÇOS ────────────────────────────────────────────
 function loadSvcs() {
   apiFetch('/api/servicos').then(function(r){
-    SVCS = r && r.length ? r : D.svcs; renderSvcs(SVCS);
-  }).catch(function(){ SVCS = D.svcs; renderSvcs(D.svcs); });
+    SVCS = r || []; renderSvcs(SVCS);
+  }).catch(function(){ SVCS = DEMO ? D.svcs : []; renderSvcs(SVCS); });
 }
 
 function renderSvcs(list) {
