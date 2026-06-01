@@ -206,12 +206,10 @@ tbody tr:hover{background:#F9FAFB}
         <input class="inp" type="email" id="in-email" placeholder="seu@email.com"/>
         <label class="lbl">Senha</label>
         <input class="inp" type="password" id="in-pw" placeholder="••••••"/>
-        <label class="lbl">URL da API <span style="font-weight:400;color:var(--t3)">(Railway — opcional)</span></label>
-        <input class="inp" type="url" id="in-api" placeholder="https://sua-api.up.railway.app"/>
-        <div style="font-size:.68rem;color:var(--t3);margin-top:3px">Deixe vazio para entrar em modo demo com dados de exemplo</div>
+        <input type="hidden" id="in-api" value=""/>
         <button class="l-btn" id="btn-in" onclick="doLogin()">Entrar no Painel</button>
         <div class="l-hint">
-          <strong>Modo demo:</strong> deixe a URL da API em branco e clique em Entrar para ver o sistema funcionando com dados de exemplo.
+          Novo por aqui? Clique em <strong>Criar Conta</strong> para cadastrar seu salão gratuitamente.
         </div>
       </div>
 
@@ -220,8 +218,7 @@ tbody tr:hover{background:#F9FAFB}
         <div class="l-err" id="err-up"></div>
         <label class="lbl" style="margin-top:0">Nome do Salão*</label>
         <input class="inp" id="up-salao" placeholder="Ex.: Studio Luna Hair"/>
-        <label class="lbl">URL da API* (Railway)</label>
-        <input class="inp" type="url" id="up-api" placeholder="https://sua-api.up.railway.app"/>
+        <input type="hidden" id="up-api" value=""/>
         <div class="fr" style="margin-top:0">
           <div><label class="lbl">Seu nome*</label><input class="inp" id="up-nome" placeholder="Seu nome"/></div>
           <div><label class="lbl">Telefone</label><input class="inp" id="up-tel" placeholder="(11) 9..."/></div>
@@ -403,8 +400,8 @@ tbody tr:hover{background:#F9FAFB}
           <div class="ct">API & Integração</div>
           <label class="fl">URL da API Backend (Railway)</label>
           <input class="fc fg" type="url" id="cfg-api" placeholder="https://sua-api.up.railway.app"/>
-          <div style="font-size:.7rem;color:var(--t3);margin-bottom:10px">Vazio = modo demo com dados de exemplo</div>
-          <button class="btn btnp" onclick="saveApi()" style="margin-bottom:14px">Conectar API</button>
+          <div style="font-size:.7rem;color:var(--t3);margin-bottom:10px">A URL padrão já está configurada no sistema. Altere apenas se mudar o Railway.</div>
+          <button class="btn btnp" onclick="saveApi()" style="margin-bottom:14px">Atualizar URL da API</button>
           <div style="padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.7rem;color:var(--t2)" id="api-st">Carregando...</div>
         </div>
         <div class="card">
@@ -614,9 +611,11 @@ tbody tr:hover{background:#F9FAFB}
 <script>
 'use strict';
 // ── CONFIG ──────────────────────────────────────────────
-var API = localStorage.getItem('bpro_api') || '';
+// URL da API fixa — altere aqui se mudar o Railway
+var API_FIXA = 'https://salaodebeleza-production-8eaa.up.railway.app';
+var API = localStorage.getItem('bpro_api') || API_FIXA;
 var TK  = localStorage.getItem('bpro_tk')  || '';
-var DEMO = !API;
+var DEMO = false; // nunca entra em demo se API_FIXA estiver definida
 var PROS = [], SVCS = [], CLIS = [];
 var COR_SEL = '#6C63FF';
 
@@ -675,8 +674,9 @@ function doLogin() {
   err.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Entrando...';
 
-  if (apiV) { API = apiV; localStorage.setItem('bpro_api', API); DEMO = false; }
-  else if (!API) { DEMO = true; }
+  if (apiV) { API = apiV; localStorage.setItem('bpro_api', API); }
+  else { API = API_FIXA; }
+  DEMO = false;
 
   (DEMO
     ? Promise.resolve(null)
@@ -702,10 +702,8 @@ function doLogin() {
 function doRegister() {
   var btn = document.getElementById('btn-up');
   var err = document.getElementById('err-up');
-  var apiV = document.getElementById('up-api').value.trim().replace(/\/+$/,'');
   err.style.display = 'none'; btn.disabled = true; btn.textContent = 'Criando...';
-  if (!apiV) { err.textContent='URL da API obrigatória para criar conta real'; err.style.display='block'; btn.disabled=false; btn.textContent='Criar Conta Grátis'; return; }
-  API = apiV; localStorage.setItem('bpro_api', API); DEMO = false;
+  API = API_FIXA; DEMO = false;
   fetch(API+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     nome_salao: document.getElementById('up-salao').value,
     nome: document.getElementById('up-nome').value,
@@ -1057,7 +1055,8 @@ function renderEst(list) {
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
       '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
-'<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" title="Repor" onclick="event.stopPropagation();openMovModal(\''+p.id+'\',\''+p.nome+'\',\'entrada\')">+</button><button class="btnic btn btnsm" title="Usar" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\''+p.id+'\',\''+p.nome+'\',\'saida\')">−</button></div></td>' +      '</tr>';
+      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Reposição registrada\',\'ok\')">+</button><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Editar\',\'inf\')">✏️</button></div></td>' +
+      '</tr>';
   }).join('');
 }
 
@@ -1381,10 +1380,10 @@ function salvarMov() {
 
 // ── INIT ────────────────────────────────────────────────
 window.addEventListener('load', function(){
-  API  = localStorage.getItem('bpro_api') || '';
+  API  = localStorage.getItem('bpro_api') || API_FIXA;
   TK   = localStorage.getItem('bpro_tk')  || '';
-  DEMO = !API;
-  if (document.getElementById('in-api') && API) document.getElementById('in-api').value = API;
+  DEMO = false;
+  localStorage.setItem('bpro_api', API);
   if (API && TK) {
     fetch(API+'/api/auth/me',{headers:{Authorization:'Bearer '+TK}})
       .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
