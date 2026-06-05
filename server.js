@@ -550,101 +550,62 @@ app.use((req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
 // ═══════════════════════════════════════════════════
 // START
 // ═══════════════════════════════════════════════════
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('Beleza Pro API rodando na porta ' + PORT);
-});
-
 
 // ═══════════════════════════════════════════════════
-// MERCADO PAGO — ASSINATURAS
+// MERCADO PAGO
 // ═══════════════════════════════════════════════════
 const MP_TOKEN = process.env.MP_ACCESS_TOKEN || '';
 
-// Cria link de pagamento para o salão assinar
 app.post('/api/pagamento/criar', auth, async (req, res) => {
-  if (!MP_TOKEN) return res.status(500).json({ error: 'Mercado Pago não configurado' });
+  if (!MP_TOKEN) return res.status(500).json({ error: 'Mercado Pago nao configurado' });
   try {
-    // Busca dados do salão
-    const { data: salao } = await supabase.from('saloes')
-      .select('nome, email').eq('id', req.salao_id).single();
-
-    // Cria preferência de pagamento (assinatura mensal)
     const response = await fetch('https://api.mercadopago.com/preapproval_plan', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + MP_TOKEN
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + MP_TOKEN },
       body: JSON.stringify({
-        reason: 'Beleza Pro — Plano Mensal',
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: 'months',
-          transaction_amount: 59,
-          currency_id: 'BRL'
-        },
-        back_url: 'https://vihrbs.github.io/salaodebeleza/painel.html',
-        payment_methods_allowed: {
-          payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }],
-          payment_methods: [{ id: 'pix' }]
-        }
+        reason: 'Beleza Pro - Plano Mensal',
+        auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 59, currency_id: 'BRL' },
+        back_url: 'https://vihrbs.github.io/salaodebeleza/painel.html'
       })
     });
-
     const plan = await response.json();
     if (!response.ok) throw new Error(plan.message || 'Erro ao criar plano');
-
     res.json({ link: plan.init_point, plan_id: plan.id });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Webhook — Mercado Pago notifica quando pagamento é feito
 app.post('/api/pagamento/webhook', async (req, res) => {
   const { type, data } = req.body;
   try {
     if (type === 'preapproval') {
-      const response = await fetch('https://api.mercadopago.com/preapproval/' + data.id, {
+      const r = await fetch('https://api.mercadopago.com/preapproval/' + data.id, {
         headers: { 'Authorization': 'Bearer ' + MP_TOKEN }
       });
-      const assinatura = await response.json();
-
-      // Busca salão pelo email do pagador
-      if (assinatura.payer_email) {
-        const { data: usuario } = await supabase.from('usuarios')
-          .select('salao_id').eq('email', assinatura.payer_email).single();
-
-        if (usuario) {
-          // Atualiza status do salão para ativo e estende trial
-          const proxRenovacao = new Date();
-          proxRenovacao.setMonth(proxRenovacao.getMonth() + 1);
-          await supabase.from('saloes').update({
-            ativo: true,
-            trial_ate: proxRenovacao,
-            plano_id: null // marca como assinante pago
-          }).eq('id', usuario.salao_id);
+      const ass = await r.json();
+      if (ass.payer_email) {
+        const { data: u } = await supabase.from('usuarios').select('salao_id').eq('email', ass.payer_email).single();
+        if (u) {
+          const prox = new Date(); prox.setMonth(prox.getMonth() + 1);
+          await supabase.from('saloes').update({ ativo: true, trial_ate: prox }).eq('id', u.salao_id);
         }
       }
     }
-  } catch(e) { console.error('Webhook error:', e); }
+  } catch(e) { console.error('Webhook:', e); }
   res.sendStatus(200);
 });
 
-// Verifica status de pagamento do salão
 app.get('/api/pagamento/status', auth, async (req, res) => {
-  const { data: salao } = await supabase.from('saloes')
-    .select('trial_ate, ativo').eq('id', req.salao_id).single();
-
+  const { data: salao } = await supabase.from('saloes').select('trial_ate, ativo').eq('id', req.salao_id).single();
   const hoje = new Date();
   const trial = salao?.trial_ate ? new Date(salao.trial_ate) : null;
-  const diasRestantes = trial ? Math.ceil((trial - hoje) / (1000 * 60 * 60 * 24)) : 0;
+  const dias = trial ? Math.ceil((trial - hoje) / 86400000) : 0;
+  res.json({ ativo: salao?.ativo, em_trial: dias > 0, dias_restantes: Math.max(0, dias), trial_expirado: dias <= 0 });
+});
 
-  res.json({
-    ativo: salao?.ativo,
-    em_trial: diasRestantes > 0,
-    dias_restantes: Math.max(0, diasRestantes),
-    trial_expirado: diasRestantes <= 0
-  });
+// 404
+app.use((req, res) => res.status(404).json({ error: 'Rota nao encontrada' }));
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('Beleza Pro API rodando na porta ' + PORT);
 });
