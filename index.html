@@ -3,1395 +3,622 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Beleza Pro</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,wght@0,700;1,400&display=swap" rel="stylesheet"/>
+<title>Beleza Pro — Sistema de Gestão para Salões de Beleza</title>
+<meta name="description" content="Sistema completo de gestão para salões de beleza. Agenda, clientes, financeiro, estoque e comissões em um só lugar. 14 dias grátis."/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{--ac:#6C63FF;--ac2:#FF6584;--ac3:#43D9AD;--ac4:#FFB347;--bg:#F7F8FA;--wh:#fff;--tx:#1A1D2E;--t2:#6B7280;--t3:#9CA3AF;--bd:#E5E8EF;--ok:#22C55E;--er:#EF4444;--warn:#F59E0B;--sh:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.06);--r:12px;--rs:8px}
-html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
-a{text-decoration:none}
-button{font-family:inherit;cursor:pointer}
-input,select,textarea{font-family:inherit}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#FAFAF8;--dark:#0F0F0D;--accent:#7C5CFC;--accent2:#FF6B6B;--accent3:#00C896;
+  --text:#1A1A18;--text2:#6B6B68;--border:#E8E8E4;--wh:#fff;
+  --sh:0 2px 16px rgba(0,0,0,.06);--r:12px;--rl:20px;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;line-height:1.6}
+img{max-width:100%}
 
-/* LOGIN */
-#login{display:flex;min-height:100vh}
-.l-left{flex:1;background:#1C1F2E;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;gap:16px}
-.l-logo{font-family:'Fraunces',serif;font-size:2.2rem;color:#fff;font-weight:700}
-.l-logo em{color:#a79eff;font-style:italic}
-.l-tag{color:rgba(255,255,255,.5);font-size:.9rem;text-align:center;max-width:280px;line-height:1.6}
-.l-feat{display:flex;flex-direction:column;gap:12px;margin-top:32px}
-.l-fi{display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.7);font-size:.82rem}
-.l-dot{width:7px;height:7px;border-radius:50%;background:var(--ac3);flex-shrink:0}
-.l-right{width:440px;display:flex;align-items:center;justify-content:center;padding:40px;background:var(--wh)}
-.l-box{width:100%;max-width:340px}
-.l-tabs{display:flex;border-bottom:2px solid var(--bd);margin-bottom:24px}
-.l-tab{flex:1;padding:9px 0;font-size:.85rem;font-weight:600;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;text-align:center;transition:all .15s}
-.l-tab.on{color:var(--ac);border-bottom-color:var(--ac)}
-.l-pane{display:none}.l-pane.on{display:block}
-.lbl{display:block;font-size:.72rem;font-weight:600;color:var(--t2);margin-bottom:5px;margin-top:12px}
-.inp{width:100%;padding:9px 13px;border:1.5px solid var(--bd);border-radius:var(--rs);font-size:.85rem;color:var(--tx);outline:none;transition:border-color .2s;background:var(--wh)}
-.inp:focus{border-color:var(--ac)}
-.inp::placeholder{color:var(--t3)}
-.l-err{background:#FEE2E2;color:#DC2626;padding:9px 12px;border-radius:var(--rs);font-size:.78rem;margin-bottom:12px;display:none}
-.l-ok{background:#DCFCE7;color:#16A34A;padding:9px 12px;border-radius:var(--rs);font-size:.78rem;margin-bottom:12px;display:none}
-.l-btn{width:100%;padding:11px;background:var(--ac);color:#fff;border:none;border-radius:var(--rs);font-size:.88rem;font-weight:700;margin-top:14px;transition:background .15s}
-.l-btn:hover{background:#5A52E0}
-.l-btn:disabled{opacity:.6;cursor:not-allowed}
-.l-hint{margin-top:14px;padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.72rem;color:var(--t2);text-align:center;line-height:1.5}
-.trial{background:#D6FAF0;color:#1A8A63;padding:9px;border-radius:var(--rs);font-size:.78rem;text-align:center;font-weight:600;margin-bottom:12px}
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:14px 40px;display:flex;align-items:center;justify-content:space-between;background:rgba(250,250,248,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);transition:box-shadow .2s}
+nav.scrolled{box-shadow:0 2px 20px rgba(0,0,0,.06)}
+.nav-logo{font-family:'Fraunces',serif;font-size:1.25rem;font-weight:900;color:var(--dark);text-decoration:none}
+.nav-logo em{color:var(--accent);font-style:italic}
+.nav-links{display:flex;align-items:center;gap:28px}
+.nav-links a{text-decoration:none;color:var(--text2);font-size:.85rem;font-weight:500;transition:color .15s}
+.nav-links a:hover{color:var(--text)}
+.nav-cta{background:var(--dark)!important;color:#fff!important;padding:9px 22px;border-radius:50px;font-size:.84rem;font-weight:600;text-decoration:none;transition:all .2s}
+.nav-cta:hover{background:var(--accent)!important;transform:translateY(-1px)}
 
-/* APP */
-#app{display:none;flex-direction:column;min-height:100vh}
+/* ── HERO ── */
+#hero{min-height:100vh;display:flex;align-items:center;padding:110px 40px 80px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 65% 45%,rgba(124,92,252,.07) 0%,transparent 70%),radial-gradient(ellipse 40% 40% at 20% 70%,rgba(0,200,150,.05) 0%,transparent 60%)}
+.hero-inner{max-width:1140px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;width:100%}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:50px;padding:6px 16px;font-size:.73rem;font-weight:600;color:var(--text2);margin-bottom:22px;box-shadow:var(--sh)}
+.hero-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--accent3);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+h1{font-family:'Fraunces',serif;font-size:clamp(2.4rem,4.5vw,3.6rem);font-weight:900;line-height:1.08;color:var(--dark);margin-bottom:18px}
+h1 em{color:var(--accent);font-style:italic}
+.hero-sub{font-size:1rem;color:var(--text2);line-height:1.75;max-width:440px;margin-bottom:32px}
+.hero-btns{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:36px}
+.btn-p{background:var(--accent);color:#fff;padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:700;text-decoration:none;border:none;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px}
+.btn-p:hover{background:#6344E0;transform:translateY(-2px);box-shadow:0 8px 24px rgba(124,92,252,.3)}
+.btn-s{background:transparent;color:var(--text);padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:600;text-decoration:none;border:1.5px solid var(--border);transition:all .2s;display:inline-flex;align-items:center;gap:8px}
+.btn-s:hover{border-color:var(--accent);color:var(--accent)}
+.hero-social{display:flex;align-items:center;gap:14px;font-size:.78rem;color:var(--text2)}
+.avatars{display:flex}
+.av{width:30px;height:30px;border-radius:50%;border:2px solid #fff;margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:#fff}
+.av:first-child{margin-left:0}
 
-/* TOPBAR */
-#topbar{height:50px;background:var(--wh);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 18px;gap:8px;position:sticky;top:0;z-index:99;box-shadow:0 1px 0 var(--bd)}
-.tb-logo{font-family:'Fraunces',serif;font-size:1.1rem;font-weight:700;white-space:nowrap}
-.tb-logo em{color:var(--ac);font-style:italic}
-.tb-salon{font-size:.7rem;color:var(--t3);margin-left:4px}
-.apibadge{font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:50px;margin-left:6px}
-.apibadge.live{background:#DCFCE7;color:#16A34A}
-.apibadge.demo{background:#FEF3C7;color:#B45309}
-.tb-nav{display:flex;gap:1px;margin-left:16px;flex:1;overflow-x:auto;scrollbar-width:none}
-.tb-nav::-webkit-scrollbar{display:none}
-.nb{display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:var(--rs);font-size:.76rem;font-weight:600;color:var(--t2);border:none;background:none;white-space:nowrap;transition:all .15s}
-.nb:hover{background:var(--bg);color:var(--tx)}
-.nb.on{background:var(--ac);color:#fff}
-.nbadge{background:var(--ac2);color:#fff;font-size:.58rem;padding:1px 5px;border-radius:50px;margin-left:2px}
-.tb-r{margin-left:auto;display:flex;align-items:center;gap:7px}
-.ib{width:30px;height:30px;border-radius:var(--rs);border:1.5px solid var(--bd);background:transparent;display:flex;align-items:center;justify-content:center;font-size:.82rem;transition:all .15s}
-.ib:hover{background:var(--ac);border-color:var(--ac);color:#fff}
-.ubox{display:flex;align-items:center;gap:7px;padding:4px 9px 4px 4px;border:1.5px solid var(--bd);border-radius:50px;background:var(--wh)}
-.uav{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--ac),var(--ac2));display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:#fff}
-.uname{font-size:.73rem;font-weight:600}
-.logout{background:none;border:none;font-size:.8rem;color:var(--t3);padding:2px 4px}
+/* MOCKUP */
+.hero-visual{position:relative;z-index:1}
+.mockup{background:#fff;border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.12),0 4px 16px rgba(0,0,0,.06);border:1px solid var(--border);overflow:hidden;animation:fadeUp .8s .2s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.mock-bar{background:#F5F5F3;padding:10px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border)}
+.mock-dots{display:flex;gap:5px}
+.mock-dot{width:9px;height:9px;border-radius:50%}
+.mock-url{flex:1;background:#fff;border:1px solid var(--border);border-radius:5px;padding:3px 10px;font-size:.68rem;color:var(--text2);margin:0 10px}
+.mock-body{padding:16px}
+.mock-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.mk{background:#F8F8F6;border-radius:9px;padding:10px;text-align:center}
+.mk-v{font-size:1rem;font-weight:800;color:var(--dark)}
+.mk-l{font-size:.6rem;color:var(--text2);margin-top:1px}
+.mock-section{font-size:.62rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:7px}
+.mock-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#F8F8F6;border-radius:7px;margin-bottom:5px}
+.mock-row:last-child{margin-bottom:0}
+.mr-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.mr-name{font-size:.7rem;font-weight:600;flex:1}
+.mr-badge{font-size:.58rem;padding:2px 7px;border-radius:50px;font-weight:600}
+.mr-val{font-size:.7rem;font-weight:700}
+.fc{position:absolute;background:#fff;border-radius:11px;box-shadow:0 6px 24px rgba(0,0,0,.1);padding:11px 14px;border:1px solid var(--border)}
+.fc-lbl{font-size:.62rem;color:var(--text2);margin-bottom:3px}
+.fc-val{font-size:.95rem;font-weight:800;color:var(--dark)}
+.fc-sub{font-size:.6rem;font-weight:600;margin-top:2px}
+.fc1{top:-18px;right:-16px;animation:float1 4s ease-in-out infinite}
+.fc2{bottom:16px;left:-24px;animation:float2 4s 1s ease-in-out infinite}
+@keyframes float1{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
+@keyframes float2{0%,100%{transform:translateY(0) rotate(1deg)}50%{transform:translateY(-6px) rotate(-1deg)}}
 
-/* CONTENT */
-#content{flex:1;padding:20px;max-width:1400px;margin:0 auto;width:100%}
-.page{display:none}
-.page.on{display:block;animation:fi .2s ease}
-@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* ── LOGOS ── */
+#logos{padding:36px 40px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center}
+#logos p{font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);margin-bottom:18px}
+.logos-row{display:flex;align-items:center;justify-content:center;gap:36px;flex-wrap:wrap;opacity:.45}
+.logo-it{font-family:'Fraunces',serif;font-size:.95rem;font-weight:700;color:var(--text)}
 
-/* CARDS */
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:18px}
-.kc{background:var(--wh);border-radius:var(--r);box-shadow:var(--sh);padding:16px;display:flex;flex-direction:column;gap:9px;position:relative;overflow:hidden}
-.kc::after{content:'';position:absolute;top:-15px;right:-15px;width:70px;height:70px;border-radius:50%;opacity:.08}
-.kc.c1::after{background:var(--ac)}.kc.c2::after{background:var(--ac2)}.kc.c3::after{background:var(--ac3)}.kc.c4::after{background:var(--ac4)}
-.ki{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem}
-.ki.c1{background:#EDE9FF;color:var(--ac)}.ki.c2{background:#FFE4EB;color:var(--ac2)}.ki.c3{background:#D6FAF0;color:var(--ac3)}.ki.c4{background:#FFF3E0;color:var(--ac4)}
-.kv{font-size:1.4rem;font-weight:800;color:var(--tx);letter-spacing:-.5px}
-.kl{font-size:.7rem;color:var(--t2)}
-.kd{font-size:.68rem;font-weight:600;padding:2px 7px;border-radius:50px;background:#DCFCE7;color:#16A34A}
+/* ── SECTIONS ── */
+section{padding:90px 40px}
+.sec-tag{font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+h2{font-family:'Fraunces',serif;font-size:clamp(1.7rem,3.5vw,2.6rem);font-weight:900;color:var(--dark);line-height:1.15;margin-bottom:14px}
+.sec-sub{font-size:.95rem;color:var(--text2);max-width:520px;margin:0 auto 52px;line-height:1.7}
+.text-center{text-align:center}
 
-.card{background:var(--wh);border-radius:var(--r);box-shadow:var(--sh);padding:18px}
-.crow{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
-.ch{font-size:.88rem;font-weight:700;color:var(--tx)}
-.ct{font-size:.7rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t2);margin-bottom:12px}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.g31{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+/* PROBLEMA */
+#problema{background:var(--bg)}
+.pains{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:1000px;margin:0 auto}
+.pain{background:#fff;border:1px solid var(--border);border-radius:var(--rl);padding:22px;position:relative}
+.pain-x{position:absolute;top:14px;right:14px;width:22px;height:22px;border-radius:50%;background:#FEE2E2;display:flex;align-items:center;justify-content:center;font-size:.62rem;color:#DC2626;font-weight:700}
+.pain-em{font-size:1.6rem;margin-bottom:10px}
+.pain-title{font-size:.88rem;font-weight:700;color:var(--dark);margin-bottom:5px}
+.pain-desc{font-size:.78rem;color:var(--text2);line-height:1.55}
 
-/* TABLE */
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse}
-th{text-align:left;font-size:.65rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t3);padding:8px 11px;border-bottom:1px solid var(--bd);white-space:nowrap}
-td{padding:10px 11px;border-bottom:1px solid var(--bd);font-size:.78rem;vertical-align:middle}
-tr:last-child td{border-bottom:none}
-tbody tr{cursor:pointer;transition:background .1s}
-tbody tr:hover{background:#F9FAFB}
+/* FEATURES */
+#features{background:#fff}
+.feat-inner{max-width:1100px;margin:0 auto}
+.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:72px}
+.feat-grid:last-child{margin-bottom:0}
+.feat-grid.rev{direction:rtl}
+.feat-grid.rev>*{direction:ltr}
+.feat-list{display:flex;flex-direction:column;gap:22px}
+.feat-item{display:flex;gap:14px}
+.feat-ic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+.feat-title{font-size:.88rem;font-weight:700;color:var(--dark);margin-bottom:4px}
+.feat-desc{font-size:.78rem;color:var(--text2);line-height:1.6}
+.feat-screen{background:#F8F8F6;border-radius:var(--r);padding:20px;border:1px solid var(--border)}
+.fs-title{font-size:.65rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:12px}
+.fs-row{display:flex;align-items:center;gap:9px;padding:9px 11px;background:#fff;border-radius:7px;margin-bottom:7px;border:1px solid var(--border)}
+.fs-row:last-child{margin-bottom:0}
 
-/* BADGES */
-.badge{display:inline-flex;padding:3px 8px;border-radius:50px;font-size:.66rem;font-weight:700}
-.bs{background:#DCFCE7;color:#16A34A}.bw{background:#FEF3C7;color:#B45309}
-.bd2{background:#FEE2E2;color:#DC2626}.bi{background:#DBEAFE;color:#1D4ED8}
-.bp{background:#EDE9FF;color:#6C63FF}.bg2{background:#F3F4F6;color:#6B7280}
+/* COMO FUNCIONA */
+#como{background:var(--bg)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;max-width:880px;margin:0 auto;position:relative}
+.steps::before{content:'';position:absolute;top:35px;left:calc(16.6%+18px);right:calc(16.6%+18px);height:1px;background:repeating-linear-gradient(90deg,var(--border) 0,var(--border) 7px,transparent 7px,transparent 14px)}
+.step-item{text-align:center;position:relative}
+.step-n{width:70px;height:70px;border-radius:50%;background:#fff;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-family:'Fraunces',serif;font-size:1.4rem;font-weight:900;color:var(--accent);position:relative;z-index:1;transition:all .2s}
+.step-item:hover .step-n{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-t{font-size:.88rem;font-weight:700;color:var(--dark);margin-bottom:6px}
+.step-d{font-size:.78rem;color:var(--text2);line-height:1.6}
 
-/* BUTTONS */
-.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:var(--rs);font-size:.76rem;font-weight:600;border:none;transition:all .15s;white-space:nowrap}
-.btnp{background:var(--ac);color:#fff}.btnp:hover{background:#5A52E0}
-.btns{background:var(--wh);color:var(--tx);border:1.5px solid var(--bd)}.btns:hover{border-color:var(--ac);color:var(--ac)}
-.btnsm{padding:4px 10px;font-size:.7rem}
-.btnic{width:27px;height:27px;padding:0;justify-content:center;border-radius:var(--rs);background:var(--bg);border:1.5px solid var(--bd);font-size:.8rem}
-.btnic:hover{background:var(--ac);border-color:var(--ac);color:#fff}
+/* DEPOIMENTOS */
+#depoimentos{background:#fff}
+.deps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:1100px;margin:0 auto}
+.dep{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);padding:22px;position:relative}
+.dep::before{content:'"';font-family:'Fraunces',serif;font-size:3.5rem;color:var(--border);position:absolute;top:6px;left:18px;line-height:1}
+.dep-txt{font-size:.82rem;color:var(--text2);line-height:1.7;padding-top:24px;margin-bottom:18px}
+.dep-auth{display:flex;align-items:center;gap:10px}
+.dep-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.82rem;flex-shrink:0}
+.dep-name{font-size:.8rem;font-weight:700;color:var(--dark)}
+.dep-role{font-size:.68rem;color:var(--text2)}
+.dep-stars{color:#F59E0B;font-size:.7rem;margin-top:1px}
 
-/* FORMS */
-.fg{margin-bottom:13px}
-.fr{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.fc{width:100%;padding:9px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);font-size:.82rem;color:var(--tx);outline:none;transition:border-color .2s;background:var(--wh)}
-.fc:focus{border-color:var(--ac)}
-.fl{display:block;font-size:.72rem;font-weight:600;color:var(--t2);margin-bottom:5px}
+/* PRECOS */
+#precos{background:var(--bg)}
+.planos{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:980px;margin:0 auto}
+.plano{background:#fff;border:1px solid var(--border);border-radius:var(--rl);padding:28px;position:relative;transition:transform .2s,box-shadow .2s}
+.plano:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.08)}
+.plano.popular{border:2px solid var(--accent)}
+.pop-badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:.68rem;font-weight:700;padding:3px 14px;border-radius:50px;white-space:nowrap}
+.plano-nome{font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:6px}
+.plano-preco{font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--dark);margin-bottom:3px}
+.plano-preco span{font-size:.85rem;font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;color:var(--text2)}
+.plano-desc{font-size:.75rem;color:var(--text2);margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.plano-feats{display:flex;flex-direction:column;gap:9px;margin-bottom:24px}
+.pf{display:flex;align-items:center;gap:7px;font-size:.78rem}
+.pf-ic{width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.6rem;flex-shrink:0}
+.btn-plano{display:block;text-align:center;padding:11px;border-radius:50px;font-size:.82rem;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:all .2s}
+.btn-plano-p{background:var(--accent);color:#fff}
+.btn-plano-p:hover{background:#6344E0}
+.btn-plano-s{background:transparent;color:var(--text);border:1.5px solid var(--border)}
+.btn-plano-s:hover{border-color:var(--accent);color:var(--accent)}
+.trial-note{text-align:center;margin-top:32px;font-size:.8rem;color:var(--text2)}
 
-/* MODAL */
-.mov{display:none;position:fixed;inset:0;background:rgba(26,29,46,.5);backdrop-filter:blur(3px);z-index:500;align-items:center;justify-content:center}
-.mov.on{display:flex}
-.mbox{background:var(--wh);border-radius:var(--r);box-shadow:0 8px 32px rgba(0,0,0,.15);width:100%;max-height:90vh;overflow-y:auto;animation:mup .22s ease}
-.mbox.md{max-width:490px}.mbox.lg{max-width:650px}
-@keyframes mup{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
-.mh{padding:16px 18px 13px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between}
-.mt{font-size:.9rem;font-weight:700}
-.mx{background:none;border:none;font-size:1.1rem;color:var(--t3);border-radius:5px;padding:3px 6px}
-.mx:hover{background:var(--bg)}
-.mb{padding:16px 18px}
-.mf{padding:11px 18px;border-top:1px solid var(--bd);display:flex;justify-content:flex-end;gap:9px}
+/* FAQ */
+#faq{background:#fff}
+.faq-inner{max-width:680px;margin:0 auto}
+.faq-list{margin-top:44px;display:flex;flex-direction:column;gap:4px}
+.faq-item{border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.faq-q{padding:16px 18px;font-size:.88rem;font-weight:600;color:var(--dark);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .15s;user-select:none}
+.faq-q:hover,.faq-q.open{background:#F8F8F6}
+.faq-arr{transition:transform .25s;font-size:.75rem;color:var(--text2);flex-shrink:0}
+.faq-q.open .faq-arr{transform:rotate(180deg)}
+.faq-a{padding:0 18px;max-height:0;overflow:hidden;transition:all .3s ease;font-size:.8rem;color:var(--text2);line-height:1.7}
+.faq-a.open{padding:0 18px 15px;max-height:300px}
 
-/* TIMELINE */
-.tli{display:flex;align-items:center;gap:11px;padding:9px 11px;background:var(--wh);border-radius:var(--r);border:1.5px solid var(--bd);margin-bottom:3px;cursor:pointer;transition:border-color .15s}
-.tli:hover{border-color:var(--ac)}
-.tdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+/* MODAL CADASTRO */
+.modal-ov{display:none;position:fixed;inset:0;background:rgba(15,15,13,.6);backdrop-filter:blur(6px);z-index:999;align-items:center;justify-content:center;padding:20px}
+.modal-ov.open{display:flex}
+.modal{background:#fff;border-radius:var(--rl);box-shadow:0 32px 80px rgba(0,0,0,.2);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:slideUp .3s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.modal-hdr{padding:28px 28px 0}
+.modal-logo{font-family:'Fraunces',serif;font-size:1.1rem;font-weight:900;color:var(--dark);margin-bottom:6px}
+.modal-logo em{color:var(--accent);font-style:italic}
+.modal-title{font-size:1.4rem;font-weight:800;color:var(--dark);margin-bottom:4px}
+.modal-sub{font-size:.82rem;color:var(--text2);margin-bottom:20px}
+.trial-pill{display:inline-flex;align-items:center;gap:6px;background:#DCFCE7;color:#16A34A;font-size:.72rem;font-weight:700;padding:5px 12px;border-radius:50px;margin-bottom:20px}
+.modal-body{padding:0 28px 28px}
+.modal-err{background:#FEE2E2;color:#DC2626;padding:10px 14px;border-radius:var(--r);font-size:.78rem;margin-bottom:14px;display:none}
+.modal-suc{background:#DCFCE7;color:#16A34A;padding:14px;border-radius:var(--r);font-size:.85rem;margin-bottom:14px;display:none;text-align:center;line-height:1.6}
+.fl{display:block;font-size:.72rem;font-weight:600;color:var(--text2);margin-bottom:5px;margin-top:13px}
+.fi{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--r);font-family:inherit;font-size:.85rem;color:var(--text);outline:none;transition:border-color .2s}
+.fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,252,.08)}
+.fi::placeholder{color:var(--text2);opacity:.6}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn-submit{width:100%;margin-top:18px;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:50px;font-family:inherit;font-size:.92rem;font-weight:700;cursor:pointer;transition:all .2s}
+.btn-submit:hover{background:#6344E0}
+.btn-submit:disabled{opacity:.6;cursor:not-allowed}
+.modal-footer-note{text-align:center;font-size:.72rem;color:var(--text2);margin-top:14px}
+.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;font-size:1.2rem;color:var(--text2);cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1}
+.modal-close:hover{background:#F5F5F3}
+.plano-sel{display:none}
 
-/* BARS */
-.bc{height:120px;display:flex;align-items:flex-end;gap:5px}
-.bw{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
-.bar{width:100%;border-radius:4px 4px 0 0;min-height:3px}
-.blab{font-size:.58rem;color:var(--t3)}
-.bval{font-size:.58rem;color:var(--t2);font-weight:600}
-.sbw{margin-bottom:9px}
-.sbh{display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:3px}
-.sbt{height:5px;background:var(--bd);border-radius:50px;overflow:hidden}
-.sbf{height:100%;border-radius:50px}
-.sfok{background:var(--ac3)}.sflow{background:var(--warn)}.sfcrit{background:var(--er)}
+/* CTA FINAL */
+#cta-final{background:var(--dark);text-align:center;position:relative;overflow:hidden}
+#cta-final::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 50% 50%,rgba(124,92,252,.18) 0%,transparent 70%)}
+#cta-final h2{color:#fff;position:relative;z-index:1}
+#cta-final .sec-sub{color:rgba(255,255,255,.55);position:relative;z-index:1}
+.cta-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:36px;position:relative;z-index:1}
+.btn-wh{background:#fff;color:var(--dark);padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:700;text-decoration:none;border:none;cursor:pointer;transition:all .2s}
+.btn-wh:hover{background:var(--accent);color:#fff;transform:translateY(-2px)}
+.btn-gh{background:transparent;color:#fff;padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:600;text-decoration:none;border:1.5px solid rgba(255,255,255,.25);transition:all .2s}
+.btn-gh:hover{border-color:#fff;background:rgba(255,255,255,.07)}
 
-/* MISC */
-.spin{width:26px;height:26px;border:3px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:sp .8s linear infinite;margin:0 auto}
-@keyframes sp{to{transform:rotate(360deg)}}
-.lc{padding:24px;text-align:center;color:var(--t3)}
-.empty{padding:36px;text-align:center;color:var(--t3);font-size:.82rem}
-.svc-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--bd);border-radius:50px;cursor:pointer;font-size:.74rem;margin:3px;transition:all .15s}
-.svc-pill.on{background:var(--ac);color:#fff;border-color:var(--ac)}
-.pro-card{background:var(--wh);border-radius:var(--r);box-shadow:var(--sh);padding:16px}
-.pro-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.9rem;flex-shrink:0}
+/* FOOTER */
+footer{background:var(--dark);border-top:1px solid rgba(255,255,255,.07);padding:32px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.foot-logo{font-family:'Fraunces',serif;font-size:1rem;font-weight:900;color:#fff}
+.foot-logo em{color:var(--accent);font-style:italic}
+.foot-txt{font-size:.72rem;color:rgba(255,255,255,.35)}
+.foot-links{display:flex;gap:20px}
+.foot-links a{font-size:.72rem;color:rgba(255,255,255,.35);text-decoration:none;transition:color .15s}
+.foot-links a:hover{color:rgba(255,255,255,.7)}
 
-/* MINI CAL */
-.mcg{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:9px}
-.mcdn{font-size:.58rem;font-weight:700;text-align:center;color:var(--t3);padding:2px 0;text-transform:uppercase}
-.mcd{font-size:.7rem;text-align:center;padding:4px 2px;border-radius:5px;cursor:pointer}
-.mcd:hover{background:var(--bg)}
-.mcd.today{background:var(--ac);color:#fff;font-weight:700}
-.mcd.hev::after{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--ac2);margin:1px auto 0}
-.mcd.oth{color:var(--t3)}
-
-/* TOAST */
-#toasts{position:fixed;bottom:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:6px}
-.toast{padding:9px 14px;border-radius:var(--r);color:#fff;font-size:.76rem;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.15);display:flex;align-items:center;gap:7px;animation:mup .2s ease;max-width:280px}
-.tok{background:#16A34A}.ter{background:#DC2626}.tinf{background:var(--ac)}
-
-@media(max-width:880px){.kpis{grid-template-columns:1fr 1fr}.g2,.g31{grid-template-columns:1fr}.tb-nav{max-width:55vw}}
+/* RESPONSIVE */
+@media(max-width:820px){
+  nav{padding:12px 18px}.nav-links{display:none}
+  .nav-entrar-mobile{display:flex!important}
+  #hero{padding:88px 18px 60px}.hero-inner{grid-template-columns:1fr}.hero-visual{display:none}
+  section{padding:64px 18px}
+  .feat-grid,.deps,.planos{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr}.steps::before{display:none}
+  .feat-grid.rev{direction:ltr}
+  footer{padding:24px 18px}
+  .form-row{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="login">
-  <div class="l-left">
-    <div class="l-logo">Bele<em>za</em> Pro</div>
-    <div class="l-tag">Sistema completo de gestão para salões de beleza</div>
-    <div class="l-feat">
-      <div class="l-fi"><div class="l-dot"></div>Agenda com disponibilidade em tempo real</div>
-      <div class="l-fi"><div class="l-dot"></div>Financeiro, estoque e comissões</div>
-      <div class="l-fi"><div class="l-dot"></div>Lembretes automáticos via WhatsApp</div>
-      <div class="l-fi"><div class="l-dot"></div>Multi-salão — venda para outros salões</div>
-    </div>
+<!-- NAV -->
+<nav id="navbar">
+  <a class="nav-logo" href="#">Bele<em>za</em> Pro</a>
+  <a href="https://vihrbs.github.io/salaodebeleza/salao-v4-final.html" target="_blank" class="nav-entrar-mobile" style="display:none;font-size:.8rem;font-weight:600;color:var(--text2);text-decoration:none;margin-left:auto;margin-right:12px;align-items:center;gap:4px">Entrar →</a>
+  <div class="nav-links">
+    <a href="#features">Funcionalidades</a>
+    <a href="#como">Como funciona</a>
+    <a href="#depoimentos">Depoimentos</a>
+    <a href="#precos">Preços</a>
+    <a href="https://vihrbs.github.io/salaodebeleza/salao-v4-final.html" target="_blank" style="font-size:.84rem;font-weight:600;color:var(--text2);text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text2)'">Entrar →</a>
+    <a href="#" class="nav-cta" onclick="openModal(event,'Pro')">Começar grátis</a>
   </div>
-  <div class="l-right">
-    <div class="l-box">
-      <div class="l-tabs">
-        <div class="l-tab on" onclick="tab('in')">Entrar</div>
-        <div class="l-tab" onclick="tab('up')">Criar Conta</div>
-      </div>
+</nav>
 
-      <div class="l-pane on" id="pane-in">
-        <div style="font-size:1.15rem;font-weight:800;margin-bottom:4px">Bem-vindo 👋</div>
-        <div style="font-size:.78rem;color:var(--t2);margin-bottom:16px">Entre com suas credenciais</div>
-        <div class="l-err" id="err-in"></div>
-        <label class="lbl" style="margin-top:0">E-mail</label>
-        <input class="inp" type="email" id="in-email" placeholder="seu@email.com"/>
-        <label class="lbl">Senha</label>
-        <input class="inp" type="password" id="in-pw" placeholder="••••••"/>
-        <input type="hidden" id="in-api" value=""/>
-        <button class="l-btn" id="btn-in" onclick="doLogin()">Entrar no Painel</button>
-        <div class="l-hint">
-          Novo por aqui? Clique em <strong>Criar Conta</strong> para cadastrar seu salão gratuitamente.
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-inner">
+    <div>
+      <div class="hero-tag"><span class="dot"></span> 100% online — funciona no celular</div>
+      <h1>Seu salão organizado.<br>Sua vida mais <em>fácil.</em></h1>
+      <p class="hero-sub">Agenda, clientes, financeiro, estoque e comissões — tudo em um só lugar. Sem planilha, sem caderno, sem confusão.</p>
+      <div class="hero-btns">
+        <button class="btn-p" onclick="openModal(event,'Pro')">✨ Começar grátis por 14 dias</button>
+        <a href="#features" class="btn-s">Ver funcionalidades →</a>
+      </div>
+      <div class="hero-social">
+        <div class="avatars">
+          <div class="av" style="background:linear-gradient(135deg,#7C5CFC,#9B8AFF)">M</div>
+          <div class="av" style="background:linear-gradient(135deg,#FF6B6B,#FF9E9E)">K</div>
+          <div class="av" style="background:linear-gradient(135deg,#00C896,#00A878)">J</div>
+          <div class="av" style="background:linear-gradient(135deg,#FFB347,#FF8C00)">P</div>
         </div>
-      </div>
-
-      <div class="l-pane" id="pane-up">
-        <div class="trial">🎉 14 dias grátis — sem cartão de crédito</div>
-        <div class="l-err" id="err-up"></div>
-        <label class="lbl" style="margin-top:0">Nome do Salão*</label>
-        <input class="inp" id="up-salao" placeholder="Ex.: Studio Luna Hair"/>
-        <input type="hidden" id="up-api" value=""/>
-        <div class="fr" style="margin-top:0">
-          <div><label class="lbl">Seu nome*</label><input class="inp" id="up-nome" placeholder="Seu nome"/></div>
-          <div><label class="lbl">Telefone</label><input class="inp" id="up-tel" placeholder="(11) 9..."/></div>
-        </div>
-        <label class="lbl">E-mail*</label>
-        <input class="inp" type="email" id="up-email" placeholder="contato@seusalao.com"/>
-        <label class="lbl">Senha* (mín. 6 caracteres)</label>
-        <input class="inp" type="password" id="up-pw" placeholder="••••••"/>
-        <button class="l-btn" id="btn-up" onclick="doRegister()">Criar Conta Grátis</button>
+        <span>+47 salões já usam o Beleza Pro</span>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- APP -->
-<div id="app">
-  <div id="topbar">
-    <div class="tb-logo">Bele<em>za</em> Pro</div>
-    <span class="tb-salon" id="tb-salon"></span>
-    <span class="apibadge demo" id="apibadge">DEMO</span>
-    <nav class="tb-nav">
-      <button class="nb on" onclick="nav('dashboard',this)">🏠 Dashboard</button>
-      <button class="nb" onclick="nav('agenda',this)">📅 Agenda <span class="nbadge" id="nbag">0</span></button>
-      <button class="nb" onclick="nav('clientes',this)">👥 Clientes</button>
-      <button class="nb" onclick="nav('financeiro',this)">💰 Financeiro</button>
-      <button class="nb" onclick="nav('estoque',this)">📦 Estoque</button>
-      <button class="nb" onclick="nav('comissoes',this)">💸 Comissões</button>
-      <button class="nb" onclick="nav('profissionais',this)">👤 Profissionais</button>
-      <button class="nb" onclick="nav('servicos',this)">✂️ Serviços</button>
-      <button class="nb" onclick="nav('config',this)">⚙️ Config</button>
-    </nav>
-    <div class="tb-r">
-      <button class="ib" onclick="toast('Sem notificações','inf')">🔔</button>
-      <button class="ib" onclick="openM('m-ag')">📅</button>
-      <div class="ubox">
-        <div class="uav" id="uav">A</div>
-        <span class="uname" id="uname">Admin</span>
-        <button class="logout" onclick="doLogout()" title="Sair">⏻</button>
+    <div class="hero-visual">
+      <div class="fc fc1">
+        <div class="fc-lbl">Faturamento hoje</div>
+        <div class="fc-val">R$ 2.840</div>
+        <div class="fc-sub" style="color:var(--accent3)">↑ 12% vs ontem</div>
       </div>
-    </div>
-  </div>
-
-  <div id="content">
-
-    <!-- DASHBOARD -->
-    <div class="page on" id="page-dashboard">
-      <div class="kpis">
-        <div class="kc c1"><div class="ki c1">📅</div><div><div class="kv" id="k1">—</div><div class="kl">Agendamentos hoje</div></div><span class="kd" id="k1d">...</span></div>
-        <div class="kc c2"><div class="ki c2">💰</div><div><div class="kv" id="k2">—</div><div class="kl">Faturamento hoje</div></div><span class="kd" id="k2d">...</span></div>
-        <div class="kc c3"><div class="ki c3">👥</div><div><div class="kv" id="k3">—</div><div class="kl">Clientes ativos</div></div><span class="kd" id="k3d">...</span></div>
-        <div class="kc c4"><div class="ki c4">⭐</div><div><div class="kv">4.9</div><div class="kl">Avaliação média</div></div><span class="kd">48 avaliações</span></div>
-      </div>
-      <div class="g31" style="margin-bottom:14px">
-        <div class="card">
-          <div class="crow"><span class="ch">Agenda de Hoje</span><button class="btn btnp btnsm" onclick="openM('m-ag')">+ Novo</button></div>
-          <div id="dash-tl"><div class="lc"><div class="spin"></div></div></div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:13px">
-          <div class="card" style="padding:14px"><div class="ct">Maio 2026</div><div class="mcg" id="mcal"></div></div>
-          <div class="card" style="padding:14px"><div class="ct">Alertas de Estoque</div><div id="dash-al"><div class="lc"><div class="spin"></div></div></div></div>
-        </div>
-      </div>
-      <div class="g2">
-        <div class="card"><div class="crow"><span class="ch">Faturamento — 7 dias</span><strong id="fat7" style="color:var(--ac3)">—</strong></div><div class="bc" id="dash-bc"></div></div>
-        <div class="card"><div class="ct">Top Serviços do Mês</div><div id="top-svc"><div class="lc"><div class="spin"></div></div></div></div>
-      </div>
-    </div>
-
-    <!-- AGENDA -->
-    <div class="page" id="page-agenda">
-      <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-wrap:wrap">
-        <input type="date" class="fc" id="ag-dt" style="width:auto" onchange="loadAgenda()"/>
-        <select class="fc" id="ag-prf" style="width:auto" onchange="loadAgenda()"><option value="">Todos profissionais</option></select>
-        <button class="btn btns btnsm" onclick="document.getElementById('ag-dt').value=today();loadAgenda()">Hoje</button>
-        <button class="btn btnp" style="margin-left:auto" onclick="openM('m-ag')">+ Novo Agendamento</button>
-      </div>
-      <div class="card">
-        <div class="crow"><span class="ch" id="ag-ttl">Agenda</span></div>
-        <div class="tw"><table><thead><tr><th>Hora</th><th>Cliente</th><th>Serviço</th><th>Profissional</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
-        <tbody id="ag-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
-      </div>
-    </div>
-
-    <!-- CLIENTES -->
-    <div class="page" id="page-clientes">
-      <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
-        <input class="fc" style="max-width:240px" placeholder="🔍 Buscar cliente..." oninput="deb(()=>loadClientes(this.value),400)()"/>
-        <button class="btn btnp" style="margin-left:auto" onclick="openM('m-cli')">+ Novo Cliente</button>
-      </div>
-      <div class="card">
-        <div class="tw"><table><thead><tr><th>Cliente</th><th>Telefone</th><th>Visitas</th><th>Última visita</th><th>Total gasto</th><th>Status</th><th>Ações</th></tr></thead>
-        <tbody id="cli-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
-      </div>
-    </div>
-
-    <!-- FINANCEIRO -->
-    <div class="page" id="page-financeiro">
-      <div class="kpis">
-        <div class="kc c1"><div class="ki c1">📈</div><div><div class="kv" id="fr">—</div><div class="kl">Receita do mês</div></div></div>
-        <div class="kc c2"><div class="ki c2">📉</div><div><div class="kv" id="fd">—</div><div class="kl">Despesas</div></div></div>
-        <div class="kc c3"><div class="ki c3">💵</div><div><div class="kv" id="fl">—</div><div class="kl">Lucro</div></div></div>
-        <div class="kc c4"><div class="ki c4">⏳</div><div><div class="kv" id="fa">—</div><div class="kl">A receber</div></div></div>
-      </div>
-      <div class="card" style="margin-bottom:14px">
-        <div class="crow"><span class="ch">Faturamento 2026</span><button class="btn btnp btnsm" onclick="openM('m-lan')">+ Lançamento</button></div>
-        <div class="bc" id="fin-bc" style="height:140px"></div>
-      </div>
-      <div class="card">
-        <div class="crow"><span class="ch">Lançamentos</span>
-          <select class="fc" style="width:auto;font-size:.72rem" onchange="loadLan(this.value)"><option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option></select>
-        </div>
-        <div id="lan-lst"><div class="lc"><div class="spin"></div></div></div>
-      </div>
-    </div>
-
-    <!-- ESTOQUE -->
-    <div class="page" id="page-estoque">
-      <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
-        <input class="fc" style="max-width:240px" placeholder="🔍 Buscar produto..." oninput="deb(()=>loadEst(this.value),400)()"/>
-        <button class="btn btnp" style="margin-left:auto" onclick="openM('m-prod')">+ Novo Produto</button>
-      </div>
-      <div class="card">
-        <div class="tw"><table><thead><tr><th>Produto</th><th>Categoria</th><th>Qtd.</th><th>Mínimo</th><th>Nível</th><th>Preço</th><th>Ações</th></tr></thead>
-        <tbody id="est-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
-      </div>
-    </div>
-
-    <!-- COMISSÕES -->
-    <div class="page" id="page-comissoes">
-      <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center">
-        <select class="fc" style="width:auto"><option>Maio 2026</option><option>Abril 2026</option></select>
-        <button class="btn btnp" style="margin-left:auto" onclick="openM('m-fcom')">💸 Fechar Comissões</button>
-      </div>
-      <div class="kpis">
-        <div class="kc c1"><div class="ki c1">💸</div><div><div class="kv" id="ct1">—</div><div class="kl">Total comissões</div></div></div>
-        <div class="kc c2"><div class="ki c2">👤</div><div><div class="kv" id="ct2">—</div><div class="kl">Profissionais</div></div></div>
-        <div class="kc c3"><div class="ki c3">✅</div><div><div class="kv" id="ct3">—</div><div class="kl">Pago</div></div></div>
-        <div class="kc c4"><div class="ki c4">⏳</div><div><div class="kv" id="ct4">—</div><div class="kl">A pagar</div></div></div>
-      </div>
-      <div id="com-lst"><div class="lc"><div class="spin"></div></div></div>
-    </div>
-
-    <!-- PROFISSIONAIS -->
-    <div class="page" id="page-profissionais">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-        <button class="btn btnp" onclick="openM('m-pro')">+ Novo Profissional</button>
-      </div>
-      <div id="pro-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">
-        <div class="lc"><div class="spin"></div></div>
-      </div>
-    </div>
-
-    <!-- SERVIÇOS -->
-    <div class="page" id="page-servicos">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-        <button class="btn btnp" onclick="openM('m-svc')">+ Novo Serviço</button>
-      </div>
-      <div class="card">
-        <div class="tw"><table><thead><tr><th>Serviço</th><th>Categoria</th><th>Duração</th><th>Preço</th><th>Comissão</th><th>Ativo</th><th>Ações</th></tr></thead>
-        <tbody id="svc-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
-      </div>
-    </div>
-
-    <!-- CONFIG -->
-    <div class="page" id="page-config">
-      <div class="g2">
-        <div class="card">
-          <div class="ct">Dados do Salão</div>
-          <label class="fl">Nome</label><input class="fc fg" id="cfg-nome"/>
-          <div class="fr fg">
-            <div><label class="fl">Telefone</label><input class="fc" id="cfg-tel"/></div>
-            <div><label class="fl">WhatsApp</label><input class="fc" id="cfg-wpp"/></div>
+      <div class="mockup">
+        <div class="mock-bar">
+          <div class="mock-dots">
+            <div class="mock-dot" style="background:#FF5F57"></div>
+            <div class="mock-dot" style="background:#FFBD2E"></div>
+            <div class="mock-dot" style="background:#28C840"></div>
           </div>
-          <label class="fl">E-mail</label><input class="fc fg" id="cfg-email"/>
-          <label class="fl">Endereço</label><input class="fc fg" id="cfg-end"/>
-          <button class="btn btnp" onclick="saveConfig()">Salvar Alterações</button>
+          <div class="mock-url">belezapro.app</div>
         </div>
-        <div class="card">
-          <div class="ct">API & Integração</div>
-          <label class="fl">URL da API Backend (Railway)</label>
-          <input class="fc fg" type="url" id="cfg-api" placeholder="https://sua-api.up.railway.app"/>
-          <div style="font-size:.7rem;color:var(--t3);margin-bottom:10px">A URL padrão já está configurada no sistema. Altere apenas se mudar o Railway.</div>
-          <button class="btn btnp" onclick="saveApi()" style="margin-bottom:14px">Atualizar URL da API</button>
-          <div style="padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.7rem;color:var(--t2)" id="api-st">Carregando...</div>
-        </div>
-        <div class="card">
-          <div class="ct">Plano Atual</div>
-          <div style="background:linear-gradient(135deg,var(--ac),#9B8FFF);border-radius:var(--rs);padding:16px;color:#fff;margin-bottom:12px">
-            <div style="font-size:.68rem;opacity:.7">PLANO</div>
-            <div style="font-size:1.2rem;font-weight:800" id="cfg-plan">Starter — Trial</div>
-            <div style="font-size:.72rem;opacity:.7">Trial ativo por 14 dias</div>
+        <div class="mock-body">
+          <div class="mock-kpis">
+            <div class="mk"><div class="mk-v">18</div><div class="mk-l">Agendamentos</div></div>
+            <div class="mk"><div class="mk-v" style="color:var(--accent)">R$2.8k</div><div class="mk-l">Faturamento</div></div>
+            <div class="mk"><div class="mk-v">127</div><div class="mk-l">Clientes</div></div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:5px;font-size:.78rem;color:var(--t2)">
-            <div>✅ Agenda ilimitada</div><div>✅ Clientes e financeiro</div>
-            <div>✅ Estoque e comissões</div><div>✅ Profissionais e serviços</div>
-          </div>
+          <div class="mock-section">Agenda de hoje</div>
+          <div class="mock-row"><div class="mr-dot" style="background:#7C5CFC"></div><div class="mr-name">Ana Paula — Corte</div><div class="mr-badge" style="background:#DCFCE7;color:#16A34A">Confirmado</div><div class="mr-val">R$70</div></div>
+          <div class="mock-row"><div class="mr-dot" style="background:#FF6B6B"></div><div class="mr-name">Beatriz — Coloração</div><div class="mr-badge" style="background:#DBEAFE;color:#1D4ED8">Atendendo</div><div class="mr-val">R$150</div></div>
+          <div class="mock-row"><div class="mr-dot" style="background:#00C896"></div><div class="mr-name">Carla — Manicure</div><div class="mr-badge" style="background:#F3F4F6;color:#6B7280">Aguardando</div><div class="mr-val">R$45</div></div>
         </div>
       </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- MODALS -->
-<div class="mov" id="m-ag">
-  <div class="mbox lg">
-    <div class="mh"><span class="mt">Novo Agendamento</span><button class="mx" onclick="closeM('m-ag')">✕</button></div>
-    <div class="mb">
-      <div class="fr">
-        <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli"><option value="">Selecionar...</option></select></div>
-        <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro"><option value="">Selecionar...</option></select></div>
-      </div>
-      <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label><div id="ag-svcs" style="padding:4px 0"></div></div>
-      <div class="fr">
-        <div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="ag-d"/></div>
-        <div class="fg"><label class="fl">Horário*</label>
-          <select class="fc" id="ag-h">
-            <option>08:00</option><option>08:30</option><option>09:00</option><option>09:30</option>
-            <option>10:00</option><option>10:30</option><option>11:00</option><option>11:30</option>
-            <option>13:00</option><option>13:30</option><option>14:00</option><option>14:30</option>
-            <option>15:00</option><option>15:30</option><option>16:00</option><option>16:30</option>
-            <option>17:00</option><option>17:30</option>
-          </select>
-        </div>
-      </div>
-      <div class="fr">
-        <div class="fg"><label class="fl">Pagamento</label>
-          <select class="fc" id="ag-pg"><option>PIX</option><option>Dinheiro</option><option>Cartão Débito</option><option>Cartão Crédito</option></select>
-        </div>
-        <div class="fg"><label class="fl">Origem</label>
-          <select class="fc" id="ag-or"><option value="backoffice">Backoffice</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option></select>
-        </div>
-      </div>
-      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ag-obs" rows="2" placeholder="Preferências, alergias..."></textarea></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-ag')">Cancelar</button><button class="btn btnp" onclick="saveAg()">✅ Confirmar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-cli">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Cliente</span><button class="mx" onclick="closeM('m-cli')">✕</button></div>
-    <div class="mb">
-      <div class="fr"><div class="fg"><label class="fl">Nome completo*</label><input class="fc" id="cli-n" placeholder="Ana Paula Silva"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="cli-nasc"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone/WhatsApp</label><input class="fc" id="cli-t" placeholder="(11) 99999-0000"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="cli-e" placeholder="email@email.com"/></div></div>
-      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="cli-o" rows="2" placeholder="Alergias, preferências..."></textarea></div>
-      <div class="fg"><label class="fl">Como nos conheceu?</label><select class="fc" id="cli-k"><option>Instagram</option><option>Indicação</option><option>Google</option><option>Passante</option><option>Outro</option></select></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-cli')">Cancelar</button><button class="btn btnp" onclick="saveCli()">Salvar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-lan">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Lançamento</span><button class="mx" onclick="closeM('m-lan')">✕</button></div>
-    <div class="mb">
-      <div class="fg"><label class="fl">Tipo</label><select class="fc" id="lan-t"><option value="entrada">Entrada (Receita)</option><option value="saida">Saída (Despesa)</option></select></div>
-      <div class="fg"><label class="fl">Descrição*</label><input class="fc" id="lan-d" placeholder="Descrição do lançamento"/></div>
-      <div class="fr"><div class="fg"><label class="fl">Valor (R$)*</label><input type="number" class="fc" id="lan-v" step="0.01" placeholder="0,00"/></div><div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="lan-dt"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Pagamento</label><select class="fc" id="lan-p"><option>PIX</option><option>Dinheiro</option><option>Cartão</option><option>Boleto</option></select></div><div class="fg"><label class="fl">Categoria</label><select class="fc" id="lan-c"><option>Serviço</option><option>Produto</option><option>Aluguel</option><option>Comissão</option><option>Material</option><option>Outros</option></select></div></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-lan')">Cancelar</button><button class="btn btnp" onclick="saveLan()">Lançar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-prod">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Produto</span><button class="mx" onclick="closeM('m-prod')">✕</button></div>
-    <div class="mb">
-      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="p-n" placeholder="Ex.: Tintura L'Oréal 6.0"/></div>
-      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="p-c"><option>Tintura</option><option>Shampoo</option><option>Tratamento</option><option>Acessório</option><option>Outro</option></select></div><div class="fg"><label class="fl">Fornecedor</label><input class="fc" id="p-f" placeholder="Fornecedor"/></div></div>
-      <div class="fr3"><div class="fg"><label class="fl">Qtd. Atual</label><input type="number" class="fc" id="p-q" value="0"/></div><div class="fg"><label class="fl">Qtd. Mínima</label><input type="number" class="fc" id="p-m" value="5"/></div><div class="fg"><label class="fl">Preço (R$)</label><input type="number" class="fc" id="p-p" step="0.01"/></div></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-prod')">Cancelar</button><button class="btn btnp" onclick="saveProd()">Salvar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-pro">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Profissional</span><button class="mx" onclick="closeM('m-pro')">✕</button></div>
-    <div class="mb">
-      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="pr-n" placeholder="Nome completo"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="pr-e" placeholder="Ex.: Cabeleireira"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="pr-t" placeholder="(11) 99..."/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="pr-c" value="40"/></div></div>
-      <div class="fg"><label class="fl">Cor na agenda</label>
-        <div style="display:flex;gap:8px;margin-top:5px" id="cor-wrap">
-          <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer;border:3px solid #6C63FF" data-cor="#6C63FF" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#FF6584;cursor:pointer" data-cor="#FF6584" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#43D9AD;cursor:pointer" data-cor="#43D9AD" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#FFB347;cursor:pointer" data-cor="#FFB347" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#3B82F6;cursor:pointer" data-cor="#3B82F6" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#EC4899;cursor:pointer" data-cor="#EC4899" onclick="pickCor(this)"></div>
-        </div>
-        <input type="hidden" id="pr-cor" value="#6C63FF"/>
+      <div class="fc fc2">
+        <div class="fc-lbl">Comissão — Juliana</div>
+        <div class="fc-val">R$ 1.863</div>
+        <div class="fc-sub" style="color:var(--accent3)">✅ Pago este mês</div>
       </div>
     </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-pro')">Cancelar</button><button class="btn btnp" onclick="savePro()">Salvar</button></div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<div id="logos">
+  <p>Usado por salões em todo o Brasil</p>
+  <div class="logos-row">
+    <div class="logo-it">Studio Luna</div>
+    <div class="logo-it">Barbearia RBS</div>
+    <div class="logo-it">Salão Charm</div>
+    <div class="logo-it">Espaço Beleza</div>
+    <div class="logo-it">Nails &amp; More</div>
   </div>
 </div>
 
-<div class="mov" id="m-svc">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Serviço</span><button class="mx" onclick="closeM('m-svc')">✕</button></div>
-    <div class="mb">
-      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="sv-n" placeholder="Ex.: Corte Feminino"/></div>
-      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="sv-c"><option>Cabelo</option><option>Unhas</option><option>Estética</option><option>Barba</option><option>Outro</option></select></div><div class="fg"><label class="fl">Duração (min)*</label><input type="number" class="fc" id="sv-d" value="60"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="sv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="sv-com" value="40"/></div></div>
+<!-- PROBLEMA -->
+<section id="problema">
+  <div class="text-center">
+    <div class="sec-tag">O problema</div>
+    <h2>Gerenciar salão não precisa<br>ser tão difícil assim</h2>
+    <p class="sec-sub">A maioria dos donos de salão perde horas por semana em coisas que o sistema resolve em segundos.</p>
+  </div>
+  <div class="pains">
+    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">📱</div><div class="pain-title">Agenda bagunçada no WhatsApp</div><div class="pain-desc">Clientes confirmando, cancelando e remarcando. Fica impossível controlar quem vem e quem não vem.</div></div>
+    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">📊</div><div class="pain-title">Financeiro no caderno</div><div class="pain-desc">Sem saber quanto entrou, quanto saiu e se o mês foi realmente bom ou ruim de verdade.</div></div>
+    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">💇</div><div class="pain-title">Comissão calculada na mão</div><div class="pain-desc">Todo mês uma dor de cabeça para calcular o que cada profissional vai receber sem errar.</div></div>
+    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">📦</div><div class="pain-title">Estoque sem controle</div><div class="pain-desc">Produtos acabando sem avisar, compras desnecessárias e dinheiro sendo jogado fora.</div></div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="feat-inner">
+    <div class="text-center">
+      <div class="sec-tag">Funcionalidades</div>
+      <h2>Tudo que seu salão precisa</h2>
+      <p class="sec-sub">Seis módulos integrados que trabalham juntos para você ter controle total do negócio.</p>
     </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-svc')">Cancelar</button><button class="btn btnp" onclick="saveSvc()">Salvar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-fcom">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Fechar Comissões</span><button class="mx" onclick="closeM('m-fcom')">✕</button></div>
-    <div class="mb">
-      <div style="background:#FEF3C7;border-radius:var(--rs);padding:9px 11px;font-size:.76rem;color:#92400E;margin-bottom:11px">⚠️ Esta ação marca comissões como pagas e não pode ser desfeita.</div>
-      <div id="fcom-t"></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-fcom')">Cancelar</button><button class="btn btnp" onclick="fecharCom()">Confirmar</button></div>
-  </div>
-</div>
-
-<div id="toasts"></div>
-
-<!-- Modal Perfil Cliente -->
-<div class="mov" id="m-cli-perfil">
-  <div class="mbox lg">
-    <div class="mh"><span class="mt" id="cli-perfil-nome">Cliente</span><button class="mx" onclick="closeM('m-cli-perfil')">✕</button></div>
-    <div class="mb">
-      <div class="g2" style="margin-bottom:16px">
-        <div>
-          <div class="ct">Informações</div>
-          <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem">
-            <div><strong>Telefone:</strong> <span id="cp-tel">—</span></div>
-            <div><strong>E-mail:</strong> <span id="cp-email">—</span></div>
-            <div><strong>Nascimento:</strong> <span id="cp-nasc">—</span></div>
-            <div><strong>Como conheceu:</strong> <span id="cp-orig">—</span></div>
-            <div><strong>Observações:</strong> <span id="cp-obs">—</span></div>
-          </div>
-        </div>
-        <div>
-          <div class="ct">Resumo</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div style="background:var(--bg);border-radius:var(--rs);padding:12px;text-align:center">
-              <div style="font-size:1.3rem;font-weight:800;color:var(--ac)" id="cp-visitas">0</div>
-              <div style="font-size:.7rem;color:var(--t2)">Visitas</div>
-            </div>
-            <div style="background:var(--bg);border-radius:var(--rs);padding:12px;text-align:center">
-              <div style="font-size:1.1rem;font-weight:800;color:var(--ac3)" id="cp-gasto">R$ 0</div>
-              <div style="font-size:.7rem;color:var(--t2)">Total gasto</div>
-            </div>
-          </div>
-        </div>
+    <div class="feat-grid">
+      <div class="feat-list">
+        <div class="feat-item"><div class="feat-ic" style="background:#EDE9FF;color:#7C5CFC">📅</div><div><div class="feat-title">Agenda inteligente</div><div class="feat-desc">Visualize todos os horários, profissionais e serviços do dia. Crie agendamentos em segundos com confirmação automática.</div></div></div>
+        <div class="feat-item"><div class="feat-ic" style="background:#D6FAF0;color:#00A878">👥</div><div><div class="feat-title">CRM de clientes</div><div class="feat-desc">Histórico completo: visitas, serviços realizados e total gasto. Fidelize quem já frequenta seu salão.</div></div></div>
+        <div class="feat-item"><div class="feat-ic" style="background:#FEF3C7;color:#B45309">💰</div><div><div class="feat-title">Financeiro completo</div><div class="feat-desc">Entradas, saídas, lucro líquido e gráficos mensais. Saiba exatamente onde seu dinheiro está indo.</div></div></div>
       </div>
-      <div class="ct">Histórico de Visitas</div>
-      <div id="cp-historico"><div class="lc"><div class="spin"></div></div></div>
-    </div>
-    <div class="mf">
-      <button class="btn btns" onclick="closeM('m-cli-perfil')">Fechar</button>
-      <button class="btn btnp" onclick="closeM('m-cli-perfil');openM('m-ag')">📅 Agendar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Movimentar Estoque -->
-<div class="mov" id="m-mov">
-  <div class="mbox md">
-    <div class="mh"><span class="mt" id="mov-title">Movimentar Estoque</span><button class="mx" onclick="closeM('m-mov')">✕</button></div>
-    <div class="mb">
-      <div style="padding:12px;background:var(--bg);border-radius:var(--rs);margin-bottom:14px;font-size:.82rem;font-weight:600" id="mov-prod-nome"></div>
-      <input type="hidden" id="mov-prod-id"/>
-      <input type="hidden" id="mov-tipo"/>
-      <div class="fg"><label class="fl">Quantidade</label><input type="number" class="fc" id="mov-qtd" value="1" min="1" step="0.5"/></div>
-      <div class="fg"><label class="fl">Motivo</label>
-        <select class="fc" id="mov-motivo">
-          <option value="uso_servico">Uso em serviço</option>
-          <option value="compra">Compra/Reposição</option>
-          <option value="perda">Perda/Vencimento</option>
-          <option value="ajuste">Ajuste de inventário</option>
-        </select>
+      <div class="feat-screen">
+        <div class="fs-title">Agenda de hoje</div>
+        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#7C5CFC;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">08:30 — Ana Paula · Corte</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#DCFCE7;color:#16A34A;font-weight:700">✓ Confirmado</div></div>
+        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#FF6B6B;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">09:00 — Beatriz · Coloração</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#DBEAFE;color:#1D4ED8;font-weight:700">Atendendo</div></div>
+        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#00C896;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">10:30 — Carla · Manicure</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#F3F4F6;color:#6B7280;font-weight:700">Aguardando</div></div>
+        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#FFB347;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">14:00 — Diana · Escova</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#F3F4F6;color:#6B7280;font-weight:700">Aguardando</div></div>
       </div>
     </div>
-    <div class="mf">
-      <button class="btn btns" onclick="closeM('m-mov')">Cancelar</button>
-      <button class="btn btnp" id="mov-btn" onclick="salvarMov()">Confirmar</button>
+    <div class="feat-grid rev">
+      <div class="feat-screen">
+        <div class="fs-title">Comissões — Maio 2026</div>
+        <div class="fs-row"><div style="width:30px;height:30px;border-radius:50%;background:#7C5CFC;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.68rem;font-weight:700;flex-shrink:0">J</div><div style="flex:1;padding-left:8px"><div style="font-size:.72rem;font-weight:600">Juliana · 45%</div><div style="font-size:.64rem;color:#9B9B98">42 serviços · R$ 4.140</div></div><div style="font-size:.82rem;font-weight:800;color:#7C5CFC">R$1.863</div></div>
+        <div class="fs-row"><div style="width:30px;height:30px;border-radius:50%;background:#FF6B6B;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.68rem;font-weight:700;flex-shrink:0">K</div><div style="flex:1;padding-left:8px"><div style="font-size:.72rem;font-weight:600">Katia · 40%</div><div style="font-size:.64rem;color:#9B9B98">28 serviços · R$ 2.800</div></div><div style="font-size:.82rem;font-weight:800;color:#7C5CFC">R$1.120</div></div>
+        <div style="margin-top:10px;padding:9px 11px;background:#DCFCE7;border-radius:7px;font-size:.7rem;font-weight:700;color:#16A34A">✅ Total a pagar este mês: R$ 2.983</div>
+      </div>
+      <div class="feat-list">
+        <div class="feat-item"><div class="feat-ic" style="background:#FFE4EB;color:#FF6B6B">💸</div><div><div class="feat-title">Comissões automáticas</div><div class="feat-desc">Configure a porcentagem de cada profissional e o sistema calcula tudo sozinho. Feche o mês com um clique.</div></div></div>
+        <div class="feat-item"><div class="feat-ic" style="background:#FFF3E0;color:#FF8C00">📦</div><div><div class="feat-title">Controle de estoque</div><div class="feat-desc">Registre entradas e saídas. Receba alertas quando um produto estiver acabando antes de faltar.</div></div></div>
+        <div class="feat-item"><div class="feat-ic" style="background:#E0F2FE;color:#0284C7">🔒</div><div><div class="feat-title">Dados seguros e isolados</div><div class="feat-desc">Cada salão tem seus dados completamente separados. Nenhum salão vê os dados de outro.</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMO FUNCIONA -->
+<section id="como" class="text-center">
+  <div class="sec-tag">Simples assim</div>
+  <h2>Em 3 passos você começa</h2>
+  <p class="sec-sub">Sem instalar nada, sem precisar de técnico. Se você usa WhatsApp, você usa o Beleza Pro.</p>
+  <div class="steps">
+    <div class="step-item"><div class="step-n">1</div><div class="step-t">Crie sua conta</div><div class="step-d">Preencha o nome do salão, e-mail e senha. Em menos de 1 minuto você já está dentro.</div></div>
+    <div class="step-item"><div class="step-n">2</div><div class="step-t">Configure seu salão</div><div class="step-d">Adicione seus profissionais, serviços e preços. Leva menos de 10 minutos.</div></div>
+    <div class="step-item"><div class="step-n">3</div><div class="step-t">Comece a usar</div><div class="step-d">Crie agendamentos, cadastre clientes e veja seu salão ganhar forma no sistema.</div></div>
+  </div>
+</section>
+
+<!-- DEPOIMENTOS -->
+<section id="depoimentos">
+  <div class="text-center">
+    <div class="sec-tag">Depoimentos</div>
+    <h2>Quem já usa, não larga</h2>
+    <p class="sec-sub">Veja o que donos de salão falam sobre o Beleza Pro.</p>
+  </div>
+  <div class="deps">
+    <div class="dep"><p class="dep-txt">Antes perdia 2 horas por semana calculando comissão na calculadora. Agora clico num botão e está pronto. Mudou minha vida.</p><div class="dep-auth"><div class="dep-av" style="background:linear-gradient(135deg,#7C5CFC,#FF6B6B)">M</div><div><div class="dep-name">Maria Clara</div><div class="dep-role">Salão em São Paulo, SP</div><div class="dep-stars">★★★★★</div></div></div></div>
+    <div class="dep"><p class="dep-txt">Meu estoque nunca mais acabou no meio da semana. O sistema avisa antes e consigo repor com calma, sem correr.</p><div class="dep-auth"><div class="dep-av" style="background:linear-gradient(135deg,#00C896,#0284C7)">K</div><div><div class="dep-name">Karla Mendes</div><div class="dep-role">Barbearia em Curitiba, PR</div><div class="dep-stars">★★★★★</div></div></div></div>
+    <div class="dep"><p class="dep-txt">O financeiro me mostrou que eu gastava R$800 por mês em material que nem usava. Economizei mais do que pago no sistema.</p><div class="dep-auth"><div class="dep-av" style="background:linear-gradient(135deg,#FFB347,#FF8C00)">J</div><div><div class="dep-name">Juliana Alves</div><div class="dep-role">Studio de Beleza em BH, MG</div><div class="dep-stars">★★★★★</div></div></div></div>
+  </div>
+</section>
+
+<!-- PREÇOS -->
+<section id="precos" class="text-center">
+  <div class="sec-tag">Preços</div>
+  <h2>Simples e sem surpresas</h2>
+  <p class="sec-sub">Comece grátis por 14 dias em qualquer plano. Sem cartão de crédito.</p>
+  <div class="planos">
+    <div class="plano">
+      <div class="plano-nome">Starter</div>
+      <div class="plano-preco">R$ 49<span>/mês</span></div>
+      <div class="plano-desc">Para salões pequenos começando a se organizar.</div>
+      <div class="plano-feats">
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Agenda ilimitada</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Até 200 clientes</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Financeiro básico</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>2 profissionais</div>
+        <div class="pf"><div class="pf-ic" style="background:#F3F4F6;color:#9CA3AF">–</div><span style="color:#9CA3AF">Estoque e comissões</span></div>
+      </div>
+      <button class="btn-plano btn-plano-s" onclick="openModal(event,'Starter')">Começar grátis</button>
+    </div>
+    <div class="plano popular">
+      <div class="pop-badge">✨ Mais popular</div>
+      <div class="plano-nome">Pro</div>
+      <div class="plano-preco">R$ 89<span>/mês</span></div>
+      <div class="plano-desc">Para salões que querem controle total do negócio.</div>
+      <div class="plano-feats">
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Tudo do Starter</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Até 1.000 clientes</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Estoque completo</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Comissões automáticas</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>10 profissionais</div>
+      </div>
+      <button class="btn-plano btn-plano-p" onclick="openModal(event,'Pro')">Começar grátis</button>
+    </div>
+    <div class="plano">
+      <div class="plano-nome">Business</div>
+      <div class="plano-preco">R$ 149<span>/mês</span></div>
+      <div class="plano-desc">Para redes de salões sem limites.</div>
+      <div class="plano-feats">
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Tudo do Pro</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Clientes ilimitados</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Profissionais ilimitados</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Múltiplas unidades</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Suporte prioritário</div>
+      </div>
+      <button class="btn-plano btn-plano-s" onclick="openModal(event,'Business')">Começar grátis</button>
+    </div>
+  </div>
+  <p class="trial-note">🎉 <strong>14 dias grátis</strong> em qualquer plano · Sem cartão de crédito · Cancele quando quiser</p>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="faq-inner">
+    <div class="text-center">
+      <div class="sec-tag">Dúvidas</div>
+      <h2>Perguntas frequentes</h2>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Preciso instalar algum programa? <span class="faq-arr">▼</span></div><div class="faq-a">Não. O Beleza Pro funciona direto no navegador do celular ou computador — Chrome, Safari, qualquer um. Sem instalação.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Meus dados ficam salvos se eu fechar o navegador? <span class="faq-arr">▼</span></div><div class="faq-a">Sim. Todos os dados são salvos em nuvem com segurança. Acesse de qualquer dispositivo, a qualquer hora.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Posso cancelar quando quiser? <span class="faq-arr">▼</span></div><div class="faq-a">Sim, sem burocracia. Cancele pelo painel a qualquer momento, sem multa e sem precisar ligar para ninguém.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="faq(this)">E se eu tiver mais de um salão? <span class="faq-arr">▼</span></div><div class="faq-a">No plano Business você cria múltiplas unidades com dados completamente separados. Cada salão tem sua própria conta.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Tenho suporte se tiver dúvidas? <span class="faq-arr">▼</span></div><div class="faq-a">Sim! Suporte via WhatsApp em horário comercial. No plano Business o atendimento é prioritário com resposta em até 1 hora.</div></div>
+      <div class="faq-item"><div class="faq-q" onclick="faq(this)">O sistema funciona no celular? <span class="faq-arr">▼</span></div><div class="faq-a">Sim, funciona perfeitamente no celular. Você pode gerenciar seu salão de qualquer lugar, direto pelo smartphone.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA FINAL -->
+<section id="cta-final">
+  <div class="sec-tag" style="color:rgba(255,255,255,.4)">Pronto para começar?</div>
+  <h2>Seu salão merece<br>uma gestão profissional</h2>
+  <p class="sec-sub">Junte-se a dezenas de salões que já economizam horas por semana.</p>
+  <div class="cta-btns">
+    <button class="btn-wh" onclick="openModal(event,'Pro')">✨ Começar grátis por 14 dias</button>
+    <a href="#features" class="btn-gh">Ver funcionalidades</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="foot-logo">Bele<em>za</em> Pro</div>
+  <div class="foot-links">
+    <a href="#">Termos de uso</a>
+    <a href="#">Privacidade</a>
+    <a href="#">Contato</a>
+  </div>
+  <div class="foot-txt">© 2026 Beleza Pro · Feito no Brasil 🇧🇷</div>
+</footer>
+
+<!-- MODAL CADASTRO -->
+<div class="modal-ov" id="modal-cad" onclick="closeModalOutside(event)">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-hdr">
+      <div class="modal-logo">Bele<em>za</em> Pro</div>
+      <div class="modal-title">Crie sua conta grátis</div>
+      <div class="modal-sub">14 dias grátis · Sem cartão · Cancele quando quiser</div>
+      <div class="trial-pill">🎉 Plano <span id="modal-plano-nome">Pro</span> selecionado · 14 dias grátis</div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-err" id="modal-err"></div>
+      <div class="modal-suc" id="modal-suc"></div>
+      <label class="fl">Nome do Salão*</label>
+      <input class="fi" id="m-salao" placeholder="Ex.: Studio Luna Hair" autocomplete="organization"/>
+      <div class="form-row">
+        <div><label class="fl">Seu nome*</label><input class="fi" id="m-nome" placeholder="Seu nome completo" autocomplete="name"/></div>
+        <div><label class="fl">Telefone</label><input class="fi" id="m-tel" placeholder="(11) 99999-0000" autocomplete="tel"/></div>
+      </div>
+      <label class="fl">E-mail*</label>
+      <input class="fi" type="email" id="m-email" placeholder="contato@seusalao.com.br" autocomplete="email"/>
+      <label class="fl">Senha* <span style="font-weight:400;color:var(--text2)">(mínimo 6 caracteres)</span></label>
+      <input class="fi" type="password" id="m-senha" placeholder="••••••••" autocomplete="new-password"/>
+      <button class="btn-submit" id="btn-submit" onclick="submitCadastro()">Criar conta e começar →</button>
+      <p class="modal-footer-note">Ao criar sua conta você concorda com nossos <a href="#" style="color:var(--accent)">Termos de uso</a>.</p>
+      <div style="text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <span style="font-size:.78rem;color:var(--text2)">Já tem conta? </span>
+        <a href="https://vihrbs.github.io/salaodebeleza/salao-v4-final.html" target="_blank" style="font-size:.78rem;font-weight:700;color:var(--accent);text-decoration:none">Entrar no painel →</a>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-'use strict';
-// ── CONFIG ──────────────────────────────────────────────
-// URL da API fixa — altere aqui se mudar o Railway
-var API_FIXA = 'https://salaodebeleza-production-8eaa.up.railway.app';
-var API = localStorage.getItem('bpro_api') || API_FIXA;
-var TK  = localStorage.getItem('bpro_tk')  || '';
-var DEMO = false; // nunca entra em demo se API_FIXA estiver definida
-var PROS = [], SVCS = [], CLIS = [];
-var COR_SEL = '#6C63FF';
+// ── CONFIG ──────────────────────────
+var API_URL = 'https://salaodebeleza-production-8eaa.up.railway.app';
+var PLANO_SEL = 'Pro';
 
-var SL = {agendado:'Agendado',confirmado:'Confirmado',em_atendimento:'Em Atendimento',concluido:'Concluído',cancelado:'Cancelado',nao_compareceu:'Não Compareceu'};
-var SC = {agendado:'bg2',confirmado:'bi',em_atendimento:'bs',concluido:'bp',cancelado:'bd2',nao_compareceu:'bw'};
-var COLS = ['#6C63FF','#FF6584','#43D9AD','#FFB347','#3B82F6','#EC4899'];
+// ── NAV scroll ──────────────────────
+window.addEventListener('scroll', function(){
+  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 30);
+});
 
-// ── HELPERS ─────────────────────────────────────────────
-function brl(v){ return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
-function fdt(d){ return new Date(d).toLocaleDateString('pt-BR'); }
-function fhr(d){ return new Date(d).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
-function today(){ return new Date().toISOString().split('T')[0]; }
-function deb(fn,ms){ var t; return function(){ clearTimeout(t); t = setTimeout(fn, ms); }; }
-
-function toast(msg, type) {
-  var c = document.getElementById('toasts');
-  var el = document.createElement('div');
-  var icons = {ok:'✅', er:'❌', inf:'ℹ️'};
-  var cls = {ok:'tok', er:'ter', inf:'tinf'};
-  el.className = 'toast ' + (cls[type] || 'tinf');
-  el.innerHTML = (icons[type]||'ℹ️') + ' ' + msg;
-  c.appendChild(el);
-  setTimeout(function(){ el.style.opacity='0'; el.style.transition='opacity .3s'; }, 2800);
-  setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 3100);
-}
-
-// ── API ─────────────────────────────────────────────────
-function apiFetch(path, opts) {
-  if (!API || DEMO) return Promise.resolve(null);
-  opts = opts || {};
-  var headers = {'Content-Type':'application/json'};
-  if (TK) headers['Authorization'] = 'Bearer ' + TK;
-  if (opts.headers) Object.assign(headers, opts.headers);
-  opts.headers = headers;
-  if (opts.body && typeof opts.body === 'object') opts.body = JSON.stringify(opts.body);
-  return fetch(API + path, opts).then(function(r){
-    if (r.status === 401) { doLogout(); throw new Error('Sessão expirada'); }
-    if (!r.ok) return r.json().then(function(e){ throw new Error(e.error || 'Erro ' + r.status); });
-    return r.json();
+// ── SMOOTH SCROLL ───────────────────
+document.querySelectorAll('a[href^="#"]').forEach(function(a){
+  a.addEventListener('click', function(e){
+    var t = document.querySelector(this.getAttribute('href'));
+    if(t){ e.preventDefault(); t.scrollIntoView({behavior:'smooth'}); }
   });
+});
+
+// ── FAQ ─────────────────────────────
+function faq(el){
+  var isOpen = el.classList.contains('open');
+  document.querySelectorAll('.faq-q').forEach(function(q){ q.classList.remove('open'); });
+  document.querySelectorAll('.faq-a').forEach(function(a){ a.classList.remove('open'); });
+  if(!isOpen){ el.classList.add('open'); el.nextElementSibling.classList.add('open'); }
 }
 
-// ── AUTH ────────────────────────────────────────────────
-function tab(t) {
-  document.querySelectorAll('.l-tab').forEach(function(el,i){ el.classList.toggle('on', (i===0&&t==='in')||(i===1&&t==='up')); });
-  document.getElementById('pane-in').classList.toggle('on', t==='in');
-  document.getElementById('pane-up').classList.toggle('on', t==='up');
+// ── MODAL ───────────────────────────
+function openModal(e, plano){
+  if(e) e.preventDefault();
+  PLANO_SEL = plano || 'Pro';
+  document.getElementById('modal-plano-nome').textContent = PLANO_SEL;
+  document.getElementById('modal-err').style.display = 'none';
+  document.getElementById('modal-suc').style.display = 'none';
+  document.getElementById('modal-cad').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  setTimeout(function(){ document.getElementById('m-salao').focus(); }, 100);
 }
+function closeModal(){
+  document.getElementById('modal-cad').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function closeModalOutside(e){
+  if(e.target === document.getElementById('modal-cad')) closeModal();
+}
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
 
-function doLogin() {
-  var email = document.getElementById('in-email').value.trim();
-  var pw    = document.getElementById('in-pw').value;
-  var apiV  = document.getElementById('in-api').value.trim().replace(/\/+$/,'');
-  var btn   = document.getElementById('btn-in');
-  var err   = document.getElementById('err-in');
+// ── SUBMIT CADASTRO ─────────────────
+function submitCadastro(){
+  var salao = document.getElementById('m-salao').value.trim();
+  var nome  = document.getElementById('m-nome').value.trim();
+  var tel   = document.getElementById('m-tel').value.trim();
+  var email = document.getElementById('m-email').value.trim();
+  var senha = document.getElementById('m-senha').value;
+  var err   = document.getElementById('modal-err');
+  var suc   = document.getElementById('modal-suc');
+  var btn   = document.getElementById('btn-submit');
+
   err.style.display = 'none';
-  btn.disabled = true; btn.textContent = 'Entrando...';
+  suc.style.display = 'none';
 
-  if (apiV) { API = apiV; localStorage.setItem('bpro_api', API); }
-  else { API = API_FIXA; }
-  DEMO = false;
+  if(!salao){ showErr('Preencha o nome do salão'); return; }
+  if(!nome){  showErr('Preencha seu nome'); return; }
+  if(!email || !email.includes('@')){ showErr('E-mail inválido'); return; }
+  if(!senha || senha.length < 6){ showErr('Senha deve ter pelo menos 6 caracteres'); return; }
 
-  (DEMO
-    ? Promise.resolve(null)
-    : fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,senha:pw})})
-        .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Email ou senha incorretos'); return d; }); })
-  ).then(function(data){
-    if (data && data.token) {
-      TK = data.token;
-      localStorage.setItem('bpro_tk', TK);
-      DEMO = false;
-      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE');
-    } else {
-      DEMO = true;
-      enterApp(email ? email.split('@')[0] : 'Admin Demo', 'Studio Demo', 'DEMO');
-    }
-  }).catch(function(e){
-    err.textContent = e.message; err.style.display = 'block';
-  }).finally(function(){
-    btn.disabled = false; btn.textContent = 'Entrar no Painel';
-  });
-}
+  btn.disabled = true;
+  btn.textContent = 'Criando sua conta...';
 
-function doRegister() {
-  var btn = document.getElementById('btn-up');
-  var err = document.getElementById('err-up');
-  err.style.display = 'none'; btn.disabled = true; btn.textContent = 'Criando...';
-  API = API_FIXA; DEMO = false;
-  fetch(API+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-    nome_salao: document.getElementById('up-salao').value,
-    nome: document.getElementById('up-nome').value,
-    email: document.getElementById('up-email').value,
-    senha: document.getElementById('up-pw').value,
-    telefone: document.getElementById('up-tel').value
-  })}).then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Erro ao criar conta'); return d; }); })
-  .then(function(data){
-    TK = data.token; localStorage.setItem('bpro_tk', TK); DEMO = false;
-    enterApp(data.usuario && data.usuario.nome||'Admin', data.salao && data.salao.nome||'Meu Salão', 'LIVE');
-    toast('Conta criada! Trial de 14 dias ativo 🎉','ok');
-  }).catch(function(e){ err.textContent=e.message; err.style.display='block'; })
-  .finally(function(){ btn.disabled=false; btn.textContent='Criar Conta Grátis'; });
-}
-
-function enterApp(nome, salon, mode) {
-  document.getElementById('login').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  document.getElementById('uav').textContent = (nome||'A')[0].toUpperCase();
-  document.getElementById('uname').textContent = nome || 'Admin';
-  document.getElementById('tb-salon').textContent = salon || '';
-  var b = document.getElementById('apibadge');
-  b.textContent = mode; b.className = 'apibadge ' + (mode==='LIVE'?'live':'demo');
-  document.getElementById('ag-dt').value = today();
-  document.getElementById('ag-d').value  = today();
-  document.getElementById('lan-dt').value = today();
-  if (document.getElementById('cfg-api')) document.getElementById('cfg-api').value = API || '';
-  updateApiStatus();
-  loadAll();
-}
-
-function doLogout() {
-  localStorage.removeItem('bpro_tk'); TK = ''; DEMO = true;
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login').style.display = 'flex';
-}
-
-// ── NAV ─────────────────────────────────────────────────
-function nav(page, el) {
-  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('on'); });
-  document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('on'); });
-  document.getElementById('page-'+page).classList.add('on');
-  el.classList.add('on');
-  if (page==='config') updateApiStatus();
-}
-
-// ── MODALS ──────────────────────────────────────────────
-function openM(id){ document.getElementById(id).classList.add('on'); document.body.style.overflow='hidden'; }
-function closeM(id){ document.getElementById(id).classList.remove('on'); document.body.style.overflow=''; }
-document.querySelectorAll('.mov').forEach(function(el){
-  el.addEventListener('click', function(e){ if(e.target===el) closeM(el.id); });
-});
-
-// ── DEMO DATA ───────────────────────────────────────────
-var D = {
-  kpis: {agendamentos_hoje:18,faturamento_hoje:2840,clientes_ativos:127,novos_clientes_mes:5},
-  ags: [
-    {id:'1',data_hora:'2026-05-29T08:30:00',status:'confirmado',valor_total:70,clientes:{nome:'Ana Paula Silva'},profissionais:{nome:'Juliana Alves',cor_agenda:'#6C63FF'},agendamento_servicos:[{servicos:{nome:'Corte Feminino'}}]},
-    {id:'2',data_hora:'2026-05-29T09:00:00',status:'em_atendimento',valor_total:240,clientes:{nome:'Beatriz Santos'},profissionais:{nome:'Marcos Souza',cor_agenda:'#FF6584'},agendamento_servicos:[{servicos:{nome:'Coloração'}}]},
-    {id:'3',data_hora:'2026-05-29T10:30:00',status:'confirmado',valor_total:95,clientes:{nome:'Carla Mendes'},profissionais:{nome:'Fernanda Lima',cor_agenda:'#43D9AD'},agendamento_servicos:[{servicos:{nome:'Manicure + Pedicure'}}]},
-    {id:'4',data_hora:'2026-05-29T13:00:00',status:'agendado',valor_total:55,clientes:{nome:'Daniela Ferreira'},profissionais:{nome:'Juliana Alves',cor_agenda:'#6C63FF'},agendamento_servicos:[{servicos:{nome:'Escova'}}]},
-    {id:'5',data_hora:'2026-05-29T14:00:00',status:'agendado',valor_total:150,clientes:{nome:'Eduarda Costa'},profissionais:{nome:'Marcos Souza',cor_agenda:'#FF6584'},agendamento_servicos:[{servicos:{nome:'Coloração'}}]},
-  ],
-  pros: [
-    {id:'p1',nome:'Juliana Alves',especialidade:'Cabeleireira',comissao_pct:45,cor_agenda:'#6C63FF',total_servicos:42,faturado:4140},
-    {id:'p2',nome:'Marcos Souza',especialidade:'Colorista',comissao_pct:40,cor_agenda:'#FF6584',total_servicos:35,faturado:3850},
-    {id:'p3',nome:'Fernanda Lima',especialidade:'Manicure',comissao_pct:50,cor_agenda:'#43D9AD',total_servicos:28,faturado:2240},
-    {id:'p4',nome:'Patricia Costa',especialidade:'Esteticista',comissao_pct:40,cor_agenda:'#FFB347',total_servicos:21,faturado:1680},
-  ],
-  svcs: [
-    {id:'s1',nome:'Corte Feminino',categoria:'Cabelo',duracao_min:60,preco:70,comissao_pct:40,ativo:true},
-    {id:'s2',nome:'Coloração',categoria:'Cabelo',duracao_min:120,preco:150,comissao_pct:40,ativo:true},
-    {id:'s3',nome:'Escova',categoria:'Cabelo',duracao_min:60,preco:55,comissao_pct:40,ativo:true},
-    {id:'s4',nome:'Hidratação',categoria:'Cabelo',duracao_min:60,preco:90,comissao_pct:40,ativo:true},
-    {id:'s5',nome:'Manicure',categoria:'Unhas',duracao_min:45,preco:45,comissao_pct:50,ativo:true},
-    {id:'s6',nome:'Pedicure',categoria:'Unhas',duracao_min:60,preco:50,comissao_pct:50,ativo:true},
-    {id:'s7',nome:'Sobrancelha',categoria:'Estética',duracao_min:20,preco:40,comissao_pct:40,ativo:true},
-    {id:'s8',nome:'Barba',categoria:'Barba',duracao_min:30,preco:45,comissao_pct:45,ativo:true},
-  ],
-  clis: [
-    {id:'c1',nome:'Ana Paula Silva',telefone:'(11) 98765-4321',email:'ana@email.com',historico_count:24,ultimo_agendamento:'2026-05-20',total_gasto:2880,status:'vip',cor:'#6C63FF'},
-    {id:'c2',nome:'Beatriz Santos',telefone:'(11) 91234-5678',email:'bea@email.com',historico_count:18,ultimo_agendamento:'2026-05-22',total_gasto:1920,status:'ativo',cor:'#FF6584'},
-    {id:'c3',nome:'Carla Mendes',telefone:'(11) 99887-6543',email:'carla@email.com',historico_count:8,ultimo_agendamento:'2026-05-15',total_gasto:760,status:'ativo',cor:'#43D9AD'},
-    {id:'c4',nome:'Daniela Ferreira',telefone:'(11) 97654-3210',email:'dani@email.com',historico_count:31,ultimo_agendamento:'2026-05-28',total_gasto:4650,status:'vip',cor:'#FFB347'},
-  ],
-  est: [
-    {id:'e1',nome:"Tintura L'Oréal 5.0",categoria:'Tintura',qtd_atual:12,qtd_minima:5,preco_custo:28,fornecedor:"L'Oréal"},
-    {id:'e2',nome:"Tintura L'Oréal 6.0",categoria:'Tintura',qtd_atual:3,qtd_minima:5,preco_custo:28,fornecedor:"L'Oréal"},
-    {id:'e3',nome:'Shampoo Kerastase',categoria:'Shampoo',qtd_atual:8,qtd_minima:4,preco_custo:65,fornecedor:'Kerastase'},
-    {id:'e4',nome:'Máscara Hidratante',categoria:'Tratamento',qtd_atual:2,qtd_minima:3,preco_custo:42,fornecedor:'Wella'},
-    {id:'e5',nome:'Pó Descolorante',categoria:'Tratamento',qtd_atual:1,qtd_minima:4,preco_custo:35,fornecedor:'Wella'},
-  ],
-  com: [
-    {id:'p1',nome:'Juliana Alves',cor:'#6C63FF',comissao_pct:45,total_servicos:42,total_bruto:4140,total_comissao:1863,fechamento:null},
-    {id:'p2',nome:'Marcos Souza',cor:'#FF6584',comissao_pct:40,total_servicos:35,total_bruto:3850,total_comissao:1540,fechamento:{status:'pago'}},
-    {id:'p3',nome:'Fernanda Lima',cor:'#43D9AD',comissao_pct:50,total_servicos:28,total_bruto:2240,total_comissao:1120,fechamento:null},
-  ],
-  lan: [
-    {tipo:'entrada',descricao:'Coloração — Daniela Ferreira',data:'2026-05-29',valor:150,forma_pgto:'PIX'},
-    {tipo:'entrada',descricao:'Manicure — Carla Mendes',data:'2026-05-29',valor:95,forma_pgto:'Dinheiro'},
-    {tipo:'saida',descricao:'Compra de tinturas',data:'2026-05-28',valor:280,forma_pgto:'PIX'},
-    {tipo:'entrada',descricao:'Escova — Ana Paula',data:'2026-05-28',valor:55,forma_pgto:'Débito'},
-    {tipo:'saida',descricao:'Conta de luz',data:'2026-05-27',valor:340,forma_pgto:'Boleto'},
-  ],
-  fin: {receita:28640,despesa:6240,lucro:22400,apagar:3200},
-  top: [{nome:'Coloração',count:24,total:3600},{nome:'Corte',count:31,total:2170},{nome:'Escova',count:18,total:990},{nome:'Manicure',count:22,total:990}]
-};
-
-// ── LOAD ALL ────────────────────────────────────────────
-function loadAll() {
-  loadKPIs(); loadDashTl(); loadTopSvc(); loadAlertas();
-  loadAgenda(); loadClientes(); loadFin(); loadEst();
-  loadCom(); loadPros(); loadSvcs();
-  renderCal(); renderDashChart();
-  fillSelects();
-}
-
-// ── DASHBOARD ───────────────────────────────────────────
-function loadKPIs() {
-  apiFetch('/api/dashboard/kpis').then(function(r){
-    var d = r || (DEMO ? D.kpis : {agendamentos_hoje:0,faturamento_hoje:0,clientes_ativos:0,novos_clientes_mes:0});
-    document.getElementById('k1').textContent = d.agendamentos_hoje;
-    document.getElementById('k2').textContent = brl(d.faturamento_hoje);
-    document.getElementById('k3').textContent = d.clientes_ativos;
-    document.getElementById('k1d').textContent = '+' + (d.novos_clientes_mes||0) + ' novos este mês';
-    document.getElementById('k2d').textContent = d.agendamentos_hoje + ' atendimentos';
-    document.getElementById('k3d').textContent = (d.novos_clientes_mes||0) + ' novos este mês';
-    document.getElementById('nbag').textContent = d.agendamentos_hoje;
-  }).catch(function(){ /* use demo */ });
-}
-
-function loadDashTl() {
-  apiFetch('/api/dashboard/agenda-hoje').then(function(r){
-    renderTl(r || []);
-  }).catch(function(){ renderTl(DEMO ? D.ags : []); });
-}
-
-function renderTl(list) {
-  var el = document.getElementById('dash-tl');
-  if (!list || !list.length) { el.innerHTML='<div class="empty">📅 Nenhum agendamento hoje</div>'; return; }
-  el.innerHTML = list.map(function(a){
-    var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos && s.servicos.nome; }).join(', ') || '—';
-    return '<div class="tli" onclick="toast(\'' + (a.clientes&&a.clientes.nome||'').replace(/'/g,"\\'") + '\',\'inf\')">' +
-      '<div style="font-size:.73rem;font-weight:700;min-width:38px">' + fhr(a.data_hora) + '</div>' +
-      '<div class="tdot" style="background:' + (a.profissionais&&a.profissionais.cor_agenda||'#999') + '"></div>' +
-      '<div style="flex:1"><div style="font-size:.8rem;font-weight:600">' + (a.clientes&&a.clientes.nome||'—') + '</div>' +
-      '<div style="font-size:.7rem;color:var(--t2)">' + sv + ' · ' + (a.profissionais&&a.profissionais.nome||'') + '</div></div>' +
-      '<span class="badge ' + (SC[a.status]||'bg2') + '">' + (SL[a.status]||a.status) + '</span>' +
-      '<strong style="font-size:.78rem;min-width:58px;text-align:right">' + brl(a.valor_total) + '</strong>' +
-      '<button class="btnic btn" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'concluido\')" title="Concluir">✅</button>' +
-      '</div>';
-  }).join('');
-}
-
-function mudaStatus(id, status) {
-  apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{status:status}})
-    .then(function(){ loadDashTl(); loadAgenda(); })
-    .catch(function(){});
-  toast('Status: ' + (SL[status]||status), 'ok');
-}
-
-function loadTopSvc() {
-  apiFetch('/api/dashboard/top-servicos').then(function(r){
-    renderTop(r || []);
-  }).catch(function(){ renderTop(DEMO ? D.top : []); });
-}
-
-function renderTop(d) {
-  var max = Math.max.apply(null, d.map(function(x){ return x.total; })) || 1;
-  document.getElementById('top-svc').innerHTML = d.map(function(s){
-    return '<div class="sbw"><div class="sbh"><span style="font-weight:600">' + s.nome + '</span><span>' + s.count + 'x · <strong>' + brl(s.total) + '</strong></span></div>' +
-      '<div class="sbt"><div class="sbf sfok" style="width:' + Math.round(s.total/max*100) + '%;background:var(--ac)"></div></div></div>';
-  }).join('');
-}
-
-function loadAlertas() {
-  apiFetch('/api/estoque/alertas').then(function(r){
-    var d = r || D.est.filter(function(p){ return p.qtd_atual < p.qtd_minima; });
-    var el = document.getElementById('dash-al');
-    if (!d || !d.length) { el.innerHTML='<div style="padding:10px;font-size:.76rem;color:var(--t3)">✅ Tudo em ordem</div>'; return; }
-    el.innerHTML = d.slice(0,4).map(function(p){
-      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:.76rem"><span style="font-weight:600">' + p.nome + '</span><span class="badge bd2">' + p.qtd_atual + ' restante' + (p.qtd_atual!==1?'s':'') + '</span></div>';
-    }).join('');
-  }).catch(function(){});
-}
-
-function renderDashChart() {
-  var days = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
-  var vals = [1840,2100,1650,2480,2840,2200,1190];
-  var max  = Math.max.apply(null, vals);
-  document.getElementById('fat7').textContent = brl(vals.reduce(function(s,v){ return s+v; }, 0));
-  document.getElementById('dash-bc').innerHTML = days.map(function(d,i){
-    return '<div class="bw"><div class="bval">' + (vals[i]/1000).toFixed(1) + 'k</div>' +
-      '<div class="bar" style="height:' + (Math.round(vals[i]/max*100)+8) + 'px;background:' + (i===4?'var(--ac)':'var(--bd)') + '"></div>' +
-      '<div class="blab">' + d + '</div></div>';
-  }).join('');
-}
-
-function renderCal() {
-  var el = document.getElementById('mcal');
-  var hev = [5,8,10,15,18,22,25,26,27,28,29];
-  el.innerHTML = ['D','S','T','Q','Q','S','S'].map(function(d){ return '<div class="mcdn">' + d + '</div>'; }).join('');
-  for (var i=0; i<5; i++) el.innerHTML += '<div class="mcd oth">' + (25+i) + '</div>';
-  for (var d=1; d<=31; d++) {
-    el.innerHTML += '<div class="mcd ' + (d===29?'today':'') + ' ' + (hev.indexOf(d)>=0&&d!==29?'hev':'') + '">' + d + '</div>';
-  }
-}
-
-// ── AGENDA ──────────────────────────────────────────────
-function loadAgenda() {
-  var data = document.getElementById('ag-dt').value;
-  var pro  = document.getElementById('ag-prf').value;
-  if (data) {
-    var dt = new Date(data+'T12:00');
-    document.getElementById('ag-ttl').textContent = 'Agenda — ' + dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
-  }
-  var params = new URLSearchParams();
-  if (data) params.set('data', data);
-  if (pro)  params.set('profissional_id', pro);
-  apiFetch('/api/agendamentos?' + params).then(function(r){
-    renderAgenda(r || (DEMO ? D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); }) : []));
-  }).catch(function(){ renderAgenda(DEMO ? D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); }) : []); });
-}
-
-function renderAgenda(list) {
-  var tb = document.getElementById('ag-tb');
-  if (!list || !list.length) { tb.innerHTML='<tr><td colspan="7" class="empty">📅 Nenhum agendamento neste dia</td></tr>'; return; }
-  tb.innerHTML = list.map(function(a){
-    var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).join(', ') || '—';
-    return '<tr onclick="toast(\'' + (a.clientes&&a.clientes.nome||'').replace(/'/g,"\\'") + '\',\'inf\')">' +
-      '<td><strong>' + fhr(a.data_hora) + '</strong></td>' +
-      '<td><strong>' + (a.clientes&&a.clientes.nome||'—') + '</strong></td>' +
-      '<td style="color:var(--t2)">' + sv + '</td>' +
-      '<td><div style="display:flex;align-items:center;gap:6px"><div style="width:9px;height:9px;border-radius:50%;background:' + (a.profissionais&&a.profissionais.cor_agenda||'#999') + '"></div>' + (a.profissionais&&a.profissionais.nome||'—') + '</div></td>' +
-      '<td><strong>' + brl(a.valor_total) + '</strong></td>' +
-      '<td><span class="badge ' + (SC[a.status]||'bg2') + '">' + (SL[a.status]||a.status) + '</span></td>' +
-      '<td><div style="display:flex;gap:3px">' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'em_atendimento\')" title="Iniciar">▶</button>' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'concluido\')" title="Concluir">✅</button>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'cancelado\')" title="Cancelar">✕</button>' +
-      '</div></td></tr>';
-  }).join('');
-}
-
-// ── CLIENTES ────────────────────────────────────────────
-function loadClientes(q) {
-  q = q || '';
-  apiFetch('/api/clientes?q=' + encodeURIComponent(q) + '&limit=100').then(function(r){
-    var list = r ? (r.data||r) : [];
-    if (!list.length && DEMO) list = D.clis.filter(function(c){ return !q || c.nome.toLowerCase().indexOf(q.toLowerCase())>=0; });
-    renderCli(list); CLIS = list;
-  }).catch(function(){
-    var list = DEMO ? D.clis.filter(function(c){ return !q || c.nome.toLowerCase().indexOf(q.toLowerCase())>=0; }) : [];
-    renderCli(list); CLIS = list;
-  });
-}
-
-function renderCli(list) {
-  var stL = {vip:'VIP',ativo:'Ativo',novo:'Novo',inativo:'Inativo'};
-  var stC = {vip:'bp',ativo:'bs',novo:'bi',inativo:'bg2'};
-  document.getElementById('cli-tb').innerHTML = list.map(function(c){
-    return '<tr onclick="toast(\'' + c.nome.replace(/'/g,"\\'") + '\',\'inf\')">' +
-      '<td><div style="display:flex;align-items:center;gap:9px">' +
-      '<div style="width:30px;height:30px;border-radius:50%;background:' + (c.cor||COLS[0]) + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.78rem;flex-shrink:0">' + c.nome[0] + '</div>' +
-      '<div><div style="font-weight:600">' + c.nome + '</div><div style="font-size:.68rem;color:var(--t3)">' + (c.email||'') + '</div></div></div></td>' +
-      '<td>' + (c.telefone||'—') + '</td>' +
-      '<td><strong>' + (c.historico_count||0) + '</strong></td>' +
-      '<td>' + (c.ultimo_agendamento ? fdt(c.ultimo_agendamento+'T12:00') : '—') + '</td>' +
-      '<td><strong>' + brl(c.total_gasto) + '</strong></td>' +
-      '<td><span class="badge ' + (stC[c.status]||'bg2') + '">' + (stL[c.status]||'Ativo') + '</span></td>' +
-      '<td><div style="display:flex;gap:3px">' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Abrindo WhatsApp...\',\'ok\')">💬</button>' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();openM(\'m-ag\')">📅</button>' +
-      '</div></td></tr>';
-  }).join('');
-}
-
-// ── FINANCEIRO ──────────────────────────────────────────
-function loadFin() {
-  apiFetch('/api/financeiro/resumo').then(function(r){
-    var d = r || (DEMO ? D.fin : {receita:0,despesa:0,lucro:0,apagar:0});
-    document.getElementById('fr').textContent = brl(d.receita);
-    document.getElementById('fd').textContent = brl(d.despesa);
-    document.getElementById('fl').textContent = brl(d.lucro);
-    document.getElementById('fa').textContent = brl(d.apagar);
-  }).catch(function(){
-    document.getElementById('fr').textContent = brl(D.fin.receita);
-    document.getElementById('fd').textContent = brl(D.fin.despesa);
-    document.getElementById('fl').textContent = brl(D.fin.lucro);
-    document.getElementById('fa').textContent = brl(D.fin.apagar);
-  });
-  renderFinChart(); loadLan('');
-}
-
-function renderFinChart() {
-  var m = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  var v = [18200,21400,19800,24600,28640,0,0,0,0,0,0,0];
-  var max = Math.max.apply(null, v.filter(function(x){ return x>0; })) || 1;
-  document.getElementById('fin-bc').innerHTML = m.map(function(mn,i){
-    return '<div class="bw">' +
-      (v[i] ? '<div class="bval">' + (v[i]/1000).toFixed(0) + 'k</div>' : '<div class="bval" style="opacity:0">-</div>') +
-      '<div class="bar" style="height:' + (v[i] ? Math.round(v[i]/max*120)+5 : 3) + 'px;background:' + (i===4?'var(--ac)':v[i]?'var(--bd)':'#F3F4F6') + '"></div>' +
-      '<div class="blab">' + mn + '</div></div>';
-  }).join('');
-}
-
-function loadLan(tipo) {
-  apiFetch('/api/financeiro/lancamentos?tipo=' + (tipo||'') + '&limit=30').then(function(r){
-    var list = r ? (r.data||r) : D.lan;
-    if (tipo) list = list.filter(function(l){ return l.tipo===tipo; });
-    renderLan(list);
-  }).catch(function(){
-    var list = tipo ? D.lan.filter(function(l){ return l.tipo===tipo; }) : D.lan;
-    renderLan(list);
-  });
-}
-
-function renderLan(list) {
-  document.getElementById('lan-lst').innerHTML = list.map(function(l){
-    return '<div style="display:flex;align-items:center;gap:11px;padding:8px 9px;border-radius:var(--rs);transition:background .1s;cursor:pointer" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
-      '<div style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.85rem;background:' + (l.tipo==='entrada'?'#D6FAF0':'#FEE2E2') + ';flex-shrink:0">' + (l.tipo==='entrada'?'💰':'📤') + '</div>' +
-      '<div style="flex:1"><div style="font-size:.78rem;font-weight:600">' + l.descricao + '</div><div style="font-size:.68rem;color:var(--t3)">' + fdt(l.data+'T12:00') + ' · ' + (l.forma_pgto||'') + '</div></div>' +
-      '<div style="font-size:.82rem;font-weight:700;color:' + (l.tipo==='entrada'?'var(--ok)':'var(--er)') + '">' + (l.tipo==='entrada'?'+':'-') + brl(l.valor) + '</div></div>';
-  }).join('');
-}
-
-// ── ESTOQUE ─────────────────────────────────────────────
-function loadEst(q) {
-  q = q || '';
-  apiFetch('/api/estoque' + (q ? '?q='+encodeURIComponent(q) : '')).then(function(r){
-    var list = r || [];
-    if (!list.length && DEMO) list = D.est.filter(function(p){ return !q || p.nome.toLowerCase().indexOf(q.toLowerCase())>=0; });
-    renderEst(list);
-  }).catch(function(){
-    renderEst(DEMO ? D.est.filter(function(p){ return !q || p.nome.toLowerCase().indexOf(q.toLowerCase())>=0; }) : []);
-  });
-}
-
-function renderEst(list) {
-  var lC = {ok:'bs',low:'bw',crit:'bd2'};
-  var lF = {ok:'sfok',low:'sflow',crit:'sfcrit'};
-  var lT = {ok:'Normal',low:'Baixo',crit:'Crítico'};
-  document.getElementById('est-tb').innerHTML = list.map(function(p){
-    var pct = Math.min(Math.round((p.qtd_atual/Math.max(p.qtd_minima,1))*100), 100);
-    var lvl = p.qtd_atual<=0 ? 'crit' : p.qtd_atual<p.qtd_minima ? 'low' : 'ok';
-    return '<tr onclick="toast(\'' + p.nome.replace(/'/g,"\\'") + '\',\'inf\')">' +
-      '<td><strong>' + p.nome + '</strong></td>' +
-      '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + p.categoria + '</span></td>' +
-      '<td><strong style="color:' + (lvl==='crit'?'var(--er)':lvl==='low'?'var(--warn)':'inherit') + '">' + p.qtd_atual + '</strong></td>' +
-      '<td>' + p.qtd_minima + '</td>' +
-      '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
-      '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Reposição registrada\',\'ok\')">+</button><button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Editar\',\'inf\')">✏️</button></div></td>' +
-      '</tr>';
-  }).join('');
-}
-
-// ── COMISSÕES ───────────────────────────────────────────
-function loadCom() {
-  apiFetch('/api/comissoes').then(function(r){
-    renderCom(r || []);
-  }).catch(function(){ renderCom(DEMO ? D.com : []); });
-}
-
-function renderCom(list) {
-  var tot  = list.reduce(function(s,p){ return s+p.total_comissao; }, 0);
-  var pago = list.filter(function(p){ return p.fechamento&&p.fechamento.status==='pago'; }).reduce(function(s,p){ return s+p.total_comissao; }, 0);
-  document.getElementById('ct1').textContent = brl(tot);
-  document.getElementById('ct2').textContent = list.length;
-  document.getElementById('ct3').textContent = brl(pago);
-  document.getElementById('ct4').textContent = brl(tot-pago);
-
-  document.getElementById('com-lst').innerHTML = list.map(function(p){
-    return '<div style="display:flex;align-items:center;gap:13px;padding:13px;background:var(--wh);border-radius:var(--r);border:1.5px solid var(--bd);margin-bottom:7px">' +
-      '<div class="pro-av" style="background:' + (p.cor||COLS[0]) + '">' + p.nome[0] + '</div>' +
-      '<div><div style="font-weight:700;font-size:.85rem">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div></div>' +
-      '<div style="display:flex;gap:18px;margin-left:auto;text-align:center">' +
-      '<div><div style="font-size:.88rem;font-weight:800">' + p.total_servicos + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
-      '<div><div style="font-size:.88rem;font-weight:800">' + brl(p.total_bruto) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div>' +
-      '<div><div style="font-size:.88rem;font-weight:800;color:var(--ac)">' + brl(p.total_comissao) + '</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
-      '</div>' +
-      (p.fechamento&&p.fechamento.status==='pago'
-        ? '<span class="badge bs">✅ Pago</span>'
-        : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.total_comissao + ')">Pagar ' + brl(p.total_comissao) + '</button>') +
-      '</div>';
-  }).join('');
-
-  document.getElementById('fcom-t').innerHTML = '<table><thead><tr><th>Profissional</th><th>Serviços</th><th>Comissão</th><th>Status</th></tr></thead><tbody>' +
-    list.map(function(p){ return '<tr><td>' + p.nome + '</td><td>' + p.total_servicos + '</td><td><strong>' + brl(p.total_comissao) + '</strong></td><td><span class="badge ' + (p.fechamento&&p.fechamento.status==='pago'?'bs':'bw') + '">' + (p.fechamento&&p.fechamento.status==='pago'?'Pago':'A pagar') + '</span></td></tr>'; }).join('') +
-    '</tbody></table>';
-}
-
-function pagarCom(id, nome, val) {
-  var now = new Date();
-  var ini = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
-  var fim = new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0];
-  apiFetch('/api/comissoes/fechar',{method:'POST',body:{
-    profissional_id:id, total_comissao:val,
-    periodo_inicio:ini, periodo_fim:fim
-  }})
-  .then(function(){ toast('Comissão de '+nome+' paga e salva! ✅','ok'); loadCom(); })
-  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
-}
-function fecharCom(){ closeM('m-fcom'); toast('Comissões fechadas!','ok'); loadCom(); }
-
-// ── PROFISSIONAIS ───────────────────────────────────────
-function loadPros() {
-  apiFetch('/api/profissionais').then(function(r){
-    PROS = r || []; renderPros(PROS);
-  }).catch(function(){ PROS = DEMO ? D.pros : []; renderPros(PROS); });
-}
-
-function renderPros(list) {
-  document.getElementById('pro-grid').innerHTML = list.map(function(p){
-    return '<div class="pro-card">' +
-      '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">' +
-      '<div class="pro-av" style="background:' + (p.cor_agenda||COLS[0]) + '">' + p.nome[0] + '</div>' +
-      '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + (p.especialidade||'—') + '</div></div>' +
-      '<button class="btnic btn btnsm" onclick="toast(\'Editar ' + p.nome.split(' ')[0].replace(/'/g,"\\'") + '\',\'inf\')">✏️</button></div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs)">' +
-      '<div><div style="font-size:.9rem;font-weight:800">' + (p.total_servicos||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
-      '<div><div style="font-size:.9rem;font-weight:800;color:var(--ac)">' + (p.comissao_pct||40) + '%</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
-      '<div><div style="font-size:.8rem;font-weight:800;color:var(--ac3)">' + brl(p.faturado||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div></div>' +
-      '<div style="display:flex;gap:7px;margin-top:11px">' +
-      '<button class="btn btns btnsm" style="flex:1" onclick="openM(\'m-ag\')">📅 Agendar</button>' +
-      '<button class="btn btns btnsm" style="flex:1" onclick="toast(\'WhatsApp...\',\'ok\')">💬 WhatsApp</button></div></div>';
-  }).join('');
-}
-
-// ── SERVIÇOS ────────────────────────────────────────────
-function loadSvcs() {
-  apiFetch('/api/servicos').then(function(r){
-    SVCS = r || []; renderSvcs(SVCS);
-  }).catch(function(){ SVCS = DEMO ? D.svcs : []; renderSvcs(SVCS); });
-}
-
-function renderSvcs(list) {
-  document.getElementById('svc-tb').innerHTML = list.map(function(s){
-    return '<tr><td><strong>' + s.nome + '</strong></td>' +
-      '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + s.categoria + '</span></td>' +
-      '<td>' + s.duracao_min + ' min</td>' +
-      '<td><strong>' + brl(s.preco) + '</strong></td>' +
-      '<td><span class="badge bp">' + (s.comissao_pct||40) + '%</span></td>' +
-      '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toast(this.checked?\'Ativo\':\'Desativado\',this.checked?\'ok\':\'er\')"/></td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="toast(\'Editar\',\'inf\')">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="toast(\'Removido\',\'er\')">🗑</button></div></td></tr>';
-  }).join('');
-}
-
-// ── FILL SELECTS ────────────────────────────────────────
-function fillSelects() {
-  Promise.allSettled([
-    apiFetch('/api/profissionais'),
-    apiFetch('/api/servicos'),
-    apiFetch('/api/clientes?limit=200')
-  ]).then(function(results){
-    var pros  = (results[0].status==='fulfilled' && results[0].value && results[0].value.length) ? results[0].value : D.pros;
-    var svcs  = (results[1].status==='fulfilled' && results[1].value && results[1].value.length) ? results[1].value : D.svcs;
-    var clis  = (results[2].status==='fulfilled' && results[2].value) ? (results[2].value.data || results[2].value) : D.clis;
-    PROS = pros; SVCS = svcs; CLIS = clis;
-
-    function fillSel(id, items) {
-      var sel = document.getElementById(id); if (!sel) return;
-      var ph = sel.querySelector('option[value=""]');
-      sel.innerHTML = ''; if (ph) sel.appendChild(ph);
-      items.forEach(function(it){ var o = document.createElement('option'); o.value = it.id; o.textContent = it.nome; sel.appendChild(o); });
-    }
-    fillSel('ag-prf', pros);
-    fillSel('ag-pro', pros);
-    fillSel('ag-cli', clis);
-
-    var sw = document.getElementById('ag-svcs');
-    if (sw) sw.innerHTML = svcs.map(function(s){
-      return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\')">' + s.nome + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
-    }).join('');
-  });
-}
-
-// ── SAVES ───────────────────────────────────────────────
-function saveAg() {
-  var cli  = document.getElementById('ag-cli').value;
-  var pro  = document.getElementById('ag-pro').value;
-  var data = document.getElementById('ag-d').value;
-  var hora = document.getElementById('ag-h').value;
-  var svcs = Array.from(document.querySelectorAll('#ag-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
-  if (!cli || !pro || !svcs.length) { toast('Preencha cliente, profissional e pelo menos 1 serviço','er'); return; }
-  var agBtn = document.querySelector('#m-ag .btnp');
-  agBtn.disabled=true; agBtn.textContent='Salvando...';
-  (DEMO ? Promise.resolve({id:'demo_'+Date.now()}) : apiFetch('/api/agendamentos',{method:'POST',body:{cliente_id:cli,profissional_id:pro,data_hora:data+'T'+hora+':00',servicos:svcs,observacoes:document.getElementById('ag-obs').value,origem:document.getElementById('ag-or').value}}))
-  .then(function(){
-    toast('Agendamento criado! ✅','ok');
-    closeM('m-ag');
-    document.getElementById('ag-obs').value='';
-    document.querySelectorAll('#ag-svcs .svc-pill.on').forEach(function(el){ el.classList.remove('on'); });
-    loadDashTl(); loadAgenda(); loadKPIs();
-  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ agBtn.disabled=false; agBtn.textContent='✅ Confirmar'; });
-}
-function saveCli() {
-  var nome = document.getElementById('cli-n').value.trim();
-  if (!nome) { toast('Nome obrigatório','er'); return; }
-  var btn = document.querySelector('#m-cli .btnp');
-  btn.disabled=true; btn.textContent='Salvando...';
-  var body = {nome:nome,telefone:document.getElementById('cli-t').value,email:document.getElementById('cli-e').value,observacoes:document.getElementById('cli-o').value,como_conheceu:document.getElementById('cli-k').value};
-  if (document.getElementById('cli-nasc').value) body.data_nascimento = document.getElementById('cli-nasc').value;
-  (DEMO ? Promise.resolve({id:'demo_'+Date.now(),nome:nome,telefone:body.telefone,email:body.email,historico_count:0,total_gasto:0,status:'novo',cor:COLS[Math.floor(Math.random()*COLS.length)]}) : apiFetch('/api/clientes',{method:'POST',body:body}))
-  .then(function(r){
-    toast('Cliente cadastrado! ✅','ok');
-    closeM('m-cli');
-    document.getElementById('cli-n').value='';
-    document.getElementById('cli-t').value='';
-    document.getElementById('cli-e').value='';
-    document.getElementById('cli-o').value='';
-    if (DEMO && r) { D.clis.push(r); CLIS=D.clis; renderCli(CLIS); } else { loadClientes(); }
-    loadKPIs();
-  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
-}
-function saveLan() {
-  var desc = document.getElementById('lan-d').value.trim();
-  var val  = parseFloat(document.getElementById('lan-v').value);
-  if (!desc || !val) { toast('Preencha descrição e valor','er'); return; }
-  apiFetch('/api/financeiro/lancamentos',{method:'POST',body:{tipo:document.getElementById('lan-t').value,descricao:desc,valor:val,data:document.getElementById('lan-dt').value,forma_pgto:document.getElementById('lan-p').value,categoria:document.getElementById('lan-c').value}}).catch(function(){});
-  toast('Lançamento registrado! ✅','ok'); closeM('m-lan'); loadFin();
-}
-function saveProd() {
-  var nome = document.getElementById('p-n').value.trim();
-  if (!nome) { toast('Nome obrigatório','er'); return; }
-  apiFetch('/api/estoque',{method:'POST',body:{nome:nome,categoria:document.getElementById('p-c').value,fornecedor:document.getElementById('p-f').value,qtd_atual:parseFloat(document.getElementById('p-q').value)||0,qtd_minima:parseFloat(document.getElementById('p-m').value)||5,preco_custo:parseFloat(document.getElementById('p-p').value)||null}}).catch(function(){});
-  toast('Produto cadastrado! ✅','ok'); closeM('m-prod'); loadEst(); document.getElementById('p-n').value='';
-}
-function savePro() {
-  var nome = document.getElementById('pr-n').value.trim();
-  if (!nome) { toast('Nome obrigatório','er'); return; }
-  var btn = document.querySelector('#m-pro .btnp');
-  btn.disabled = true; btn.textContent = 'Salvando...';
-  var body = {nome:nome, especialidade:document.getElementById('pr-e').value, telefone:document.getElementById('pr-t').value, comissao_pct:parseFloat(document.getElementById('pr-c').value)||40, cor_agenda:COR_SEL};
-  (DEMO ? Promise.resolve({nome:nome,especialidade:body.especialidade,comissao_pct:body.comissao_pct,cor_agenda:body.cor_agenda,total_servicos:0,faturado:0,id:'demo_'+Date.now()}) : apiFetch('/api/profissionais',{method:'POST',body:body}))
-  .then(function(r){
-    toast('Profissional cadastrado! ✅','ok');
-    closeM('m-pro');
-    document.getElementById('pr-n').value='';
-    document.getElementById('pr-e').value='';
-    document.getElementById('pr-t').value='';
-    document.getElementById('pr-c').value='40';
-    if (DEMO && r) { D.pros.push(r); PROS = D.pros; renderPros(PROS); } else { loadPros(); }
-    fillSelects();
-  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
-}
-function saveSvc() {
-  var nome  = document.getElementById('sv-n').value.trim();
-  var preco = parseFloat(document.getElementById('sv-p').value);
-  if (!nome || !preco) { toast('Nome e preço obrigatórios','er'); return; }
-  var btn = document.querySelector('#m-svc .btnp');
-  btn.disabled=true; btn.textContent='Salvando...';
-  var body = {nome:nome, categoria:document.getElementById('sv-c').value, duracao_min:parseInt(document.getElementById('sv-d').value)||60, preco:preco, comissao_pct:parseFloat(document.getElementById('sv-com').value)||40};
-  (DEMO ? Promise.resolve({id:'demo_'+Date.now(),nome:nome,categoria:body.categoria,duracao_min:body.duracao_min,preco:preco,comissao_pct:body.comissao_pct,ativo:true}) : apiFetch('/api/servicos',{method:'POST',body:body}))
-  .then(function(r){
-    toast('Serviço cadastrado! ✅','ok');
-    closeM('m-svc');
-    document.getElementById('sv-n').value='';
-    document.getElementById('sv-p').value='';
-    if (DEMO && r) { D.svcs.push(r); SVCS=D.svcs; renderSvcs(SVCS); } else { loadSvcs(); }
-    fillSelects();
-  }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
-}
-function saveConfig() {
-  var btn = document.querySelector('#page-config .btnp');
-  btn.disabled=true; btn.textContent='Salvando...';
-  var body = {
-    nome:     document.getElementById('cfg-nome').value,
-    telefone: document.getElementById('cfg-tel').value,
-    whatsapp: document.getElementById('cfg-wpp').value,
-    email:    document.getElementById('cfg-email').value,
-    endereco: document.getElementById('cfg-end').value
-  };
-  apiFetch('/api/saloes/meu',{method:'PUT',body:body})
-  .then(function(r){
-    toast('Configurações salvas! ✅','ok');
-    if(r && r.nome) document.getElementById('tb-salon').textContent = r.nome;
+  fetch(API_URL + '/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome_salao: salao, nome: nome, email: email, senha: senha, telefone: tel, plano: PLANO_SEL })
   })
-  .catch(function(e){ toast('Erro ao salvar: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ btn.disabled=false; btn.textContent='Salvar Alterações'; });
-}
-function saveApi() {
-  var url = (document.getElementById('cfg-api').value||'').trim().replace(/\/+$/,'');
-  API = url; DEMO = !url;
-  if (url) localStorage.setItem('bpro_api', url); else localStorage.removeItem('bpro_api');
-  var b = document.getElementById('apibadge');
-  b.textContent = DEMO?'DEMO':'LIVE'; b.className = 'apibadge ' + (DEMO?'demo':'live');
-  updateApiStatus();
-  toast(url ? 'API conectada! ✅' : 'Voltou para modo demo','ok');
-  if (url) loadAll();
-}
-function updateApiStatus() {
-  var el = document.getElementById('api-st'); if (!el) return;
-  el.textContent = DEMO ? 'Modo demo — dados de exemplo' : '✅ Conectado em ' + API;
-  if (document.getElementById('cfg-api')) document.getElementById('cfg-api').value = API || '';
-}
-function pickCor(el) {
-  document.querySelectorAll('#cor-wrap div').forEach(function(e){ e.style.border='none'; });
-  el.style.border = '3px solid ' + el.dataset.cor;
-  COR_SEL = el.dataset.cor; document.getElementById('pr-cor').value = COR_SEL;
-}
-
-// ── CLIENTE MODAL ───────────────────────────────────────
-function openClientModal(tr) {
-  var raw = tr.getAttribute('data-cli');
-  if (!raw) return;
-  var c;
-  try { c = JSON.parse(raw); } catch(e) { return; }
-  document.getElementById('cli-perfil-nome').textContent = c.nome || '—';
-  document.getElementById('cp-tel').textContent   = c.telefone || '—';
-  document.getElementById('cp-email').textContent  = c.email    || '—';
-  document.getElementById('cp-nasc').textContent   = c.data_nascimento ? fdt(c.data_nascimento+'T12:00') : '—';
-  document.getElementById('cp-orig').textContent   = c.como_conheceu  || '—';
-  document.getElementById('cp-obs').textContent    = c.observacoes    || '—';
-  document.getElementById('cp-visitas').textContent = c.historico_count || 0;
-  document.getElementById('cp-gasto').textContent   = brl(c.total_gasto || 0);
-  openM('m-cli-perfil');
-  // Carrega histórico de agendamentos do cliente
-  var hist = document.getElementById('cp-historico');
-  hist.innerHTML = '<div class="lc"><div class="spin"></div></div>';
-  apiFetch('/api/agendamentos?cliente_id=' + c.id + '&limit=20')
-  .then(function(r){
-    var list = r || [];
-    if (!list.length) { hist.innerHTML = '<div class="empty">Nenhum agendamento encontrado</div>'; return; }
-    hist.innerHTML = '<div style="display:flex;flex-direction:column;gap:4px">' +
-      list.map(function(a){
-        var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).join(', ') || '—';
-        return '<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--bg);border-radius:var(--rs);font-size:.78rem">' +
-          '<div style="min-width:80px;font-weight:600">' + fdt(a.data_hora) + '</div>' +
-          '<div style="flex:1;color:var(--t2)">' + sv + '</div>' +
-          '<span class="badge '+(SC[a.status]||'bg2')+'">' + (SL[a.status]||a.status) + '</span>' +
-          '<strong>' + brl(a.valor_total) + '</strong>' +
-          '</div>';
-      }).join('') + '</div>';
+  .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
+  .then(function(res){
+    if(!res.ok) throw new Error(res.data.error || 'Erro ao criar conta');
+    // Sucesso!
+    suc.innerHTML = '🎉 <strong>Conta criada com sucesso!</strong><br><br>Seu trial de 14 dias está ativo.<br>Clique abaixo para acessar o painel.';
+    suc.style.display = 'block';
+    btn.textContent = '🚀 Acessar o painel →';
+    btn.disabled = false;
+    btn.onclick = function(){
+      window.open('https://vihrbs.github.io/salaodebeleza/salao-v4-final.html', '_blank');
+      closeModal();
+    };
   })
-  .catch(function(){ hist.innerHTML = '<div class="empty">Erro ao carregar histórico</div>'; });
+  .catch(function(e){
+    showErr(e.message || 'Erro ao criar conta. Tente novamente.');
+    btn.disabled = false;
+    btn.textContent = 'Criar conta e começar →';
+    btn.onclick = submitCadastro;
+  });
 }
 
-// ── MOVIMENTAR ESTOQUE ───────────────────────────────────
-function openMovModal(id, nome, tipo) {
-  document.getElementById('mov-prod-id').value = id;
-  document.getElementById('mov-tipo').value    = tipo;
-  document.getElementById('mov-prod-nome').textContent = nome;
-  document.getElementById('mov-title').textContent = tipo === 'entrada' ? '📦 Repor Estoque' : '📤 Registrar Uso';
-  document.getElementById('mov-btn').textContent   = tipo === 'entrada' ? 'Confirmar Reposição' : 'Confirmar Uso';
-  var sel = document.getElementById('mov-motivo');
-  sel.innerHTML = tipo === 'entrada'
-    ? '<option value="compra">Compra/Reposição</option><option value="ajuste">Ajuste de inventário</option>'
-    : '<option value="uso_servico">Uso em serviço</option><option value="perda">Perda/Vencimento</option><option value="ajuste">Ajuste de inventário</option>';
-  document.getElementById('mov-qtd').value = '1';
-  openM('m-mov');
+function showErr(msg){
+  var err = document.getElementById('modal-err');
+  err.textContent = '⚠️ ' + msg;
+  err.style.display = 'block';
 }
-
-function salvarMov() {
-  var id   = document.getElementById('mov-prod-id').value;
-  var tipo = document.getElementById('mov-tipo').value;
-  var qtd  = parseFloat(document.getElementById('mov-qtd').value);
-  var mot  = document.getElementById('mov-motivo').value;
-  if (!qtd || qtd <= 0) { toast('Informe uma quantidade válida','er'); return; }
-  var btn = document.getElementById('mov-btn');
-  btn.disabled=true; btn.textContent='Salvando...';
-  apiFetch('/api/estoque/'+id+'/movimentar',{method:'POST',body:{tipo:tipo,quantidade:qtd,motivo:mot}})
-  .then(function(r){
-    toast(tipo==='entrada' ? 'Reposição registrada! ✅' : 'Uso registrado! ✅','ok');
-    closeM('m-mov');
-    loadEst();
-  })
-  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ btn.disabled=false; });
-}
-
-// ── INIT ────────────────────────────────────────────────
-window.addEventListener('load', function(){
-  API  = localStorage.getItem('bpro_api') || API_FIXA;
-  TK   = localStorage.getItem('bpro_tk')  || '';
-  DEMO = false;
-  localStorage.setItem('bpro_api', API);
-  if (API && TK) {
-    fetch(API+'/api/auth/me',{headers:{Authorization:'Bearer '+TK}})
-      .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
-      .then(function(d){ enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE'); })
-      .catch(function(){ localStorage.removeItem('bpro_tk'); TK=''; });
-  }
-});
 </script>
 </body>
 </html>
