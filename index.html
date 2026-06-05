@@ -6,7 +6,7 @@
 <title>Beleza Pro — Sistema de Gestão para Salões de Beleza</title>
 <meta name="description" content="Sistema completo de gestão para salões de beleza. Agenda, clientes, financeiro, estoque e comissões em um só lugar. 14 dias grátis."/>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<style>  
+<style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#FAFAF8;--dark:#0F0F0D;--accent:#7C5CFC;--accent2:#FF6B6B;--accent3:#00C896;
@@ -140,7 +140,7 @@ h2{font-family:'Fraunces',serif;font-size:clamp(1.7rem,3.5vw,2.6rem);font-weight
 
 /* PRECOS */
 #precos{background:var(--bg)}
-.planos{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:980px;margin:0 auto}
+.planos{max-width:480px;margin:0 auto}
 .plano{background:#fff;border:1px solid var(--border);border-radius:var(--rl);padding:28px;position:relative;transition:transform .2s,box-shadow .2s}
 .plano:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.08)}
 .plano.popular{border:2px solid var(--accent)}
@@ -402,49 +402,24 @@ footer{background:var(--dark);border-top:1px solid rgba(255,255,255,.07);padding
   <div class="sec-tag">Preços</div>
   <h2>Simples e sem surpresas</h2>
   <p class="sec-sub">Comece grátis por 14 dias em qualquer plano. Sem cartão de crédito.</p>
-  <div class="planos">
-    <div class="plano">
-      <div class="plano-nome">Starter</div>
-      <div class="plano-preco">R$ 49<span>/mês</span></div>
-      <div class="plano-desc">Para salões pequenos começando a se organizar.</div>
-      <div class="plano-feats">
+  <div style="max-width:480px;margin:0 auto">
+    <div class="plano popular" style="text-align:center">
+      <div class="pop-badge">✨ Tudo incluído — sem limites</div>
+      <div class="plano-nome" style="margin-top:8px">Plano Único</div>
+      <div class="plano-preco" style="font-size:3rem">R$ 59<span>/mês</span></div>
+      <div class="plano-desc">Acesso completo a todos os módulos. Sem planos confusos, sem surpresas.</div>
+      <div class="plano-feats" style="text-align:left;max-width:320px;margin:0 auto 24px">
         <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Agenda ilimitada</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Até 200 clientes</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Financeiro básico</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>2 profissionais</div>
-        <div class="pf"><div class="pf-ic" style="background:#F3F4F6;color:#9CA3AF">–</div><span style="color:#9CA3AF">Estoque e comissões</span></div>
-      </div>
-      <button class="btn-plano btn-plano-s" onclick="openModal(event,'Starter')">Começar grátis</button>
-    </div>
-    <div class="plano popular">
-      <div class="pop-badge">✨ Mais popular</div>
-      <div class="plano-nome">Pro</div>
-      <div class="plano-preco">R$ 89<span>/mês</span></div>
-      <div class="plano-desc">Para salões que querem controle total do negócio.</div>
-      <div class="plano-feats">
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Tudo do Starter</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Até 1.000 clientes</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Estoque completo</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Comissões automáticas</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>10 profissionais</div>
-      </div>
-      <button class="btn-plano btn-plano-p" onclick="openModal(event,'Pro')">Começar grátis</button>
-    </div>
-    <div class="plano">
-      <div class="plano-nome">Business</div>
-      <div class="plano-preco">R$ 149<span>/mês</span></div>
-      <div class="plano-desc">Para redes de salões sem limites.</div>
-      <div class="plano-feats">
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Tudo do Pro</div>
         <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Clientes ilimitados</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Financeiro completo</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Estoque e comissões</div>
         <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Profissionais ilimitados</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Múltiplas unidades</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Suporte prioritário</div>
+        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Suporte via WhatsApp</div>
       </div>
-      <button class="btn-plano btn-plano-s" onclick="openModal(event,'Business')">Começar grátis</button>
+      <button class="btn-plano btn-plano-p" style="max-width:320px;margin:0 auto;display:block" onclick="openModal(event,'Pro')">Começar grátis por 14 dias →</button>
     </div>
   </div>
-  <p class="trial-note">🎉 <strong>14 dias grátis</strong> em qualquer plano · Sem cartão de crédito · Cancele quando quiser</p>
+  <p class="trial-note">🎉 <strong>14 dias grátis</strong> · Sem cartão de crédito · Cancele quando quiser · R$ 59/mês depois</p>
 </section>
 
 <!-- FAQ -->
