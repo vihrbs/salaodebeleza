@@ -740,6 +740,21 @@ function enterApp(nome, salon, mode) {
   updateApiStatus();
   loadAll();
   setTimeout(checkTrial, 2000);
+  
+  // Verifica retorno do Mercado Pago
+  var urlParams = new URLSearchParams(window.location.search);
+  var pago = urlParams.get('pago');
+  if (pago === '1') {
+    toast('Pagamento aprovado! Acesso renovado por 30 dias ✅', 'ok');
+    // Limpa parametro da URL
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (pago === '0') {
+    toast('Pagamento não aprovado. Tente novamente.', 'er');
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (pago === '2') {
+    toast('Pagamento em processamento. Aguarde a confirmação.', 'inf');
+    window.history.replaceState({}, '', window.location.pathname);
+  }
 }
 
 function doLogout() {
