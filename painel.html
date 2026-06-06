@@ -174,7 +174,24 @@ tbody tr:hover{background:#F9FAFB}
 .toast{padding:9px 14px;border-radius:var(--r);color:#fff;font-size:.76rem;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.15);display:flex;align-items:center;gap:7px;animation:mup .2s ease;max-width:280px}
 .tok{background:#16A34A}.ter{background:#DC2626}.tinf{background:var(--ac)}
 
-@media(max-width:880px){.kpis{grid-template-columns:1fr 1fr}.g2,.g31{grid-template-columns:1fr}.tb-nav{max-width:55vw}}
+@media(max-width:880px){
+  .kpis{grid-template-columns:1fr 1fr}
+  .g2,.g31{grid-template-columns:1fr}
+  .tb-nav{display:none}
+  .tb-salon,.apibadge{display:none}
+  #mob-nav{display:flex!important}
+  #content{padding:14px 12px 80px}
+  .tb-r .ib{display:none}
+  .kpis{gap:10px}
+  .kv{font-size:1.2rem}
+  table{font-size:.72rem}
+  th,td{padding:7px 8px}
+}
+@media(max-width:480px){
+  .kpis{grid-template-columns:1fr 1fr}
+  .fr,.form-row{grid-template-columns:1fr}
+  .mbox{margin:10px}
+}
 </style>
 </head>
 <body>
@@ -265,6 +282,51 @@ tbody tr:hover{background:#F9FAFB}
   <div id="trial-banner" style="display:none;background:linear-gradient(90deg,#7C5CFC,#FF6B6B);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;font-size:.82rem;gap:12px;flex-wrap:wrap">
     <span id="trial-msg">⏰ Seu trial expira em breve — assine para continuar usando.</span>
     <button onclick="assinar()" style="background:#fff;color:#7C5CFC;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">Assinar R$ 78,99/mês →</button>
+  </div>
+
+  <!-- MENU MOBILE INFERIOR -->
+  <div id="mob-nav" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--wh);border-top:1px solid var(--bd);z-index:98;padding:6px 0 8px;box-shadow:0 -2px 10px rgba(0,0,0,.08)">
+    <div style="display:flex;justify-content:space-around;align-items:center">
+      <button class="mob-nb on" onclick="nav('dashboard',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--ac);padding:4px 8px;cursor:pointer;min-width:52px">
+        <span style="font-size:1.2rem">🏠</span>Dashboard
+      </button>
+      <button class="mob-nb" onclick="nav('agenda',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px">
+        <span style="font-size:1.2rem">📅</span>Agenda
+      </button>
+      <button class="mob-nb" onclick="nav('clientes',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px">
+        <span style="font-size:1.2rem">👥</span>Clientes
+      </button>
+      <button class="mob-nb" onclick="nav('financeiro',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px">
+        <span style="font-size:1.2rem">💰</span>Financeiro
+      </button>
+      <button class="mob-nb" onclick="toggleMobMenu()" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px">
+        <span style="font-size:1.2rem">☰</span>Mais
+      </button>
+    </div>
+  </div>
+
+  <!-- MENU MOBILE EXPANDIDO -->
+  <div id="mob-menu-extra" style="display:none;position:fixed;bottom:70px;left:0;right:0;background:var(--wh);border-top:1px solid var(--bd);z-index:97;padding:12px;box-shadow:0 -4px 20px rgba(0,0,0,.1);border-radius:16px 16px 0 0">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <button onclick="nav('estoque',this);closeMobMenu()" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 8px;font-size:.7rem;font-weight:600;color:var(--t2);cursor:pointer">
+        <span style="font-size:1.4rem">📦</span>Estoque
+      </button>
+      <button onclick="nav('comissoes',this);closeMobMenu()" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 8px;font-size:.7rem;font-weight:600;color:var(--t2);cursor:pointer">
+        <span style="font-size:1.4rem">💸</span>Comissões
+      </button>
+      <button onclick="nav('profissionais',this);closeMobMenu()" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 8px;font-size:.7rem;font-weight:600;color:var(--t2);cursor:pointer">
+        <span style="font-size:1.4rem">👤</span>Profissionais
+      </button>
+      <button onclick="nav('servicos',this);closeMobMenu()" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 8px;font-size:.7rem;font-weight:600;color:var(--t2);cursor:pointer">
+        <span style="font-size:1.4rem">✂️</span>Serviços
+      </button>
+      <button onclick="nav('config',this);closeMobMenu()" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 8px;font-size:.7rem;font-weight:600;color:var(--t2);cursor:pointer">
+        <span style="font-size:1.4rem">⚙️</span>Config
+      </button>
+      <button onclick="doLogout()" style="display:flex;flex-direction:column;align-items:center;gap:4px;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:12px 8px;font-size:.7rem;font-weight:600;color:#DC2626;cursor:pointer">
+        <span style="font-size:1.4rem">⏻</span>Sair
+      </button>
+    </div>
   </div>
 
   <div id="content">
@@ -1625,6 +1687,37 @@ function updateCli() {
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
+
+// ── MENU MOBILE ─────────────────────────────────────
+function toggleMobMenu() {
+  var m = document.getElementById('mob-menu-extra');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+function closeMobMenu() {
+  document.getElementById('mob-menu-extra').style.display = 'none';
+}
+// Fecha menu extra ao clicar fora
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('mob-menu-extra');
+  var btn = e.target.closest('button');
+  if (menu && menu.style.display !== 'none' && !menu.contains(e.target) && !(btn && btn.textContent.includes('☰'))) {
+    closeMobMenu();
+  }
+});
+
+// Override nav para atualizar menu mobile também
+var _origNav = nav;
+nav = function(page, el) {
+  _origNav(page, el);
+  // Atualiza botões do menu mobile
+  document.querySelectorAll('.mob-nb').forEach(function(b){ b.style.color = 'var(--t2)'; });
+  var pages = ['dashboard','agenda','clientes','financeiro'];
+  var idx = pages.indexOf(page);
+  if (idx >= 0) {
+    var btns = document.querySelectorAll('.mob-nb');
+    if (btns[idx]) btns[idx].style.color = 'var(--ac)';
+  }
+};
 
 // ── INIT ────────────────────────────────────────────────
 // ── PAGAMENTO ───────────────────────────────────────
