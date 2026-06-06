@@ -967,15 +967,49 @@ function loadAlertas() {
 }
 
 function renderDashChart() {
-  var days = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
-  var vals = [1840,2100,1650,2480,2840,2200,1190];
-  var max  = Math.max.apply(null, vals);
-  document.getElementById('fat7').textContent = brl(vals.reduce(function(s,v){ return s+v; }, 0));
-  document.getElementById('dash-bc').innerHTML = days.map(function(d,i){
-    return '<div class="bw"><div class="bval">' + (vals[i]/1000).toFixed(1) + 'k</div>' +
-      '<div class="bar" style="height:' + (Math.round(vals[i]/max*100)+8) + 'px;background:' + (i===4?'var(--ac)':'var(--bd)') + '"></div>' +
-      '<div class="blab">' + d + '</div></div>';
-  }).join('');
+  // Busca dados reais dos últimos 7 dias
+  var daysNames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  var labels = [];
+  var dates  = [];
+  for (var i = 6; i >= 0; i--) {
+    var d = new Date();
+    d.setDate(d.getDate() - i);
+    labels.push(daysNames[d.getDay()]);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+
+  apiFetch('/api/financeiro/lancamentos?limit=200').then(function(r) {
+    var lancamentos = r ? (r.data || r) : [];
+    
+    // Soma entradas por dia
+    var vals = dates.map(function(dt) {
+      return lancamentos
+        .filter(function(l) { return l.tipo === 'entrada' && l.data && l.data.startsWith(dt); })
+        .reduce(function(s, l) { return s + Number(l.valor || 0); }, 0);
+    });
+
+    var max = Math.max.apply(null, vals) || 1;
+    var total = vals.reduce(function(s,v){ return s+v; }, 0);
+    
+    document.getElementById('fat7').textContent = brl(total);
+    document.getElementById('dash-bc').innerHTML = labels.map(function(d,i){
+      var height = vals[i] > 0 ? Math.round(vals[i]/max*100)+8 : 4;
+      var isToday = i === 6;
+      var valLabel = vals[i] >= 1000 
+        ? (vals[i]/1000).toFixed(1)+'k' 
+        : vals[i] > 0 ? brl(vals[i]).replace('R$ ','') : '0';
+      return '<div class="bw">' +
+        '<div class="bval">' + valLabel + '</div>' +
+        '<div class="bar" style="height:' + height + 'px;background:' + (isToday?'var(--ac)':vals[i]>0?'var(--ac3)':'var(--bd)') + '"></div>' +
+        '<div class="blab">' + d + '</div></div>';
+    }).join('');
+  }).catch(function() {
+    // Fallback silencioso — mantém gráfico vazio
+    document.getElementById('fat7').textContent = brl(0);
+    document.getElementById('dash-bc').innerHTML = ['Seg','Ter','Qua','Qui','Sex','Sáb','Hoj'].map(function(d){
+      return '<div class="bw"><div class="bval">0</div><div class="bar" style="height:4px;background:var(--bd)"></div><div class="blab">'+d+'</div></div>';
+    }).join('');
+  });
 }
 
 function renderCal() {
@@ -1067,22 +1101,42 @@ function loadFin() {
     document.getElementById('fl').textContent = brl(d.lucro);
     document.getElementById('fa').textContent = brl(d.apagar);
   }).catch(function(){
-    document.getElementById('fr').textContent = brl(D.fin.receita);
-    document.getElementById('fd').textContent = brl(D.fin.despesa);
-    document.getElementById('fl').textContent = brl(D.fin.lucro);
-    document.getElementById('fa').textContent = brl(D.fin.apagar);
+    document.getElementById('fr').textContent = brl(DEMO?D.fin.receita:0);
+    document.getElementById('fd').textContent = brl(DEMO?D.fin.despesa:0);
+    document.getElementById('fl').textContent = brl(DEMO?D.fin.lucro:0);
+    document.getElementById('fa').textContent = brl(DEMO?D.fin.apagar:0);
   });
-  renderFinChart(); loadLan('');
+  // Busca lancamentos para o gráfico anual
+  apiFetch('/api/financeiro/lancamentos?limit=500').then(function(r){
+    renderFinChart(r ? (r.data||r) : []);
+  }).catch(function(){ renderFinChart([]); });
+  loadLan('');
 }
 
-function renderFinChart() {
+function renderFinChart(lancamentos) {
   var m = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  var v = [18200,21400,19800,24600,28640,0,0,0,0,0,0,0];
+  var now = new Date();
+  var ano = now.getFullYear();
+  
+  // Soma receitas por mês com dados reais
+  var v = m.map(function(mn, i) {
+    var mes = String(i+1).padStart(2,'0');
+    return (lancamentos || [])
+      .filter(function(l) {
+        return l.tipo === 'entrada' && l.data && 
+               l.data.startsWith(ano+'-'+mes);
+      })
+      .reduce(function(s,l){ return s + Number(l.valor||0); }, 0);
+  });
+
   var max = Math.max.apply(null, v.filter(function(x){ return x>0; })) || 1;
+  var mesAtual = now.getMonth();
+  
   document.getElementById('fin-bc').innerHTML = m.map(function(mn,i){
+    var futuro = i > mesAtual;
     return '<div class="bw">' +
-      (v[i] ? '<div class="bval">' + (v[i]/1000).toFixed(0) + 'k</div>' : '<div class="bval" style="opacity:0">-</div>') +
-      '<div class="bar" style="height:' + (v[i] ? Math.round(v[i]/max*120)+5 : 3) + 'px;background:' + (i===4?'var(--ac)':v[i]?'var(--bd)':'#F3F4F6') + '"></div>' +
+      (v[i] ? '<div class="bval">' + (v[i]>=1000?(v[i]/1000).toFixed(0)+'k':v[i]) + '</div>' : '<div class="bval" style="opacity:0">-</div>') +
+      '<div class="bar" style="height:' + (v[i] ? Math.round(v[i]/max*120)+5 : 3) + 'px;background:' + (i===mesAtual?'var(--ac)':v[i]?'var(--ac3)':'#F3F4F6') + ';opacity:' + (futuro?'0.3':'1') + '"></div>' +
       '<div class="blab">' + mn + '</div></div>';
   }).join('');
 }
