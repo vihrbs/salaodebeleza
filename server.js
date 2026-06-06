@@ -577,9 +577,9 @@ app.post('/api/pagamento/criar', auth, async (req, res) => {
           installments: 1
         },
         back_urls: {
-          success: 'https://vihrbs.github.io/salaodebeleza/painel.html?pago=1',
-          failure: 'https://vihrbs.github.io/salaodebeleza/painel.html?pago=0',
-          pending: 'https://vihrbs.github.io/salaodebeleza/painel.html?pago=2'
+          success: 'https://belezaprooficial.com.br/painel.html?pago=1',
+          failure: 'https://belezaprooficial.com.br/painel.html?pago=0',
+          pending: 'https://belezaprooficial.com.br/painel.html?pago=2'
         },
         auto_return: 'approved',
         statement_descriptor: 'BELEZA PRO',
