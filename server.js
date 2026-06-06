@@ -543,15 +543,6 @@ app.put('/api/saloes/meu', auth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════
-// 404
-// ═══════════════════════════════════════════════════
-app.use((req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
-
-// ═══════════════════════════════════════════════════
-// START
-// ═══════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════
 // MERCADO PAGO
 // ═══════════════════════════════════════════════════
 const MP_TOKEN = process.env.MP_ACCESS_TOKEN || '';
@@ -593,7 +584,6 @@ app.post('/api/pagamento/webhook', async (req, res) => {
   } catch(e) { console.error('Webhook:', e); }
   res.sendStatus(200);
 });
-// v3
 
 app.get('/api/pagamento/status', auth, async (req, res) => {
   const { data: salao } = await supabase.from('saloes').select('trial_ate, ativo').eq('id', req.salao_id).single();
@@ -602,6 +592,10 @@ app.get('/api/pagamento/status', auth, async (req, res) => {
   const dias = trial ? Math.ceil((trial - hoje) / 86400000) : 0;
   res.json({ ativo: salao?.ativo, em_trial: dias > 0, dias_restantes: Math.max(0, dias), trial_expirado: dias <= 0 });
 });
+
+// 404
+app.use((req, res) => res.status(404).json({ error: 'Rota nao encontrada' }));
+
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Rota nao encontrada' }));
