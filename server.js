@@ -593,6 +593,7 @@ app.post('/api/pagamento/webhook', async (req, res) => {
   } catch(e) { console.error('Webhook:', e); }
   res.sendStatus(200);
 });
+// v3
 
 app.get('/api/pagamento/status', auth, async (req, res) => {
   const { data: salao } = await supabase.from('saloes').select('trial_ate, ativo').eq('id', req.salao_id).single();
