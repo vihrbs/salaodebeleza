@@ -630,10 +630,24 @@ app.post('/api/pagamento/webhook', async (req, res) => {
 
 app.get('/api/pagamento/status', auth, async (req, res) => {
   const { data: salao } = await supabase.from('saloes').select('trial_ate, ativo').eq('id', req.salao_id).single();
-  const hoje = new Date();
-  const trial = salao?.trial_ate ? new Date(salao.trial_ate) : null;
-  const dias = trial ? Math.ceil((trial - hoje) / 86400000) : 0;
-  res.json({ ativo: salao?.ativo, em_trial: dias > 0, dias_restantes: Math.max(0, dias), trial_expirado: dias <= 0 });
+  
+  // Calcula dias considerando fim do dia da data de vencimento
+  let dias = 0;
+  if (salao?.trial_ate) {
+    const trial = new Date(salao.trial_ate);
+    // Ajusta para fim do dia (23:59:59) para não cortar antes da hora
+    trial.setHours(23, 59, 59, 999);
+    const hoje = new Date();
+    dias = Math.ceil((trial - hoje) / 86400000);
+  }
+  
+  res.json({ 
+    ativo: salao?.ativo, 
+    em_trial: dias > 0, 
+    dias_restantes: Math.max(0, dias), 
+    trial_expirado: dias <= 0,
+    trial_ate: salao?.trial_ate
+  });
 });
 
 // 404
