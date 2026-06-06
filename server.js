@@ -595,7 +595,7 @@ app.post('/api/pagamento/criar', auth, async (req, res) => {
 app.post('/api/pagamento/webhook', async (req, res) => {
   const { type, data } = req.body;
   try {
-    if (type === 'payment' && data?.id) {
+    if ((type === 'payment' || type === 'payment.updated' || type === 'payment.created') && data?.id) {
       // Busca detalhes do pagamento
       const r = await fetch('https://api.mercadopago.com/v1/payments/' + data.id, {
         headers: { 'Authorization': 'Bearer ' + MP_TOKEN }
