@@ -1423,16 +1423,27 @@ function checkTrial() {
     if (!r) return;
     var banner = document.getElementById('trial-banner');
     var msg    = document.getElementById('trial-msg');
+    // Esconde banner por padrão
+    if (banner) banner.style.display = 'none';
     if (r.trial_expirado) {
-      banner.style.display = 'flex';
-      banner.style.background = 'linear-gradient(90deg,#DC2626,#B45309)';
-      msg.textContent = '🔒 Seu trial expirou. Assine agora para continuar usando o sistema.';
+      if (banner) {
+        banner.style.display = 'flex';
+        banner.style.background = 'linear-gradient(90deg,#DC2626,#B45309)';
+        msg.textContent = '🔒 Seu trial expirou. Assine agora para continuar usando o sistema.';
+      }
     } else if (r.em_trial && r.dias_restantes <= 5) {
-      banner.style.display = 'flex';
-      msg.textContent = '⏰ ' + r.dias_restantes + ' dia(s) de trial restante(s). Assine agora para não perder o acesso.';
+      if (banner) {
+        banner.style.display = 'flex';
+        msg.textContent = '⏰ ' + r.dias_restantes + ' dia(s) de trial restante(s). Assine agora para não perder o acesso.';
+      }
     }
+    // Mais de 5 dias restantes = banner escondido
   })
-  .catch(function(){});
+  .catch(function(){ 
+    // Em caso de erro, esconde o banner
+    var banner = document.getElementById('trial-banner');
+    if (banner) banner.style.display = 'none';
+  });
 }
 
 window.addEventListener('load', function(){
