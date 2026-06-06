@@ -550,38 +550,81 @@ const MP_TOKEN = process.env.MP_ACCESS_TOKEN || '';
 app.post('/api/pagamento/criar', auth, async (req, res) => {
   if (!MP_TOKEN) return res.status(500).json({ error: 'Mercado Pago nao configurado' });
   try {
-    const response = await fetch('https://api.mercadopago.com/preapproval_plan', {
+    // Busca dados do salao
+    const { data: salao } = await supabase.from('saloes')
+      .select('nome').eq('id', req.salao_id).single();
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('nome, email').eq('id', req.user.id).single();
+
+    // Cria preferencia de pagamento (Checkout Pro - aceita cartao, PIX, boleto)
+    const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + MP_TOKEN },
       body: JSON.stringify({
-        reason: 'Beleza Pro - Plano Mensal',
-        auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 59, currency_id: 'BRL' },
-        back_url: 'https://vihrbs.github.io/salaodebeleza/painel.html'
+        items: [{
+          title: 'Beleza Pro - Plano Mensal',
+          description: 'Acesso completo ao sistema de gestao para saloes - ' + (salao?.nome || ''),
+          quantity: 1,
+          currency_id: 'BRL',
+          unit_price: 59.00
+        }],
+        payer: {
+          name: usuario?.nome || '',
+          email: usuario?.email || ''
+        },
+        payment_methods: {
+          excluded_payment_types: [],
+          installments: 1
+        },
+        back_urls: {
+          success: 'https://vihrbs.github.io/salaodebeleza/painel.html?pago=1',
+          failure: 'https://vihrbs.github.io/salaodebeleza/painel.html?pago=0',
+          pending: 'https://vihrbs.github.io/salaodebeleza/painel.html?pago=2'
+        },
+        auto_return: 'approved',
+        statement_descriptor: 'BELEZA PRO',
+        external_reference: req.salao_id
       })
     });
-    const plan = await response.json();
-    if (!response.ok) throw new Error(plan.message || 'Erro ao criar plano');
-    res.json({ link: plan.init_point, plan_id: plan.id });
+    const preference = await response.json();
+    if (!response.ok) throw new Error(preference.message || 'Erro ao criar pagamento');
+    res.json({ link: preference.init_point, id: preference.id });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/pagamento/webhook', async (req, res) => {
   const { type, data } = req.body;
   try {
-    if (type === 'preapproval') {
-      const r = await fetch('https://api.mercadopago.com/preapproval/' + data.id, {
+    if (type === 'payment' && data?.id) {
+      // Busca detalhes do pagamento
+      const r = await fetch('https://api.mercadopago.com/v1/payments/' + data.id, {
         headers: { 'Authorization': 'Bearer ' + MP_TOKEN }
       });
-      const ass = await r.json();
-      if (ass.payer_email) {
-        const { data: u } = await supabase.from('usuarios').select('salao_id').eq('email', ass.payer_email).single();
-        if (u) {
-          const prox = new Date(); prox.setMonth(prox.getMonth() + 1);
-          await supabase.from('saloes').update({ ativo: true, trial_ate: prox }).eq('id', u.salao_id);
-        }
+      const pgto = await r.json();
+
+      // Se aprovado, renova acesso do salao por 30 dias
+      if (pgto.status === 'approved' && pgto.external_reference) {
+        const salao_id = pgto.external_reference;
+        const prox = new Date();
+        prox.setDate(prox.getDate() + 30);
+        await supabase.from('saloes')
+          .update({ ativo: true, trial_ate: prox })
+          .eq('id', salao_id);
+        
+        // Registra lancamento financeiro (para controle interno)
+        await supabase.from('lancamentos').insert({
+          salao_id: salao_id,
+          tipo: 'entrada',
+          categoria: 'Assinatura',
+          descricao: 'Mensalidade Beleza Pro - ' + new Date().toLocaleDateString('pt-BR'),
+          valor: pgto.transaction_amount || 59,
+          data: new Date().toISOString().split('T')[0],
+          forma_pgto: pgto.payment_type_id || 'mercado_pago',
+          pago: true
+        }).catch(() => {}); // ignora erro se tabela nao existir
       }
     }
-  } catch(e) { console.error('Webhook:', e); }
+  } catch(e) { console.error('Webhook erro:', e.message); }
   res.sendStatus(200);
 });
 
