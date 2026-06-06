@@ -798,7 +798,7 @@ function enterApp(nome, salon, mode) {
   // Verifica retorno do Mercado Pago
   var urlParams = new URLSearchParams(window.location.search);
   var pago = urlParams.get('pago');
-  if (pago === '1') {
+  if (pago === '1' || pago == 1) {
     toast('Pagamento aprovado! Acesso renovado por 30 dias ✅', 'ok');
     // Limpa parametro da URL
     window.history.replaceState({}, '', window.location.pathname);
@@ -1053,7 +1053,7 @@ function renderCli(list) {
       '<td><div style="display:flex;gap:3px">' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'WhatsApp...\',\'ok\')" title="WhatsApp">💬</button>' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();openM(\'m-ag\')" title="Agendar">📅</button>' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();editCli(this)" data-cli='' + JSON.stringify(c).replace(/'/g,"&#39;") + '' title="Editar">✏️</button>' +
+      '<button class="btnic btn btnsm" onclick="event.stopPropagation();editCli(this)" data-cli="' + JSON.stringify(c).replace(/"/g,"&quot;") + '" title="Editar">✏️</button>' +
       '</div></td></tr>';
   }).join('');
 }
@@ -1199,7 +1199,7 @@ function renderPros(list) {
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">' +
       '<div class="pro-av" style="background:' + (p.cor_agenda||COLS[0]) + '">' + p.nome[0] + '</div>' +
       '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + (p.especialidade||'—') + '</div></div>' +
-      '<button class="btnic btn btnsm" onclick="editPro(this)" data-pro='' + JSON.stringify(p).replace(/'/g,"&#39;") + '' title="Editar">✏️</button></div>' +
+      '<button class="btnic btn btnsm" onclick="editPro(this)" data-pro="' + JSON.stringify(p).replace(/"/g,"&quot;") + '" title="Editar">✏️</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs)">' +
       '<div><div style="font-size:.9rem;font-weight:800">' + (p.total_servicos||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.9rem;font-weight:800;color:var(--ac)">' + (p.comissao_pct||40) + '%</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
@@ -1225,7 +1225,7 @@ function renderSvcs(list) {
       '<td><strong>' + brl(s.preco) + '</strong></td>' +
       '<td><span class="badge bp">' + (s.comissao_pct||40) + '%</span></td>' +
       '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toast(this.checked?\'Ativo\':\'Desativado\',this.checked?\'ok\':\'er\')"/></td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc='' + JSON.stringify(s).replace(/'/g,"&#39;") + '' title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="toast(\'Removido\',\'er\')" title="Remover">🗑</button></div></td></tr>';
+      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="toast(\'Removido\',\'er\')" title="Remover">🗑</button></div></td></tr>';
   }).join('');
 }
 
@@ -1467,7 +1467,7 @@ function pickCorEdit(el, inputId) {
 function editPro(btn) {
   var raw = btn.getAttribute('data-pro');
   var p;
-  try { p = JSON.parse(raw.replace(/&#39;/g,"'")); } catch(e){ toast('Erro ao abrir edição','er'); return; }
+  try { p = JSON.parse(raw.replace(/&quot;/g,'"')); } catch(e){ toast('Erro ao abrir edição','er'); return; }
   document.getElementById('epr-id').value = p.id || '';
   document.getElementById('epr-n').value  = p.nome || '';
   document.getElementById('epr-e').value  = p.especialidade || '';
@@ -1502,7 +1502,7 @@ function updatePro() {
 function editSvc(btn) {
   var raw = btn.getAttribute('data-svc');
   var s;
-  try { s = JSON.parse(raw.replace(/&#39;/g,"'")); } catch(e){ toast('Erro ao abrir edição','er'); return; }
+  try { s = JSON.parse(raw.replace(/&quot;/g,'"')); } catch(e){ toast('Erro ao abrir edição','er'); return; }
   document.getElementById('esv-id').value  = s.id || '';
   document.getElementById('esv-n').value   = s.nome || '';
   document.getElementById('esv-d').value   = s.duracao_min || 60;
@@ -1540,7 +1540,7 @@ function updateSvc() {
 function editCli(btn) {
   var raw = btn.getAttribute('data-cli');
   var c;
-  try { c = JSON.parse(raw.replace(/&#39;/g,"'")); } catch(e){ toast('Erro ao abrir edição','er'); return; }
+  try { c = JSON.parse(raw.replace(/&quot;/g,'"')); } catch(e){ toast('Erro ao abrir edição','er'); return; }
   document.getElementById('ecl-id').value   = c.id || '';
   document.getElementById('ecl-n').value    = c.nome || '';
   document.getElementById('ecl-t').value    = c.telefone || '';
