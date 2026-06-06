@@ -547,6 +547,60 @@ tbody tr:hover{background:#F9FAFB}
   </div>
 </div>
 
+<!-- Modal Editar Profissional -->
+<div class="mov" id="m-edit-pro">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Profissional</span><button class="mx" onclick="closeM('m-edit-pro')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="epr-id"/>
+      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="epr-n"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="epr-e"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
+      <div class="fg"><label class="fl">Cor na agenda</label>
+        <div style="display:flex;gap:8px;margin-top:5px" id="epr-cor-wrap">
+          <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer" data-cor="#6C63FF" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#FF6584;cursor:pointer" data-cor="#FF6584" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#43D9AD;cursor:pointer" data-cor="#43D9AD" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#FFB347;cursor:pointer" data-cor="#FFB347" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#3B82F6;cursor:pointer" data-cor="#3B82F6" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#EC4899;cursor:pointer" data-cor="#EC4899" onclick="pickCorEdit(this,'epr-cor')"></div>
+        </div>
+        <input type="hidden" id="epr-cor" value="#6C63FF"/>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-pro')">Cancelar</button><button class="btn btnp" onclick="updatePro()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- Modal Editar Serviço -->
+<div class="mov" id="m-edit-svc">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Serviço</span><button class="mx" onclick="closeM('m-edit-svc')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="esv-id"/>
+      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="esv-n"/></div>
+      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="esv-c"><option>Cabelo</option><option>Unhas</option><option>Estética</option><option>Barba</option><option>Outro</option></select></div><div class="fg"><label class="fl">Duração (min)</label><input type="number" class="fc" id="esv-d"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="esv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="esv-com"/></div></div>
+      <div class="fg"><label class="fl">Ativo</label><select class="fc" id="esv-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-svc')">Cancelar</button><button class="btn btnp" onclick="updateSvc()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- Modal Editar Cliente -->
+<div class="mov" id="m-edit-cli">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Cliente</span><button class="mx" onclick="closeM('m-edit-cli')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ecl-id"/>
+      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="ecl-n"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="ecl-nasc"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="ecl-t"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="ecl-e"/></div></div>
+      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ecl-o" rows="2"></textarea></div>
+      <div class="fg"><label class="fl">Status</label><select class="fc" id="ecl-s"><option value="ativo">Ativo</option><option value="vip">VIP</option><option value="inativo">Inativo</option><option value="novo">Novo</option></select></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-cli')">Cancelar</button><button class="btn btnp" onclick="updateCli()">Salvar</button></div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <!-- Modal Perfil Cliente -->
@@ -997,8 +1051,9 @@ function renderCli(list) {
       '<td><strong>' + brl(c.total_gasto) + '</strong></td>' +
       '<td><span class="badge ' + (stC[c.status]||'bg2') + '">' + (stL[c.status]||'Ativo') + '</span></td>' +
       '<td><div style="display:flex;gap:3px">' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'Abrindo WhatsApp...\',\'ok\')">💬</button>' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();openM(\'m-ag\')">📅</button>' +
+      '<button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'WhatsApp...\',\'ok\')" title="WhatsApp">💬</button>' +
+      '<button class="btnic btn btnsm" onclick="event.stopPropagation();openM(\'m-ag\')" title="Agendar">📅</button>' +
+      '<button class="btnic btn btnsm" onclick="event.stopPropagation();editCli(this)" data-cli='' + JSON.stringify(c).replace(/'/g,"&#39;") + '' title="Editar">✏️</button>' +
       '</div></td></tr>';
   }).join('');
 }
@@ -1144,7 +1199,7 @@ function renderPros(list) {
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">' +
       '<div class="pro-av" style="background:' + (p.cor_agenda||COLS[0]) + '">' + p.nome[0] + '</div>' +
       '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + (p.especialidade||'—') + '</div></div>' +
-      '<button class="btnic btn btnsm" onclick="toast(\'Editar ' + p.nome.split(' ')[0].replace(/'/g,"\\'") + '\',\'inf\')">✏️</button></div>' +
+      '<button class="btnic btn btnsm" onclick="editPro(this)" data-pro='' + JSON.stringify(p).replace(/'/g,"&#39;") + '' title="Editar">✏️</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs)">' +
       '<div><div style="font-size:.9rem;font-weight:800">' + (p.total_servicos||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.9rem;font-weight:800;color:var(--ac)">' + (p.comissao_pct||40) + '%</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
@@ -1170,7 +1225,7 @@ function renderSvcs(list) {
       '<td><strong>' + brl(s.preco) + '</strong></td>' +
       '<td><span class="badge bp">' + (s.comissao_pct||40) + '%</span></td>' +
       '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toast(this.checked?\'Ativo\':\'Desativado\',this.checked?\'ok\':\'er\')"/></td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="toast(\'Editar\',\'inf\')">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="toast(\'Removido\',\'er\')">🗑</button></div></td></tr>';
+      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc='' + JSON.stringify(s).replace(/'/g,"&#39;") + '' title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="toast(\'Removido\',\'er\')" title="Remover">🗑</button></div></td></tr>';
   }).join('');
 }
 
@@ -1399,6 +1454,122 @@ function salvarMov() {
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled=false; });
+}
+
+// ── FUNÇÕES DE EDIÇÃO ───────────────────────────────
+
+function pickCorEdit(el, inputId) {
+  el.parentNode.querySelectorAll('div[data-cor]').forEach(function(e){ e.style.border='none'; });
+  el.style.border = '3px solid ' + el.dataset.cor;
+  document.getElementById(inputId).value = el.dataset.cor;
+}
+
+function editPro(btn) {
+  var raw = btn.getAttribute('data-pro');
+  var p;
+  try { p = JSON.parse(raw.replace(/&#39;/g,"'")); } catch(e){ toast('Erro ao abrir edição','er'); return; }
+  document.getElementById('epr-id').value = p.id || '';
+  document.getElementById('epr-n').value  = p.nome || '';
+  document.getElementById('epr-e').value  = p.especialidade || '';
+  document.getElementById('epr-t').value  = p.telefone || '';
+  document.getElementById('epr-c').value  = p.comissao_pct || 40;
+  document.getElementById('epr-cor').value = p.cor_agenda || '#6C63FF';
+  // Marca cor selecionada
+  document.querySelectorAll('#epr-cor-wrap div[data-cor]').forEach(function(el){
+    el.style.border = el.dataset.cor === (p.cor_agenda||'#6C63FF') ? '3px solid '+el.dataset.cor : 'none';
+  });
+  openM('m-edit-pro');
+}
+
+function updatePro() {
+  var id = document.getElementById('epr-id').value;
+  var nome = document.getElementById('epr-n').value.trim();
+  if (!nome) { toast('Nome obrigatório','er'); return; }
+  var btn = document.querySelector('#m-edit-pro .btnp');
+  btn.disabled=true; btn.textContent='Salvando...';
+  apiFetch('/api/profissionais/'+id, {method:'PUT', body:{
+    nome: nome,
+    especialidade: document.getElementById('epr-e').value,
+    telefone: document.getElementById('epr-t').value,
+    comissao_pct: parseFloat(document.getElementById('epr-c').value)||40,
+    cor_agenda: document.getElementById('epr-cor').value
+  }})
+  .then(function(){ toast('Profissional atualizado! ✅','ok'); closeM('m-edit-pro'); loadPros(); fillSelects(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
+}
+
+function editSvc(btn) {
+  var raw = btn.getAttribute('data-svc');
+  var s;
+  try { s = JSON.parse(raw.replace(/&#39;/g,"'")); } catch(e){ toast('Erro ao abrir edição','er'); return; }
+  document.getElementById('esv-id').value  = s.id || '';
+  document.getElementById('esv-n').value   = s.nome || '';
+  document.getElementById('esv-d').value   = s.duracao_min || 60;
+  document.getElementById('esv-p').value   = s.preco || '';
+  document.getElementById('esv-com').value = s.comissao_pct || 40;
+  document.getElementById('esv-ativo').value = s.ativo ? 'true' : 'false';
+  // Seleciona categoria
+  var sel = document.getElementById('esv-c');
+  for (var i=0; i<sel.options.length; i++) {
+    if (sel.options[i].value === s.categoria) { sel.selectedIndex = i; break; }
+  }
+  openM('m-edit-svc');
+}
+
+function updateSvc() {
+  var id = document.getElementById('esv-id').value;
+  var nome = document.getElementById('esv-n').value.trim();
+  var preco = parseFloat(document.getElementById('esv-p').value);
+  if (!nome||!preco) { toast('Nome e preço obrigatórios','er'); return; }
+  var btn = document.querySelector('#m-edit-svc .btnp');
+  btn.disabled=true; btn.textContent='Salvando...';
+  apiFetch('/api/servicos/'+id, {method:'PUT', body:{
+    nome: nome,
+    categoria: document.getElementById('esv-c').value,
+    duracao_min: parseInt(document.getElementById('esv-d').value)||60,
+    preco: preco,
+    comissao_pct: parseFloat(document.getElementById('esv-com').value)||40,
+    ativo: document.getElementById('esv-ativo').value === 'true'
+  }})
+  .then(function(){ toast('Serviço atualizado! ✅','ok'); closeM('m-edit-svc'); loadSvcs(); fillSelects(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
+}
+
+function editCli(btn) {
+  var raw = btn.getAttribute('data-cli');
+  var c;
+  try { c = JSON.parse(raw.replace(/&#39;/g,"'")); } catch(e){ toast('Erro ao abrir edição','er'); return; }
+  document.getElementById('ecl-id').value   = c.id || '';
+  document.getElementById('ecl-n').value    = c.nome || '';
+  document.getElementById('ecl-t').value    = c.telefone || '';
+  document.getElementById('ecl-e').value    = c.email || '';
+  document.getElementById('ecl-o').value    = c.observacoes || '';
+  document.getElementById('ecl-nasc').value = c.data_nascimento ? c.data_nascimento.split('T')[0] : '';
+  document.getElementById('ecl-s').value    = c.status || 'ativo';
+  openM('m-edit-cli');
+}
+
+function updateCli() {
+  var id = document.getElementById('ecl-id').value;
+  var nome = document.getElementById('ecl-n').value.trim();
+  if (!nome) { toast('Nome obrigatório','er'); return; }
+  var btn = document.querySelector('#m-edit-cli .btnp');
+  btn.disabled=true; btn.textContent='Salvando...';
+  var body = {
+    nome: nome,
+    telefone: document.getElementById('ecl-t').value,
+    email: document.getElementById('ecl-e').value,
+    observacoes: document.getElementById('ecl-o').value,
+    status: document.getElementById('ecl-s').value
+  };
+  var nasc = document.getElementById('ecl-nasc').value;
+  if (nasc) body.data_nascimento = nasc;
+  apiFetch('/api/clientes/'+id, {method:'PUT', body:body})
+  .then(function(){ toast('Cliente atualizado! ✅','ok'); closeM('m-edit-cli'); loadClientes(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
 
 // ── INIT ────────────────────────────────────────────────
