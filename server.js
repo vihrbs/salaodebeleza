@@ -150,7 +150,7 @@ Acesse o Railway para ver os dados completos.`;
       const wppMsg = encodeURIComponent(msg);
       const CALLMEBOT_KEY = process.env.CALLMEBOT_KEY || '';
       if (CALLMEBOT_KEY) {
-        await fetch(\`https://api.callmebot.com/whatsapp.php?phone=\${WPP_NUMERO}&text=\${wppMsg}&apikey=\${CALLMEBOT_KEY}\`);
+        await fetch('https://api.callmebot.com/whatsapp.php?phone=' + WPP_NUMERO + '&text=' + wppMsg + '&apikey=' + CALLMEBOT_KEY);
         console.log('WhatsApp de notificação enviado');
       }
     } catch(e) { console.error('Erro ao enviar WhatsApp:', e.message); }
