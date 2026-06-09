@@ -289,7 +289,7 @@ tbody tr:hover{background:#F9FAFB}
   <!-- BANNER TRIAL -->
   <div id="trial-banner" style="display:none;background:linear-gradient(90deg,#7C5CFC,#FF6B6B);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;font-size:.82rem;gap:12px;flex-wrap:wrap">
     <span id="trial-msg">⏰ Seu trial expira em breve — assine para continuar usando.</span>
-    <button onclick="assinar()" style="background:#fff;color:#7C5CFC;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">Assinar R$ 78,99/mês →</button>
+    <button onclick="assinar()" style="background:#fff;color:#7C5CFC;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">Assinar R$ 59,90/mês →</button>
   </div>
 
   <!-- MENU MOBILE INFERIOR -->
@@ -1740,7 +1740,7 @@ function assinar() {
     }
   })
   .catch(function(e){ toast('Erro: '+e.message,'er'); })
-  .finally(function(){ btn.textContent='Assinar R$ 78,99/mês →'; btn.disabled=false; });
+  .finally(function(){ btn.textContent='Assinar R$ 59,90/mês →'; btn.disabled=false; });
 }
 
 function checkTrial() {
