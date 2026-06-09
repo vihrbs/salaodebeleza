@@ -144,16 +144,18 @@ Acesse o Railway para ver os dados completos.`;
     } catch(e) { console.error('Erro ao enviar email:', e.message); }
   }
   
-  // Notificação por WhatsApp via CallMeBot (gratuito)
-  if (WPP_NUMERO) {
+  // Notificação por Telegram
+  const TELEGRAM_TOKEN   = process.env.TELEGRAM_BOT_TOKEN || '';
+  const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID   || '';
+  if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
     try {
-      const wppMsg = encodeURIComponent(msg);
-      const CALLMEBOT_KEY = process.env.CALLMEBOT_KEY || '';
-      if (CALLMEBOT_KEY) {
-        await fetch('https://api.callmebot.com/whatsapp.php?phone=' + WPP_NUMERO + '&text=' + wppMsg + '&apikey=' + CALLMEBOT_KEY);
-        console.log('WhatsApp de notificação enviado');
-      }
-    } catch(e) { console.error('Erro ao enviar WhatsApp:', e.message); }
+      await fetch('https://api.telegram.org/bot' + TELEGRAM_TOKEN + '/sendMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg })
+      });
+      console.log('Telegram notificação enviada');
+    } catch(e) { console.error('Erro ao enviar Telegram:', e.message); }
   }
 }
 
