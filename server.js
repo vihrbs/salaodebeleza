@@ -650,7 +650,7 @@ app.post('/api/pagamento/criar', auth, async (req, res) => {
           description: 'Acesso completo ao sistema de gestao para saloes - ' + (salao?.nome || ''),
           quantity: 1,
           currency_id: 'BRL',
-          unit_price: 78.99
+          unit_price: 59.90
         }],
         payer: {
           name: usuario?.nome || '',
@@ -701,7 +701,7 @@ app.post('/api/pagamento/webhook', async (req, res) => {
           tipo: 'entrada',
           categoria: 'Assinatura',
           descricao: 'Mensalidade Beleza Pro - ' + new Date().toLocaleDateString('pt-BR'),
-          valor: pgto.transaction_amount || 78.99,
+          valor: pgto.transaction_amount || 59.90,
           data: new Date().toISOString().split('T')[0],
           forma_pgto: pgto.payment_type_id || 'mercado_pago',
           pago: true
