@@ -98,12 +98,64 @@ app.post('/api/auth/register', async (req, res) => {
     if (userErr) throw userErr;
 
     const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
+    
+    // Notificação de novo cadastro
+    notificarNovoCadastro(salao.nome, nome, email, telefone).catch(e => 
+      console.log('Notificação falhou (não crítico):', e.message)
+    );
+    
     res.status(201).json({ token, usuario: { ...usuario, saloes: salao }, salao });
   } catch(e) {
     console.error('Register error:', e);
     res.status(500).json({ error: 'Erro ao criar conta: ' + e.message });
   }
 });
+
+// ── NOTIFICAÇÕES ─────────────────────────────────────
+async function notificarNovoCadastro(nomeSalao, nomeUser, email, telefone) {
+  const RESEND_KEY  = process.env.RESEND_API_KEY || '';
+  const EMAIL_ADMIN = process.env.ADMIN_EMAIL || '';
+  const WPP_NUMERO  = process.env.ADMIN_WHATSAPP || '';
+  
+  const msg = `🎉 Novo cadastro no Beleza Pro!
+
+Salão: ${nomeSalao}
+Nome: ${nomeUser}
+Email: ${email}
+Telefone: ${telefone || 'não informado'}
+Data: ${new Date().toLocaleString('pt-BR')}
+
+Acesse o Railway para ver os dados completos.`;
+
+  // Notificação por E-mail via Resend
+  if (RESEND_KEY && EMAIL_ADMIN) {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_KEY },
+        body: JSON.stringify({
+          from: 'Beleza Pro <noreply@belezaprooficial.com.br>',
+          to: [EMAIL_ADMIN],
+          subject: '🎉 Novo cadastro: ' + nomeSalao,
+          text: msg
+        })
+      });
+      console.log('Email de notificação enviado para', EMAIL_ADMIN);
+    } catch(e) { console.error('Erro ao enviar email:', e.message); }
+  }
+  
+  // Notificação por WhatsApp via CallMeBot (gratuito)
+  if (WPP_NUMERO) {
+    try {
+      const wppMsg = encodeURIComponent(msg);
+      const CALLMEBOT_KEY = process.env.CALLMEBOT_KEY || '';
+      if (CALLMEBOT_KEY) {
+        await fetch(\`https://api.callmebot.com/whatsapp.php?phone=\${WPP_NUMERO}&text=\${wppMsg}&apikey=\${CALLMEBOT_KEY}\`);
+        console.log('WhatsApp de notificação enviado');
+      }
+    } catch(e) { console.error('Erro ao enviar WhatsApp:', e.message); }
+  }
+}
 
 // LOGIN
 app.post('/api/auth/login', async (req, res) => {
@@ -315,9 +367,39 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     .from('agendamentos').update(updates)
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
   if (error || !data) return res.status(404).json({ error: 'Não encontrado' });
+  
   if (status === 'concluido') {
+    // Atualiza lancamento como pago
     await supabase.from('lancamentos')
       .update({ pago: true, forma_pgto }).eq('agendamento_id', req.params.id);
+    
+    // Atualiza estatísticas do cliente automaticamente
+    if (data.cliente_id) {
+      try {
+        // Conta total de visitas e soma total gasto
+        const { data: ags } = await supabase
+          .from('agendamentos')
+          .select('valor_total')
+          .eq('cliente_id', data.cliente_id)
+          .eq('salao_id', req.salao_id)
+          .eq('status', 'concluido');
+        
+        const total_visitas = ags ? ags.length : 0;
+        const total_gasto   = ags ? ags.reduce((s, a) => s + Number(a.valor_total || 0), 0) : 0;
+        
+        // Define status baseado em visitas
+        let novo_status = 'ativo';
+        if (total_visitas >= 10) novo_status = 'vip';
+        else if (total_visitas === 1) novo_status = 'novo';
+        
+        await supabase.from('clientes').update({
+          historico_count: total_visitas,
+          total_gasto: total_gasto,
+          ultimo_agendamento: new Date().toISOString().split('T')[0],
+          status: novo_status
+        }).eq('id', data.cliente_id).eq('salao_id', req.salao_id);
+      } catch(e) { console.error('Erro ao atualizar stats cliente:', e.message); }
+    }
   }
   res.json(data);
 });
