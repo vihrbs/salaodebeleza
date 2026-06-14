@@ -2186,32 +2186,57 @@ function assinar() {
 }
 
 function checkTrial() {
+  // Admin nunca é bloqueado (dono do sistema)
+  if (USER_PERFIL === 'admin' && DEMO) return;
+  
   apiFetch('/api/pagamento/status')
   .then(function(r){
     if (!r) return;
     var banner = document.getElementById('trial-banner');
     var msg    = document.getElementById('trial-msg');
-    // Esconde banner por padrão
     if (banner) banner.style.display = 'none';
+
     if (r.trial_expirado) {
-      if (banner) {
-        banner.style.display = 'flex';
-        banner.style.background = 'linear-gradient(90deg,#DC2626,#B45309)';
-        msg.textContent = '🔒 Seu trial expirou. Assine agora para continuar usando o sistema.';
-      }
+      // BLOQUEIA O SISTEMA — mostra tela de pagamento
+      bloquearSistema();
     } else if (r.em_trial && r.dias_restantes <= 5) {
       if (banner) {
         banner.style.display = 'flex';
-        msg.textContent = '⏰ ' + r.dias_restantes + ' dia(s) de trial restante(s). Assine agora para não perder o acesso.';
+        msg.textContent = '⏰ ' + r.dias_restantes + ' dia(s) restante(s) no trial. Assine para não perder o acesso.';
       }
     }
-    // Mais de 5 dias restantes = banner escondido
   })
-  .catch(function(){ 
-    // Em caso de erro, esconde o banner
+  .catch(function(){
     var banner = document.getElementById('trial-banner');
     if (banner) banner.style.display = 'none';
   });
+}
+
+function bloquearSistema() {
+  // Esconde o conteúdo do painel
+  var content = document.getElementById('content');
+  var topnav  = document.querySelector('.tb-nav');
+  var mobnav  = document.getElementById('mob-nav');
+  if (topnav)  topnav.style.display = 'none';
+  if (mobnav)  mobnav.style.display = 'none';
+
+  // Mostra tela de bloqueio
+  var existing = document.getElementById('bloqueio-screen');
+  if (existing) return;
+
+  var div = document.createElement('div');
+  div.id = 'bloqueio-screen';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(15,15,13,.97);z-index:9000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px;text-align:center';
+  div.innerHTML = [
+    '<div style="font-family:serif;font-size:2rem;font-weight:900;color:#fff">Bele<em style="color:#a79eff;font-style:italic">za</em> Pro</div>',
+    '<div style="width:64px;height:64px;background:#FEE2E2;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem">🔒</div>',
+    '<div style="font-size:1.2rem;font-weight:800;color:#fff">Seu período de trial encerrou</div>',
+    '<div style="font-size:.9rem;color:rgba(255,255,255,.6);max-width:360px;line-height:1.6">Assine o Beleza Pro por <strong style="color:#fff">R$ 59,90/mês</strong> para continuar acessando seu painel e todos os seus dados.</div>',
+    '<button onclick="assinar()" style="background:#7C5CFC;color:#fff;border:none;border-radius:50px;padding:14px 36px;font-size:1rem;font-weight:700;cursor:pointer;margin-top:8px">✨ Assinar agora — R$ 59,90/mês</button>',
+    '<div style="font-size:.75rem;color:rgba(255,255,255,.4)">Seus dados estão seguros e serão restaurados após o pagamento.</div>',
+    '<button onclick="doLogout()" style="background:transparent;color:rgba(255,255,255,.4);border:none;font-size:.78rem;cursor:pointer;margin-top:4px">Sair da conta</button>'
+  ].join('');
+  document.body.appendChild(div);
 }
 
 window.addEventListener('load', function(){
