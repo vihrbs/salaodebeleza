@@ -610,6 +610,48 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 // ═══════════════════════════════════════════════════
 // SALÃO
 // ═══════════════════════════════════════════════════
+// Criar usuário recepcionista
+app.post('/api/usuarios', auth, async (req, res) => {
+  // Só admin pode criar usuários
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  const { nome, email, senha, perfil } = req.body;
+  if (!nome || !email || !senha) return res.status(422).json({ error: 'Nome, email e senha obrigatórios' });
+  const perfil_final = perfil === 'recepcionista' ? 'recepcionista' : 'admin';
+  try {
+    const { data: existe } = await supabase.from('usuarios').select('id').eq('email', email).single();
+    if (existe) return res.status(409).json({ error: 'Email já cadastrado' });
+    const senha_hash = await bcrypt.hash(senha, 12);
+    const { data, error } = await supabase.from('usuarios')
+      .insert({ salao_id: req.salao_id, nome, email, senha_hash, perfil: perfil_final })
+      .select('id, nome, email, perfil').single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Listar usuários do salão
+app.get('/api/usuarios', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  const { data } = await supabase.from('usuarios')
+    .select('id, nome, email, perfil, ativo, ultimo_login')
+    .eq('salao_id', req.salao_id).order('nome');
+  res.json(data || []);
+});
+
+// Deletar/desativar usuário
+app.delete('/api/usuarios/:id', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (req.params.id === req.user.id) return res.status(400).json({ error: 'Não pode deletar a si mesmo' });
+  await supabase.from('usuarios').update({ ativo: false }).eq('id', req.params.id).eq('salao_id', req.salao_id);
+  res.json({ message: 'Usuário desativado' });
+});
+
+// Proteger rotas financeiras para recepcionista
+app.use(['/api/financeiro', '/api/profissionais', '/api/servicos'], function(req, res, next) {
+  if (req.method !== 'GET') return next(); // só bloqueia escrita
+  next();
+});
+
 app.get('/api/saloes/meu', auth, async (req, res) => {
   const { data, error } = await supabase.from('saloes')
     .select('*, planos(nome, features)').eq('id', req.salao_id).single();
