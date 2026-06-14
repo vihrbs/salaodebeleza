@@ -803,6 +803,47 @@ tbody tr:hover{background:#F9FAFB}
   </div>
 </div>
 
+<!-- Modal Editar Permissões -->
+<div class="mov" id="m-edit-perms">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Permissões — <span id="ep-nome"></span></span><button class="mx" onclick="closeM('m-edit-perms')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ep-uid"/>
+      <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Selecione o que este usuário pode acessar:</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="ep-checkboxes">
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="dashboard" style="accent-color:var(--ac)"/> 📊 Dashboard
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="agenda" style="accent-color:var(--ac)"/> 📅 Agenda
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="clientes" style="accent-color:var(--ac)"/> 👥 Clientes
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="financeiro" style="accent-color:var(--ac)"/> 💰 Financeiro
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="estoque" style="accent-color:var(--ac)"/> 📦 Estoque
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="comissoes" style="accent-color:var(--ac)"/> 💸 Comissões
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="profissionais" style="accent-color:var(--ac)"/> 👤 Profissionais
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="servicos" style="accent-color:var(--ac)"/> ✂️ Serviços
+        </label>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-edit-perms')">Cancelar</button>
+      <button class="btn btnp" onclick="salvarEditPerms()">Salvar Permissões</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <!-- Modal Perfil Cliente -->
@@ -2045,12 +2086,17 @@ function loadUsuarios() {
     if (!list.length) { el.innerHTML = '<div class="empty">Nenhum usuário cadastrado além de você.</div>'; return; }
     el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>' +
       list.map(function(u) {
-        var perfBadge = u.perfil === 'admin'
+        var isAdmin = u.perfil === 'admin';
+        var perfBadge = isAdmin
           ? '<span class="badge bp">Admin</span>'
-          : '<span class="badge bw">Recepcionista</span>';
+          : '<span class="badge bw">Personalizado</span>';
         var ultimo = u.ultimo_login ? fdt(u.ultimo_login) : 'Nunca';
-        return '<tr><td><strong>' + u.nome + '</strong></td><td>' + u.email + '</td><td>' + perfBadge + '</td><td>' + ultimo + '</td>' +
-          '<td><button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Desativar">🗑</button></td></tr>';
+        var acoes = isAdmin ? '<span style="font-size:.7rem;color:var(--t3)">—</span>' :
+          '<div style="display:flex;gap:4px">' +
+          '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="abrirEditPerms(this.dataset.uid,this.dataset.unome)" title="Editar permissões">✏️</button>' +
+          '<button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Excluir">🗑</button>' +
+          '</div>';
+        return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td style="font-size:.78rem">' + ultimo + '</td><td>' + acoes + '</td></tr>';
       }).join('') + '</tbody></table>';
   }).catch(function() {
     el.innerHTML = '<div class="empty">Erro ao carregar usuários.</div>';
@@ -2094,24 +2140,29 @@ function criarUsuario() {
   var btn = document.querySelector('#m-novo-user .btnp');
   btn.disabled = true; btn.textContent = 'Criando...';
   apiFetch('/api/usuarios', {method:'POST', body:{nome:nome, cargo:cargo, email:email, senha:senha, perfil:perfil, permissoes:permissoes}})
-  .then(function() {
-    toast('Usuário criado com sucesso! ✅','ok');
+  .then(function(r) {
     closeM('m-novo-user');
     document.getElementById('nu-nome').value = '';
     document.getElementById('nu-cargo').value = '';
     document.getElementById('nu-email').value = '';
     document.getElementById('nu-senha').value = '';
     loadUsuarios();
+    // Mostra modal de sucesso
+    setTimeout(function(){
+      toast('Usuário ' + nome + ' criado com sucesso! ✅','ok');
+    }, 300);
   })
   .catch(function(e) { toast('Erro: ' + (e.message||'tente novamente'),'er'); })
   .finally(function() { btn.disabled=false; btn.textContent='Criar Usuário'; });
 }
 
 function deletarUsuario(id, nome) {
-  if (!confirm('Desativar acesso de ' + nome + '?')) return;
+  if (!confirm('Excluir acesso de ' + nome + '? Esta acao nao pode ser desfeita.')) return;
+
+
   apiFetch('/api/usuarios/' + id, {method:'DELETE'})
-  .then(function() { toast(nome + ' desativado','ok'); loadUsuarios(); })
-  .catch(function(e) { toast('Erro: '+e.message,'er'); });
+  .then(function() { toast('Acesso de ' + nome + ' removido ✅','ok'); loadUsuarios(); })
+  .catch(function(e) { toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // ── PERMISSÕES ──────────────────────────────────────
@@ -2167,6 +2218,48 @@ function navComPermissao(page, el) {
     return;
   }
   nav(page, el);
+}
+
+// ── EDITAR PERMISSÕES ───────────────────────────────
+function abrirEditPerms(uid, nome) {
+  document.getElementById('ep-uid').value = uid;
+  document.getElementById('ep-nome').textContent = nome;
+  // Busca permissões atuais
+  apiFetch('/api/usuarios').then(function(list) {
+    var u = (list||[]).find(function(x){ return x.id === uid; });
+    var perms = u && u.permissoes ? u.permissoes : [];
+    document.querySelectorAll('#ep-checkboxes input[type=checkbox]').forEach(function(cb) {
+      cb.checked = perms.indexOf(cb.value) >= 0;
+      var lbl = cb.closest('label');
+      lbl.style.borderColor = cb.checked ? 'var(--ac)' : 'var(--bd)';
+      lbl.style.background  = cb.checked ? '#EDE9FF'  : '';
+      cb.onchange = function() {
+        lbl.style.borderColor = this.checked ? 'var(--ac)' : 'var(--bd)';
+        lbl.style.background  = this.checked ? '#EDE9FF'  : '';
+      };
+    });
+  }).catch(function() {
+    // Se não conseguir buscar, abre com todos desmarcados
+    document.querySelectorAll('#ep-checkboxes input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
+  });
+  openM('m-edit-perms');
+}
+
+function salvarEditPerms() {
+  var uid = document.getElementById('ep-uid').value;
+  var perms = [];
+  document.querySelectorAll('#ep-checkboxes input[type=checkbox]:checked').forEach(function(cb){ perms.push(cb.value); });
+  if (!perms.length) { toast('Selecione pelo menos uma permissão','er'); return; }
+  var btn = document.querySelector('#m-edit-perms .btnp');
+  btn.disabled=true; btn.textContent='Salvando...';
+  apiFetch('/api/usuarios/'+uid+'/permissoes', {method:'PUT', body:{permissoes:perms}})
+  .then(function() {
+    toast('Permissões atualizadas! ✅','ok');
+    closeM('m-edit-perms');
+    loadUsuarios();
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled=false; btn.textContent='Salvar Permissões'; });
 }
 
 // ── INIT ────────────────────────────────────────────────
