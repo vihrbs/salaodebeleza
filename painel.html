@@ -741,20 +741,59 @@ tbody tr:hover{background:#F9FAFB}
 
 <!-- Modal Novo Usuário -->
 <div class="mov" id="m-novo-user">
-  <div class="mbox md">
+  <div class="mbox lg">
     <div class="mh"><span class="mt">Novo Usuário</span><button class="mx" onclick="closeM('m-novo-user')">✕</button></div>
     <div class="mb">
       <div style="background:#EDE9FF;border-radius:var(--rs);padding:10px 12px;font-size:.78rem;color:#6C63FF;margin-bottom:14px">
-        ℹ️ Crie um acesso para sua recepcionista. Ela vai logar com o email e senha definidos aqui.
+        ℹ️ Configure o acesso para cada funcionário. O Admin tem acesso total e não pode ser limitado.
       </div>
-      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="nu-nome" placeholder="Nome da recepcionista"/></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Nome*</label><input class="fc" id="nu-nome" placeholder="Nome do usuário"/></div>
+        <div class="fg"><label class="fl">Cargo</label><input class="fc" id="nu-cargo" placeholder="Ex: Recepcionista"/></div>
+      </div>
       <div class="fg"><label class="fl">E-mail*</label><input class="fc" type="email" id="nu-email" placeholder="email@seusalao.com"/></div>
       <div class="fg"><label class="fl">Senha*</label><input class="fc" type="password" id="nu-senha" placeholder="Mínimo 6 caracteres"/></div>
-      <div class="fg"><label class="fl">Perfil*</label>
-        <select class="fc" id="nu-perfil">
-          <option value="recepcionista">Recepcionista (Agenda, Clientes, Estoque, Comissões)</option>
-          <option value="admin">Admin (acesso total)</option>
-        </select>
+      <div class="fg">
+        <label class="fl">Tipo de acesso</label>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--bd);border-radius:var(--rs);flex:1;transition:all .15s" id="tipo-admin-lbl">
+            <input type="radio" name="nu-tipo" value="admin" id="tipo-admin" onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
+            <div><div style="font-weight:600">Admin</div><div style="font-size:.7rem;color:var(--t2)">Acesso total</div></div>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--ac);border-radius:var(--rs);flex:1;background:#EDE9FF;transition:all .15s" id="tipo-custom-lbl">
+            <input type="radio" name="nu-tipo" value="custom" id="tipo-custom" checked onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
+            <div><div style="font-weight:600">Personalizado</div><div style="font-size:.7rem;color:var(--t2)">Você escolhe</div></div>
+          </label>
+        </div>
+      </div>
+      <div id="nu-permissoes-wrap" class="fg">
+        <label class="fl">Permissões de acesso</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" id="nu-permissoes">
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="dashboard" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📊 Dashboard
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--ac);border-radius:var(--rs);cursor:pointer;font-size:.82rem;background:#EDE9FF;transition:border-color .15s">
+            <input type="checkbox" value="agenda" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📅 Agenda
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="clientes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👥 Clientes
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="financeiro" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💰 Financeiro
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="estoque" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📦 Estoque
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="comissoes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💸 Comissões
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="profissionais" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👤 Profissionais
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="servicos" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> ✂️ Serviços
+          </label>
+        </div>
       </div>
     </div>
     <div class="mf">
@@ -843,11 +882,8 @@ var PROS = [], SVCS = [], CLIS = [];
 var COR_SEL = '#6C63FF';
 var USER_PERFIL = 'admin'; // 'admin' ou 'recepcionista'
 
-// Permissões por perfil
-var PERMISSOES = {
-  admin: ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'],
-  recepcionista: ['dashboard','agenda','clientes','estoque','comissoes']
-};
+// Permissões do usuário atual (carregadas do login)
+var USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
 
 var SL = {agendado:'Agendado',confirmado:'Confirmado',em_atendimento:'Em Atendimento',concluido:'Concluído',cancelado:'Cancelado',nao_compareceu:'Não Compareceu'};
 var SC = {agendado:'bg2',confirmado:'bi',em_atendimento:'bs',concluido:'bp',cancelado:'bd2',nao_compareceu:'bw'};
@@ -949,8 +985,17 @@ function doRegister() {
   .finally(function(){ btn.disabled=false; btn.textContent='Criar Conta Grátis'; });
 }
 
-function enterApp(nome, salon, mode, perfil) {
+function enterApp(nome, salon, mode, perfil, permissoes) {
   USER_PERFIL = perfil || 'admin';
+  if (permissoes && permissoes.length) {
+    USER_PERMISSOES = permissoes;
+  } else if (perfil === 'admin') {
+    USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+  } else {
+    // Tenta carregar do localStorage
+    var stored = localStorage.getItem('bpro_permissoes');
+    if (stored) { try { USER_PERMISSOES = JSON.parse(stored); } catch(e) {} }
+  }
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('uav').textContent = (nome||'A')[0].toUpperCase();
@@ -2012,20 +2057,48 @@ function loadUsuarios() {
   });
 }
 
+function toggleTipoAcesso() {
+  var isAdmin = document.getElementById('tipo-admin').checked;
+  document.getElementById('nu-permissoes-wrap').style.display = isAdmin ? 'none' : 'block';
+  document.getElementById('tipo-admin-lbl').style.background = isAdmin ? '#EDE9FF' : '';
+  document.getElementById('tipo-admin-lbl').style.borderColor = isAdmin ? 'var(--ac)' : 'var(--bd)';
+  document.getElementById('tipo-custom-lbl').style.background = !isAdmin ? '#EDE9FF' : '';
+  document.getElementById('tipo-custom-lbl').style.borderColor = !isAdmin ? 'var(--ac)' : 'var(--bd)';
+}
+
+function updatePermLabel(cb) {
+  var lbl = cb.closest('label');
+  lbl.style.borderColor = cb.checked ? 'var(--ac)' : 'var(--bd)';
+  lbl.style.background = cb.checked ? '#EDE9FF' : '';
+}
+
 function criarUsuario() {
   var nome  = document.getElementById('nu-nome').value.trim();
+  var cargo = document.getElementById('nu-cargo').value.trim();
   var email = document.getElementById('nu-email').value.trim();
   var senha = document.getElementById('nu-senha').value;
-  var perfil = document.getElementById('nu-perfil').value;
+  var isAdmin = document.getElementById('tipo-admin').checked;
   if (!nome || !email || !senha) { toast('Preencha todos os campos','er'); return; }
   if (senha.length < 6) { toast('Senha deve ter pelo menos 6 caracteres','er'); return; }
+  
+  var perfil = isAdmin ? 'admin' : 'custom';
+  var permissoes = ['dashboard']; // sempre tem dashboard
+  if (!isAdmin) {
+    document.querySelectorAll('#nu-permissoes input[type=checkbox]:checked').forEach(function(cb) {
+      if (permissoes.indexOf(cb.value) < 0) permissoes.push(cb.value);
+    });
+  } else {
+    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+  }
+  
   var btn = document.querySelector('#m-novo-user .btnp');
   btn.disabled = true; btn.textContent = 'Criando...';
-  apiFetch('/api/usuarios', {method:'POST', body:{nome:nome, email:email, senha:senha, perfil:perfil}})
+  apiFetch('/api/usuarios', {method:'POST', body:{nome:nome, cargo:cargo, email:email, senha:senha, perfil:perfil, permissoes:permissoes}})
   .then(function() {
     toast('Usuário criado com sucesso! ✅','ok');
     closeM('m-novo-user');
     document.getElementById('nu-nome').value = '';
+    document.getElementById('nu-cargo').value = '';
     document.getElementById('nu-email').value = '';
     document.getElementById('nu-senha').value = '';
     loadUsuarios();
@@ -2043,48 +2116,43 @@ function deletarUsuario(id, nome) {
 
 // ── PERMISSÕES ──────────────────────────────────────
 function aplicarPermissoes() {
-  var permitidos = PERMISSOES[USER_PERFIL] || PERMISSOES.admin;
+  var permitidos = USER_PERMISSOES;
   var todosModulos = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
-  
-  // Esconde/mostra botões do menu desktop
-  document.querySelectorAll('.nb').forEach(function(btn) {
-    var onclick = btn.getAttribute('onclick') || '';
-    var modulo = '';
-    todosModulos.forEach(function(m) { if (onclick.indexOf("'"+m+"'") >= 0) modulo = m; });
-    if (modulo) btn.style.display = permitidos.indexOf(modulo) >= 0 ? '' : 'none';
+
+  // Esconde/mostra botões do menu desktop e mobile
+  ['nb','mob-nb'].forEach(function(cls) {
+    document.querySelectorAll('.' + cls).forEach(function(btn) {
+      var onclick = btn.getAttribute('onclick') || '';
+      todosModulos.forEach(function(m) {
+        if (onclick.indexOf("'"+m+"'") >= 0) {
+          btn.style.display = permitidos.indexOf(m) >= 0 ? '' : 'none';
+        }
+      });
+    });
   });
 
-  // Esconde/mostra botões do menu mobile
-  document.querySelectorAll('.mob-nb').forEach(function(btn) {
+  // Menu extra mobile
+  document.querySelectorAll('#mob-menu-extra button').forEach(function(btn) {
     var onclick = btn.getAttribute('onclick') || '';
-    var modulo = '';
-    todosModulos.forEach(function(m) { if (onclick.indexOf("'"+m+"'") >= 0) modulo = m; });
-    if (modulo) btn.style.display = permitidos.indexOf(modulo) >= 0 ? '' : 'none';
+    todosModulos.forEach(function(m) {
+      if (onclick.indexOf("'"+m+"'") >= 0) {
+        btn.style.display = permitidos.indexOf(m) >= 0 ? '' : 'none';
+      }
+    });
   });
 
-  // Esconde itens do menu extra mobile
-  var extraBtns = document.querySelectorAll('#mob-menu-extra button');
-  extraBtns.forEach(function(btn) {
-    var onclick = btn.getAttribute('onclick') || '';
-    var modulo = '';
-    todosModulos.forEach(function(m) { if (onclick.indexOf("'"+m+"'") >= 0) modulo = m; });
-    if (modulo) btn.style.display = permitidos.indexOf(modulo) >= 0 ? '' : 'none';
-  });
-
-  // Se recepcionista, esconde botões de ação restritos
-  if (USER_PERFIL === 'recepcionista') {
-    // Esconde botões de importar
+  // Esconde Config do menu se não for admin
+  if (USER_PERFIL !== 'admin') {
     document.querySelectorAll('[onclick*="openImport"]').forEach(function(b){ b.style.display='none'; });
-    // Esconde botão adicionar usuário no config (se existir)
   }
 
   // Badge de perfil no topbar
   var perfBadge = document.getElementById('perfil-badge');
-  if (!perfBadge) {
+  if (!perfBadge && USER_PERFIL !== 'admin') {
     var badge = document.createElement('span');
     badge.id = 'perfil-badge';
-    badge.style.cssText = 'font-size:.62rem;font-weight:700;padding:2px 8px;border-radius:50px;margin-left:6px;background:' + (USER_PERFIL==='admin'?'#EDE9FF;color:#6C63FF':'#FEF3C7;color:#B45309');
-    badge.textContent = USER_PERFIL === 'admin' ? 'Admin' : 'Recepcionista';
+    badge.style.cssText = 'font-size:.62rem;font-weight:700;padding:2px 8px;border-radius:50px;margin-left:6px;background:#FEF3C7;color:#B45309';
+    badge.textContent = 'Acesso Limitado';
     var uname = document.getElementById('uname');
     if (uname) uname.parentNode.insertBefore(badge, uname.nextSibling);
   }
