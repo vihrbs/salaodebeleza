@@ -182,10 +182,16 @@ app.post('/api/auth/login', async (req, res) => {
     if (userSafe.perfil === 'admin') {
       userSafe.permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
     } else {
-      // Busca permissões customizadas
-      const { data: perm } = await supabase.from('usuario_permissoes')
-        .select('permissoes').eq('usuario_id', usuario.id).single();
-      userSafe.permissoes = perm?.permissoes || ['dashboard','agenda','clientes','estoque','comissoes'];
+      // Busca permissões customizadas do banco
+      try {
+        const { data: perm } = await supabase.from('usuario_permissoes')
+          .select('permissoes').eq('usuario_id', usuario.id).maybeSingle();
+        userSafe.permissoes = (perm && perm.permissoes && perm.permissoes.length)
+          ? perm.permissoes
+          : ['dashboard','agenda','clientes','estoque','comissoes'];
+      } catch(e) {
+        userSafe.permissoes = ['dashboard','agenda','clientes','estoque','comissoes'];
+      }
     }
     res.json({ token, usuario: userSafe });
   } catch(e) {
@@ -638,9 +644,11 @@ app.post('/api/usuarios', auth, async (req, res) => {
       .select('id, nome, email, perfil').single();
     if (error) throw error;
     // Salva permissões customizadas
-    await supabase.from('usuario_permissoes').upsert({
-      usuario_id: data.id, salao_id: req.salao_id, permissoes: permissoes_final
-    }, { onConflict: 'usuario_id' }).catch(() => {});
+    try {
+      await supabase.from('usuario_permissoes').upsert({
+        usuario_id: data.id, salao_id: req.salao_id, permissoes: permissoes_final
+      }, { onConflict: 'usuario_id' });
+    } catch(permErr) { console.log('Permissoes nao salvas:', permErr.message); }
     res.status(201).json({ ...data, permissoes: permissoes_final });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -652,6 +660,20 @@ app.get('/api/usuarios', auth, async (req, res) => {
     .select('id, nome, email, perfil, ativo, ultimo_login')
     .eq('salao_id', req.salao_id).order('nome');
   res.json(data || []);
+});
+
+// Editar permissões do usuário
+app.put('/api/usuarios/:id/permissoes', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  const { permissoes } = req.body;
+  if (!permissoes || !permissoes.length) return res.status(422).json({ error: 'Permissoes obrigatorias' });
+  try {
+    const { error } = await supabase.from('usuario_permissoes').upsert({
+      usuario_id: req.params.id, salao_id: req.salao_id, permissoes
+    }, { onConflict: 'usuario_id' });
+    if (error) throw error;
+    res.json({ message: 'Permissoes atualizadas', permissoes });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // Deletar/desativar usuário
