@@ -993,8 +993,12 @@ function doLogin() {
     if (data && data.token) {
       TK = data.token;
       localStorage.setItem('bpro_tk', TK);
+      var _perfil = (data.usuario && data.usuario.perfil) || 'admin';
+      var _perms  = (data.usuario && data.usuario.permissoes) || null;
+      if (_perms) localStorage.setItem('bpro_permissoes', JSON.stringify(_perms));
+      localStorage.setItem('bpro_perfil', _perfil);
       DEMO = false;
-      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE');
+      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms);
     } else {
       DEMO = true;
       enterApp(email ? email.split('@')[0] : 'Admin Demo', 'Studio Demo', 'DEMO');
@@ -2340,7 +2344,11 @@ window.addEventListener('load', function(){
   if (API && TK) {
     fetch(API+'/api/auth/me',{headers:{Authorization:'Bearer '+TK}})
       .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
-      .then(function(d){ enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE'); })
+      .then(function(d){
+        var _p  = d.perfil || localStorage.getItem('bpro_perfil') || 'admin';
+        var _pm = d.permissoes || (function(){ try{ return JSON.parse(localStorage.getItem('bpro_permissoes')||'null'); }catch(e){ return null; } })();
+        enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE', _p, _pm);
+      })
       .catch(function(){ localStorage.removeItem('bpro_tk'); TK=''; });
   }
 });
