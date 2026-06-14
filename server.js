@@ -178,6 +178,15 @@ app.post('/api/auth/login', async (req, res) => {
 
     const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
     const { senha_hash, ...userSafe } = usuario;
+    // Retorna permissões do usuário
+    if (userSafe.perfil === 'admin') {
+      userSafe.permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+    } else {
+      // Busca permissões customizadas
+      const { data: perm } = await supabase.from('usuario_permissoes')
+        .select('permissoes').eq('usuario_id', usuario.id).single();
+      userSafe.permissoes = perm?.permissoes || ['dashboard','agenda','clientes','estoque','comissoes'];
+    }
     res.json({ token, usuario: userSafe });
   } catch(e) {
     res.status(500).json({ error: 'Erro ao fazer login' });
@@ -616,7 +625,10 @@ app.post('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   const { nome, email, senha, perfil } = req.body;
   if (!nome || !email || !senha) return res.status(422).json({ error: 'Nome, email e senha obrigatórios' });
-  const perfil_final = perfil === 'recepcionista' ? 'recepcionista' : 'admin';
+  const perfil_final = perfil === 'admin' ? 'admin' : 'custom';
+  const permissoes_final = perfil_final === 'admin' 
+    ? ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config']
+    : (permissoes || ['dashboard','agenda','clientes','estoque','comissoes']);
   try {
     const { data: existe } = await supabase.from('usuarios').select('id').eq('email', email).single();
     if (existe) return res.status(409).json({ error: 'Email já cadastrado' });
@@ -625,7 +637,11 @@ app.post('/api/usuarios', auth, async (req, res) => {
       .insert({ salao_id: req.salao_id, nome, email, senha_hash, perfil: perfil_final })
       .select('id, nome, email, perfil').single();
     if (error) throw error;
-    res.status(201).json(data);
+    // Salva permissões customizadas
+    await supabase.from('usuario_permissoes').upsert({
+      usuario_id: data.id, salao_id: req.salao_id, permissoes: permissoes_final
+    }, { onConflict: 'usuario_id' }).catch(() => {});
+    res.status(201).json({ ...data, permissoes: permissoes_final });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
