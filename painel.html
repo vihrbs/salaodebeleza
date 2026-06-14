@@ -483,6 +483,14 @@ tbody tr:hover{background:#F9FAFB}
           <button class="btn btnp" onclick="saveApi()" style="margin-bottom:14px">Atualizar URL da API</button>
           <div style="padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.7rem;color:var(--t2)" id="api-st">Carregando...</div>
         </div>
+        <div class="card" id="card-usuarios" style="grid-column:1/-1">
+          <div class="crow">
+            <span class="ch">👥 Usuários do Salão</span>
+            <button class="btn btnp btnsm" onclick="openM('m-novo-user')">+ Novo Usuário</button>
+          </div>
+          <div id="usuarios-list"><div class="lc"><div class="spin"></div></div></div>
+        </div>
+
         <div class="card">
           <div class="ct">Plano Atual</div>
           <div style="background:linear-gradient(135deg,var(--ac),#9B8FFF);border-radius:var(--rs);padding:16px;color:#fff;margin-bottom:12px">
@@ -731,6 +739,31 @@ tbody tr:hover{background:#F9FAFB}
   </div>
 </div>
 
+<!-- Modal Novo Usuário -->
+<div class="mov" id="m-novo-user">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Novo Usuário</span><button class="mx" onclick="closeM('m-novo-user')">✕</button></div>
+    <div class="mb">
+      <div style="background:#EDE9FF;border-radius:var(--rs);padding:10px 12px;font-size:.78rem;color:#6C63FF;margin-bottom:14px">
+        ℹ️ Crie um acesso para sua recepcionista. Ela vai logar com o email e senha definidos aqui.
+      </div>
+      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="nu-nome" placeholder="Nome da recepcionista"/></div>
+      <div class="fg"><label class="fl">E-mail*</label><input class="fc" type="email" id="nu-email" placeholder="email@seusalao.com"/></div>
+      <div class="fg"><label class="fl">Senha*</label><input class="fc" type="password" id="nu-senha" placeholder="Mínimo 6 caracteres"/></div>
+      <div class="fg"><label class="fl">Perfil*</label>
+        <select class="fc" id="nu-perfil">
+          <option value="recepcionista">Recepcionista (Agenda, Clientes, Estoque, Comissões)</option>
+          <option value="admin">Admin (acesso total)</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-novo-user')">Cancelar</button>
+      <button class="btn btnp" onclick="criarUsuario()">Criar Usuário</button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <!-- Modal Perfil Cliente -->
@@ -808,6 +841,13 @@ var TK  = localStorage.getItem('bpro_tk')  || '';
 var DEMO = false; // nunca entra em demo se API_FIXA estiver definida
 var PROS = [], SVCS = [], CLIS = [];
 var COR_SEL = '#6C63FF';
+var USER_PERFIL = 'admin'; // 'admin' ou 'recepcionista'
+
+// Permissões por perfil
+var PERMISSOES = {
+  admin: ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'],
+  recepcionista: ['dashboard','agenda','clientes','estoque','comissoes']
+};
 
 var SL = {agendado:'Agendado',confirmado:'Confirmado',em_atendimento:'Em Atendimento',concluido:'Concluído',cancelado:'Cancelado',nao_compareceu:'Não Compareceu'};
 var SC = {agendado:'bg2',confirmado:'bi',em_atendimento:'bs',concluido:'bp',cancelado:'bd2',nao_compareceu:'bw'};
@@ -909,12 +949,14 @@ function doRegister() {
   .finally(function(){ btn.disabled=false; btn.textContent='Criar Conta Grátis'; });
 }
 
-function enterApp(nome, salon, mode) {
+function enterApp(nome, salon, mode, perfil) {
+  USER_PERFIL = perfil || 'admin';
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('uav').textContent = (nome||'A')[0].toUpperCase();
   document.getElementById('uname').textContent = nome || 'Admin';
   document.getElementById('tb-salon').textContent = salon || '';
+  aplicarPermissoes();
   var b = document.getElementById('apibadge');
   b.textContent = mode; b.className = 'apibadge ' + (mode==='LIVE'?'live':'demo');
   document.getElementById('ag-dt').value = today();
@@ -953,7 +995,7 @@ function nav(page, el) {
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('page-'+page).classList.add('on');
   el.classList.add('on');
-  if (page==='config') updateApiStatus();
+  if (page==='config') { updateApiStatus(); loadUsuarios(); }
 }
 
 // ── MODALS ──────────────────────────────────────────────
@@ -1941,6 +1983,122 @@ function executarImport() {
       .catch(function() { err++; processNext(i+1); });
   }
   processNext(0);
+}
+
+// ── USUÁRIOS ────────────────────────────────────────
+function loadUsuarios() {
+  var el = document.getElementById('usuarios-list');
+  if (!el) return;
+  // Só admin vê
+  if (USER_PERFIL !== 'admin') {
+    el.innerHTML = '<div class="empty" style="font-size:.8rem;color:var(--t2)">Acesso restrito ao administrador.</div>';
+    document.getElementById('card-usuarios').querySelector('button').style.display = 'none';
+    return;
+  }
+  apiFetch('/api/usuarios').then(function(r) {
+    var list = r || [];
+    if (!list.length) { el.innerHTML = '<div class="empty">Nenhum usuário cadastrado além de você.</div>'; return; }
+    el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>' +
+      list.map(function(u) {
+        var perfBadge = u.perfil === 'admin'
+          ? '<span class="badge bp">Admin</span>'
+          : '<span class="badge bw">Recepcionista</span>';
+        var ultimo = u.ultimo_login ? fdt(u.ultimo_login) : 'Nunca';
+        return '<tr><td><strong>' + u.nome + '</strong></td><td>' + u.email + '</td><td>' + perfBadge + '</td><td>' + ultimo + '</td>' +
+          '<td><button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Desativar">🗑</button></td></tr>';
+      }).join('') + '</tbody></table>';
+  }).catch(function() {
+    el.innerHTML = '<div class="empty">Erro ao carregar usuários.</div>';
+  });
+}
+
+function criarUsuario() {
+  var nome  = document.getElementById('nu-nome').value.trim();
+  var email = document.getElementById('nu-email').value.trim();
+  var senha = document.getElementById('nu-senha').value;
+  var perfil = document.getElementById('nu-perfil').value;
+  if (!nome || !email || !senha) { toast('Preencha todos os campos','er'); return; }
+  if (senha.length < 6) { toast('Senha deve ter pelo menos 6 caracteres','er'); return; }
+  var btn = document.querySelector('#m-novo-user .btnp');
+  btn.disabled = true; btn.textContent = 'Criando...';
+  apiFetch('/api/usuarios', {method:'POST', body:{nome:nome, email:email, senha:senha, perfil:perfil}})
+  .then(function() {
+    toast('Usuário criado com sucesso! ✅','ok');
+    closeM('m-novo-user');
+    document.getElementById('nu-nome').value = '';
+    document.getElementById('nu-email').value = '';
+    document.getElementById('nu-senha').value = '';
+    loadUsuarios();
+  })
+  .catch(function(e) { toast('Erro: ' + (e.message||'tente novamente'),'er'); })
+  .finally(function() { btn.disabled=false; btn.textContent='Criar Usuário'; });
+}
+
+function deletarUsuario(id, nome) {
+  if (!confirm('Desativar acesso de ' + nome + '?')) return;
+  apiFetch('/api/usuarios/' + id, {method:'DELETE'})
+  .then(function() { toast(nome + ' desativado','ok'); loadUsuarios(); })
+  .catch(function(e) { toast('Erro: '+e.message,'er'); });
+}
+
+// ── PERMISSÕES ──────────────────────────────────────
+function aplicarPermissoes() {
+  var permitidos = PERMISSOES[USER_PERFIL] || PERMISSOES.admin;
+  var todosModulos = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+  
+  // Esconde/mostra botões do menu desktop
+  document.querySelectorAll('.nb').forEach(function(btn) {
+    var onclick = btn.getAttribute('onclick') || '';
+    var modulo = '';
+    todosModulos.forEach(function(m) { if (onclick.indexOf("'"+m+"'") >= 0) modulo = m; });
+    if (modulo) btn.style.display = permitidos.indexOf(modulo) >= 0 ? '' : 'none';
+  });
+
+  // Esconde/mostra botões do menu mobile
+  document.querySelectorAll('.mob-nb').forEach(function(btn) {
+    var onclick = btn.getAttribute('onclick') || '';
+    var modulo = '';
+    todosModulos.forEach(function(m) { if (onclick.indexOf("'"+m+"'") >= 0) modulo = m; });
+    if (modulo) btn.style.display = permitidos.indexOf(modulo) >= 0 ? '' : 'none';
+  });
+
+  // Esconde itens do menu extra mobile
+  var extraBtns = document.querySelectorAll('#mob-menu-extra button');
+  extraBtns.forEach(function(btn) {
+    var onclick = btn.getAttribute('onclick') || '';
+    var modulo = '';
+    todosModulos.forEach(function(m) { if (onclick.indexOf("'"+m+"'") >= 0) modulo = m; });
+    if (modulo) btn.style.display = permitidos.indexOf(modulo) >= 0 ? '' : 'none';
+  });
+
+  // Se recepcionista, esconde botões de ação restritos
+  if (USER_PERFIL === 'recepcionista') {
+    // Esconde botões de importar
+    document.querySelectorAll('[onclick*="openImport"]').forEach(function(b){ b.style.display='none'; });
+    // Esconde botão adicionar usuário no config (se existir)
+  }
+
+  // Badge de perfil no topbar
+  var perfBadge = document.getElementById('perfil-badge');
+  if (!perfBadge) {
+    var badge = document.createElement('span');
+    badge.id = 'perfil-badge';
+    badge.style.cssText = 'font-size:.62rem;font-weight:700;padding:2px 8px;border-radius:50px;margin-left:6px;background:' + (USER_PERFIL==='admin'?'#EDE9FF;color:#6C63FF':'#FEF3C7;color:#B45309');
+    badge.textContent = USER_PERFIL === 'admin' ? 'Admin' : 'Recepcionista';
+    var uname = document.getElementById('uname');
+    if (uname) uname.parentNode.insertBefore(badge, uname.nextSibling);
+  }
+}
+
+// Override nav to check permissions
+var _navOrig = typeof _origNav !== 'undefined' ? _origNav : nav;
+function navComPermissao(page, el) {
+  var permitidos = PERMISSOES[USER_PERFIL] || PERMISSOES.admin;
+  if (permitidos.indexOf(page) < 0) {
+    toast('Acesso restrito — fale com o administrador', 'er');
+    return;
+  }
+  nav(page, el);
 }
 
 // ── INIT ────────────────────────────────────────────────
