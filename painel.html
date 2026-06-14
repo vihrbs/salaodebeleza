@@ -382,7 +382,8 @@ tbody tr:hover{background:#F9FAFB}
     <div class="page" id="page-clientes">
       <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
         <input class="fc" style="max-width:240px" placeholder="🔍 Buscar cliente..." oninput="deb(()=>loadClientes(this.value),400)()"/>
-        <button class="btn btnp" style="margin-left:auto" onclick="openM('m-cli')">+ Novo Cliente</button>
+        <button class="btn btns" onclick="openImport('clientes')" style="margin-left:auto">📥 Importar</button>
+        <button class="btn btnp" onclick="openM('m-cli')">+ Novo Cliente</button>
       </div>
       <div class="card">
         <div class="tw"><table><thead><tr><th>Cliente</th><th>Telefone</th><th>Visitas</th><th>Última visita</th><th>Total gasto</th><th>Status</th><th>Ações</th></tr></thead>
@@ -440,6 +441,7 @@ tbody tr:hover{background:#F9FAFB}
     <!-- PROFISSIONAIS -->
     <div class="page" id="page-profissionais">
       <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+        <button class="btn btns" onclick="openImport('profissionais')" style="margin-right:8px">📥 Importar</button>
         <button class="btn btnp" onclick="openM('m-pro')">+ Novo Profissional</button>
       </div>
       <div id="pro-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">
@@ -450,6 +452,7 @@ tbody tr:hover{background:#F9FAFB}
     <!-- SERVIÇOS -->
     <div class="page" id="page-servicos">
       <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+        <button class="btn btns" onclick="openImport('servicos')" style="margin-right:8px">📥 Importar</button>
         <button class="btn btnp" onclick="openM('m-svc')">+ Novo Serviço</button>
       </div>
       <div class="card">
@@ -668,6 +671,63 @@ tbody tr:hover{background:#F9FAFB}
       <div class="fg"><label class="fl">Status</label><select class="fc" id="ecl-s"><option value="ativo">Ativo</option><option value="vip">VIP</option><option value="inativo">Inativo</option><option value="novo">Novo</option></select></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-edit-cli')">Cancelar</button><button class="btn btnp" onclick="updateCli()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- Modal Importar -->
+<div class="mov" id="m-import">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt" id="import-title">Importar Dados</span><button class="mx" onclick="closeM('m-import')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="import-tipo"/>
+      
+      <!-- Instruções -->
+      <div style="background:var(--bg);border-radius:var(--rs);padding:14px;margin-bottom:16px">
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:8px">📋 Como importar:</div>
+        <div style="font-size:.78rem;color:var(--t2);line-height:1.7">
+          1. Baixe o modelo de planilha abaixo<br>
+          2. Preencha com seus dados<br>
+          3. Salve como Excel (.xlsx) ou CSV<br>
+          4. Faça o upload aqui
+        </div>
+      </div>
+
+      <!-- Download modelo -->
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <button class="btn btns" onclick="downloadModelo()" style="flex:1">📄 Baixar modelo Excel</button>
+      </div>
+
+      <!-- Upload -->
+      <div id="import-drop" style="border:2px dashed var(--bd);border-radius:var(--r);padding:32px;text-align:center;cursor:pointer;transition:all .2s" 
+           onclick="document.getElementById('import-file').click()"
+           ondragover="event.preventDefault();this.style.borderColor='var(--ac)'"
+           ondragleave="this.style.borderColor='var(--bd)'"
+           ondrop="handleDrop(event)">
+        <div style="font-size:2rem;margin-bottom:8px">📁</div>
+        <div style="font-size:.85rem;font-weight:600;color:var(--text)">Clique ou arraste o arquivo aqui</div>
+        <div style="font-size:.75rem;color:var(--t2);margin-top:4px">Suporta .xlsx, .xls e .csv</div>
+      </div>
+      <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(this)"/>
+
+      <!-- Preview -->
+      <div id="import-preview" style="display:none;margin-top:16px">
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:8px" id="import-preview-title"></div>
+        <div style="max-height:200px;overflow-y:auto;border:1px solid var(--bd);border-radius:var(--rs)">
+          <table style="width:100%;border-collapse:collapse;font-size:.75rem">
+            <thead id="import-thead" style="background:var(--bg);position:sticky;top:0"></thead>
+            <tbody id="import-tbody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px;font-size:.78rem;color:var(--t2)" id="import-count"></div>
+      </div>
+
+      <!-- Resultado -->
+      <div id="import-result" style="display:none;margin-top:14px;padding:12px;border-radius:var(--rs);font-size:.82rem;font-weight:600"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-import')">Cancelar</button>
+      <button class="btn btnp" id="import-btn" onclick="executarImport()" style="display:none">⬆️ Importar dados</button>
+    </div>
   </div>
 </div>
 
@@ -1726,6 +1786,162 @@ nav = function(page, el) {
     if (btns[idx]) btns[idx].style.color = 'var(--ac)';
   }
 };
+
+// ── IMPORTAÇÃO ──────────────────────────────────────
+var IMPORT_DATA = [];
+var IMPORT_TIPO = '';
+
+var MODELOS = {
+  clientes: {
+    titulo: 'Importar Clientes',
+    colunas: ['nome','telefone','email','data_nascimento','observacoes'],
+    labels:  ['Nome','Telefone','Email','Nascimento','Observacoes'],
+    exemplo: [['Ana Paula Silva','(11) 98765-4321','ana@email.com','1990-05-15','Cliente VIP'],
+              ['Beatriz Santos','(11) 91234-5678','bea@email.com','','']]
+  },
+  profissionais: {
+    titulo: 'Importar Profissionais',
+    colunas: ['nome','especialidade','telefone','comissao_pct'],
+    labels:  ['Nome','Especialidade','Telefone','Comissao'],
+    exemplo: [['Juliana Alves','Cabeleireira','(11) 99999-0000','40'],
+              ['Marcos Souza','Colorista','(11) 88888-0000','45']]
+  },
+  servicos: {
+    titulo: 'Importar Servicos',
+    colunas: ['nome','categoria','duracao_min','preco','comissao_pct'],
+    labels:  ['Nome','Categoria','Duracao','Preco','Comissao'],
+    exemplo: [['Corte Feminino','Cabelo','60','70','40'],
+              ['Coloracao','Cabelo','120','150','40']]
+  }
+};
+
+function openImport(tipo) {
+  IMPORT_TIPO = tipo;
+  IMPORT_DATA = [];
+  var m = MODELOS[tipo];
+  document.getElementById('import-title').textContent = m.titulo;
+  document.getElementById('import-tipo').value = tipo;
+  document.getElementById('import-preview').style.display = 'none';
+  document.getElementById('import-result').style.display = 'none';
+  document.getElementById('import-btn').style.display = 'none';
+  document.getElementById('import-file').value = '';
+  openM('m-import');
+}
+
+function downloadModelo() {
+  var tipo = document.getElementById('import-tipo').value;
+  var m = MODELOS[tipo];
+  var rows = [m.labels].concat(m.exemplo);
+  var csvContent = rows.map(function(r) { return r.join(','); }).join('\n');
+  var blob = new Blob([csvContent], {type: 'text/csv'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'modelo_' + tipo + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('import-drop').style.borderColor = 'var(--bd)';
+  var file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function handleFileSelect(input) {
+  if (input.files[0]) processFile(input.files[0]);
+}
+
+function processFile(file) {
+  var ext = file.name.split('.').pop().toLowerCase();
+  if (['xlsx','xls','csv'].indexOf(ext) < 0) {
+    toast('Use .xlsx, .xls ou .csv','er');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    var separator = text.indexOf(';') > text.indexOf(',') ? ';' : ',';
+    var rows = text.split('\n').map(function(r) {
+      return r.split(separator).map(function(c) {
+        return c.trim().replace(/^["']|["']$/g,'');
+      });
+    }).filter(function(r) { return r[0] && r[0].length > 0; });
+    parseRows(rows);
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseRows(rows) {
+  if (!rows || rows.length < 2) { toast('Planilha vazia ou sem dados','er'); return; }
+  var m = MODELOS[IMPORT_TIPO];
+  var data = rows.slice(1);
+  IMPORT_DATA = data.map(function(row) {
+    var obj = {};
+    m.colunas.forEach(function(col, i) { obj[col] = String(row[i] || '').trim(); });
+    return obj;
+  }).filter(function(obj) { return obj[m.colunas[0]]; });
+  if (!IMPORT_DATA.length) { toast('Nenhum dado valido encontrado','er'); return; }
+  var thead = document.getElementById('import-thead');
+  var tbody = document.getElementById('import-tbody');
+  thead.innerHTML = '<tr>' + m.labels.map(function(l) {
+    return '<th style="padding:6px 10px;text-align:left;font-size:.68rem;font-weight:700;color:var(--t3);text-transform:uppercase">' + l + '</th>';
+  }).join('') + '</tr>';
+  tbody.innerHTML = IMPORT_DATA.slice(0,10).map(function(row) {
+    return '<tr>' + m.colunas.map(function(col) {
+      return '<td style="padding:6px 10px;border-top:1px solid var(--bd);font-size:.76rem">' + (row[col]||'-') + '</td>';
+    }).join('') + '</tr>';
+  }).join('');
+  document.getElementById('import-preview-title').textContent = 'Previa dos dados:';
+  document.getElementById('import-count').textContent = IMPORT_DATA.length + ' registro(s) encontrado(s)';
+  document.getElementById('import-preview').style.display = 'block';
+  document.getElementById('import-btn').style.display = 'inline-flex';
+  document.getElementById('import-result').style.display = 'none';
+  toast(IMPORT_DATA.length + ' registros prontos para importar','ok');
+}
+
+function executarImport() {
+  if (!IMPORT_DATA.length) { toast('Nenhum dado para importar','er'); return; }
+  var tipo = IMPORT_TIPO;
+  var btn = document.getElementById('import-btn');
+  var result = document.getElementById('import-result');
+  btn.disabled = true; btn.textContent = 'Importando...';
+  var endpoints = { clientes: '/api/clientes', profissionais: '/api/profissionais', servicos: '/api/servicos' };
+  var endpoint = endpoints[tipo];
+  var ok = 0; var err = 0; var total = IMPORT_DATA.length; var done = 0;
+  function processNext(i) {
+    if (i >= total) {
+      result.style.display = 'block';
+      if (err === 0) {
+        result.style.background = '#DCFCE7'; result.style.color = '#16A34A';
+        result.textContent = ok + ' registro(s) importado(s) com sucesso!';
+      } else {
+        result.style.background = '#FEF3C7'; result.style.color = '#B45309';
+        result.textContent = ok + ' importado(s), ' + err + ' com erro.';
+      }
+      btn.disabled = false; btn.textContent = 'Importar dados';
+      if (tipo === 'clientes') { loadClientes(); loadKPIs(); }
+      if (tipo === 'profissionais') { loadPros(); fillSelects(); }
+      if (tipo === 'servicos') { loadSvcs(); fillSelects(); }
+      toast(ok + ' ' + tipo + ' importados!','ok');
+      return;
+    }
+    var body = {};
+    var m = MODELOS[tipo];
+    m.colunas.forEach(function(col) { body[col] = IMPORT_DATA[i][col]; });
+    if (body.comissao_pct) body.comissao_pct = parseFloat(body.comissao_pct) || 40;
+    if (body.duracao_min)  body.duracao_min  = parseInt(body.duracao_min)    || 60;
+    if (body.preco)        body.preco        = parseFloat(body.preco)        || 0;
+    if (body.data_nascimento === '') delete body.data_nascimento;
+    btn.textContent = 'Importando ' + (i+1) + '/' + total + '...';
+    apiFetch(endpoint, {method:'POST', body:body})
+      .then(function() { ok++; processNext(i+1); })
+      .catch(function() { err++; processNext(i+1); });
+  }
+  processNext(0);
+}
 
 // ── INIT ────────────────────────────────────────────────
 // ── PAGAMENTO ───────────────────────────────────────
