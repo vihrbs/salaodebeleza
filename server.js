@@ -623,7 +623,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 app.post('/api/usuarios', auth, async (req, res) => {
   // Só admin pode criar usuários
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
-  const { nome, email, senha, perfil } = req.body;
+  const { nome, cargo, email, senha, perfil, permissoes } = req.body;
   if (!nome || !email || !senha) return res.status(422).json({ error: 'Nome, email e senha obrigatórios' });
   const perfil_final = perfil === 'admin' ? 'admin' : 'custom';
   const permissoes_final = perfil_final === 'admin' 
