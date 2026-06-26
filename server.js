@@ -990,11 +990,13 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
     });
 
     // Cria lançamento financeiro pendente
-    await supabase.from('lancamentos').insert({
-      salao_id, agendamento_id: agendamento.id, tipo: 'entrada',
-      categoria: 'Serviço', descricao: servico.nome + ' - ' + nome,
-      valor: servico.preco, data, pago: false
-    }).catch(function() {});
+    try {
+      await supabase.from('lancamentos').insert({
+        salao_id, agendamento_id: agendamento.id, tipo: 'entrada',
+        categoria: 'Serviço', descricao: servico.nome + ' - ' + nome,
+        valor: servico.preco, data, pago: false
+      });
+    } catch(lancErr) { console.log('Lancamento nao criado:', lancErr.message); }
 
     res.status(201).json({
       message: 'Agendamento confirmado!',
