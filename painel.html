@@ -483,6 +483,15 @@ tbody tr:hover{background:#F9FAFB}
           <button class="btn btnp" onclick="saveApi()" style="margin-bottom:14px">Atualizar URL da API</button>
           <div style="padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.7rem;color:var(--t2)" id="api-st">Carregando...</div>
         </div>
+        <div class="card" style="grid-column:1/-1;background:linear-gradient(135deg,#9A5B3F,#7A4530);color:#fff">
+          <div class="crow"><span class="ch" style="color:#fff">🔗 Link de Agendamento Online</span></div>
+          <div style="font-size:.82rem;opacity:.9;margin:6px 0 14px;line-height:1.5">Envie esse link para seus clientes agendarem horário sozinhos, sem precisar te ligar.</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="link-agendamento" readonly style="flex:1;padding:11px 14px;border-radius:10px;border:none;font-size:.82rem;background:rgba(255,255,255,.15);color:#fff" />
+            <button onclick="copiarLinkAgendamento()" style="background:#fff;color:#7A4530;border:none;border-radius:10px;padding:11px 18px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap">Copiar</button>
+          </div>
+        </div>
+
         <div class="card" id="card-usuarios" style="grid-column:1/-1">
           <div class="crow">
             <span class="ch">👥 Usuários do Salão</span>
@@ -997,6 +1006,8 @@ function doLogin() {
       var _perms  = (data.usuario && data.usuario.permissoes) || null;
       if (_perms) localStorage.setItem('bpro_permissoes', JSON.stringify(_perms));
       localStorage.setItem('bpro_perfil', _perfil);
+      if (data.usuario && data.usuario.salao_id) localStorage.setItem('bpro_salao_id', data.usuario.salao_id);
+      if (data.usuario && data.usuario.saloes && data.usuario.saloes.id) localStorage.setItem('bpro_salao_id', data.usuario.saloes.id);
       DEMO = false;
       enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms);
     } else {
@@ -1024,6 +1035,7 @@ function doRegister() {
   })}).then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Erro ao criar conta'); return d; }); })
   .then(function(data){
     TK = data.token; localStorage.setItem('bpro_tk', TK); DEMO = false;
+    if (data.salao && data.salao.id) localStorage.setItem('bpro_salao_id', data.salao.id);
     enterApp(data.usuario && data.usuario.nome||'Admin', data.salao && data.salao.nome||'Meu Salão', 'LIVE');
     toast('Conta criada! Trial de 14 dias ativo 🎉','ok');
   }).catch(function(e){ err.textContent=e.message; err.style.display='block'; })
@@ -1085,7 +1097,7 @@ function nav(page, el) {
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('page-'+page).classList.add('on');
   el.classList.add('on');
-  if (page==='config') { updateApiStatus(); loadUsuarios(); }
+  if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); }
 }
 
 // ── MODALS ──────────────────────────────────────────────
@@ -2073,6 +2085,28 @@ function executarImport() {
       .catch(function() { err++; processNext(i+1); });
   }
   processNext(0);
+}
+
+// ── LINK AGENDAMENTO ────────────────────────────────
+function preencherLinkAgendamento() {
+  var el = document.getElementById('link-agendamento');
+  if (!el) return;
+  var salaoId = localStorage.getItem('bpro_salao_id') || '';
+  el.value = 'https://belezaprooficial.com.br/agendar.html?salao=' + salaoId;
+}
+
+function copiarLinkAgendamento() {
+  var el = document.getElementById('link-agendamento');
+  el.select();
+  el.setSelectionRange(0, 99999);
+  try {
+    navigator.clipboard.writeText(el.value).then(function(){
+      toast('Link copiado! Envie para seus clientes 📋','ok');
+    });
+  } catch(e) {
+    document.execCommand('copy');
+    toast('Link copiado!','ok');
+  }
 }
 
 // ── USUÁRIOS ────────────────────────────────────────
