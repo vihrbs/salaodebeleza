@@ -854,49 +854,60 @@ app.get('/api/publico/profissionais/:salaoId', async (req, res) => {
 app.get('/api/publico/horarios/:salaoId', async (req, res) => {
   const { profissional_id, data, duracao_min } = req.query;
   if (!profissional_id || !data) return res.status(422).json({ error: 'profissional_id e data obrigatórios' });
-  
+
   try {
     // Busca agendamentos já marcados nesse dia para esse profissional
+    const inicioDia = data + 'T00:00:00';
+    const fimDia     = data + 'T23:59:59';
     const { data: ocupados } = await supabase.from('agendamentos')
-      .select('hora_inicio, hora_fim')
+      .select('data_hora, duracao_min')
       .eq('salao_id', req.params.salaoId)
       .eq('profissional_id', profissional_id)
-      .eq('data', data)
+      .gte('data_hora', inicioDia)
+      .lte('data_hora', fimDia)
       .neq('status', 'cancelado');
-    
+
+    // Converte ocupados para minutos do dia [inicio, fim]
+    const ocupadosMin = (ocupados || []).map(function(ag) {
+      var dt = new Date(ag.data_hora);
+      var inicioMin = dt.getHours() * 60 + dt.getMinutes();
+      var fimMin = inicioMin + (ag.duracao_min || 60);
+      return [inicioMin, fimMin];
+    });
+
     // Gera slots de horário (08:00 às 19:00, intervalos de 30min)
     const slots = [];
     const dur = parseInt(duracao_min) || 60;
     for (let h = 8; h < 19; h++) {
       for (let m = 0; m < 60; m += 30) {
-        const inicio = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-        const fimMin = h * 60 + m + dur;
-        const fimH = Math.floor(fimMin / 60);
-        const fimM = fimMin % 60;
-        if (fimH > 19) continue; // não passa das 19h
-        const fim = String(fimH).padStart(2,'0') + ':' + String(fimM).padStart(2,'0');
-        
-        // Verifica conflito com agendamentos existentes
-        const conflito = (ocupados || []).some(ag => {
-          return (inicio < ag.hora_fim && fim > ag.hora_inicio);
+        const inicioMin = h * 60 + m;
+        const fimMin = inicioMin + dur;
+        if (fimMin > 19 * 60) continue; // não passa das 19h
+
+        const conflito = ocupadosMin.some(function(o) {
+          return (inicioMin < o[1] && fimMin > o[0]);
         });
-        
-        if (!conflito) slots.push(inicio);
+
+        if (!conflito) {
+          const hh = String(h).padStart(2,'0');
+          const mm = String(m).padStart(2,'0');
+          slots.push(hh + ':' + mm);
+        }
       }
     }
-    
+
     // Remove horários passados se for hoje
     const hoje = new Date().toISOString().split('T')[0];
     let slotsDisponiveis = slots;
     if (data === hoje) {
       const agora = new Date();
       const horaAtual = agora.getHours() * 60 + agora.getMinutes();
-      slotsDisponiveis = slots.filter(s => {
-        const [sh, sm] = s.split(':').map(Number);
-        return (sh * 60 + sm) > horaAtual + 30; // 30min de antecedência mínima
+      slotsDisponiveis = slots.filter(function(s) {
+        const parts = s.split(':').map(Number);
+        return (parts[0] * 60 + parts[1]) > horaAtual + 30;
       });
     }
-    
+
     res.json({ horarios: slotsDisponiveis });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -907,66 +918,89 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
   if (!nome || !telefone || !servico_id || !profissional_id || !data || !hora_inicio) {
     return res.status(422).json({ error: 'Todos os campos são obrigatórios' });
   }
-  
+
   try {
     const salao_id = req.params.salaoId;
-    
-    // Busca dados do serviço para calcular hora_fim e valor
+
+    // Busca dados do serviço
     const { data: servico } = await supabase.from('servicos')
-      .select('nome, duracao_min, preco, comissao_pct').eq('id', servico_id).single();
+      .select('id, nome, duracao_min, preco, comissao_pct').eq('id', servico_id).single();
     if (!servico) return res.status(404).json({ error: 'Serviço não encontrado' });
-    
-    const [h, m] = hora_inicio.split(':').map(Number);
-    const fimMin = h * 60 + m + servico.duracao_min;
-    const hora_fim = String(Math.floor(fimMin/60)).padStart(2,'0') + ':' + String(fimMin%60).padStart(2,'0');
-    
+
+    const data_hora = data + 'T' + hora_inicio + ':00';
+
     // Busca ou cria cliente pelo telefone
     let { data: cliente } = await supabase.from('clientes')
-      .select('id').eq('salao_id', salao_id).eq('telefone', telefone).single();
-    
+      .select('id').eq('salao_id', salao_id).eq('telefone', telefone).maybeSingle();
+
     if (!cliente) {
-      const { data: novoCliente } = await supabase.from('clientes')
+      const { data: novoCliente, error: cliErr } = await supabase.from('clientes')
         .insert({ salao_id, nome, telefone, status: 'novo' })
         .select('id').single();
+      if (cliErr) throw cliErr;
       cliente = novoCliente;
     }
-    
-    // Verifica conflito de horário novamente (segurança)
-    const { data: conflitos } = await supabase.from('agendamentos')
-      .select('id').eq('salao_id', salao_id).eq('profissional_id', profissional_id)
-      .eq('data', data).neq('status', 'cancelado')
-      .lt('hora_inicio', hora_fim).gt('hora_fim', hora_inicio);
-    
-    if (conflitos && conflitos.length > 0) {
+
+    // Verifica conflito de horário (segurança)
+    const [h, m] = hora_inicio.split(':').map(Number);
+    const inicioMin = h * 60 + m;
+    const fimMin = inicioMin + servico.duracao_min;
+    const inicioDia = data + 'T00:00:00';
+    const fimDia     = data + 'T23:59:59';
+
+    const { data: existentes } = await supabase.from('agendamentos')
+      .select('data_hora, duracao_min')
+      .eq('salao_id', salao_id).eq('profissional_id', profissional_id)
+      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .neq('status', 'cancelado');
+
+    const temConflito = (existentes || []).some(function(ag) {
+      var dt = new Date(ag.data_hora);
+      var agInicio = dt.getHours() * 60 + dt.getMinutes();
+      var agFim = agInicio + (ag.duracao_min || 60);
+      return (inicioMin < agFim && fimMin > agInicio);
+    });
+
+    if (temConflito) {
       return res.status(409).json({ error: 'Este horário já foi reservado. Escolha outro.' });
     }
-    
+
+    // Busca comissão do profissional (fallback)
+    const { data: prof } = await supabase.from('profissionais')
+      .select('comissao_pct').eq('id', profissional_id).single();
+
     // Cria o agendamento já confirmado
     const { data: agendamento, error } = await supabase.from('agendamentos')
       .insert({
-        salao_id, cliente_id: cliente.id, profissional_id, servico_id,
-        data, hora_inicio, hora_fim,
-        status: 'confirmado',
-        valor_total: servico.preco,
+        salao_id, cliente_id: cliente.id, profissional_id,
+        data_hora, duracao_min: servico.duracao_min,
+        status: 'confirmado', valor_total: servico.preco,
         origem: 'publico'
       })
       .select().single();
-    
+
     if (error) throw error;
-    
+
+    // Cria registro em agendamento_servicos
+    const cpct = servico.comissao_pct ?? prof?.comissao_pct ?? 40;
+    await supabase.from('agendamento_servicos').insert({
+      agendamento_id: agendamento.id, servico_id: servico.id,
+      preco: servico.preco, comissao_pct: cpct,
+      comissao_valor: (Number(servico.preco) * cpct) / 100
+    });
+
     // Cria lançamento financeiro pendente
     await supabase.from('lancamentos').insert({
-      salao_id, tipo: 'entrada', categoria: 'Serviço',
-      descricao: servico.nome + ' - ' + nome,
-      valor: servico.preco, data, pago: false,
-      agendamento_id: agendamento.id
-    }).catch(() => {});
-    
-    res.status(201).json({ 
+      salao_id, agendamento_id: agendamento.id, tipo: 'entrada',
+      categoria: 'Serviço', descricao: servico.nome + ' - ' + nome,
+      valor: servico.preco, data, pago: false
+    }).catch(function() {});
+
+    res.status(201).json({
       message: 'Agendamento confirmado!',
       agendamento: {
         servico: servico.nome,
-        data, hora_inicio, hora_fim,
+        data: data, hora_inicio: hora_inicio,
         valor: servico.preco
       }
     });
