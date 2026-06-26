@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agendar Horário</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C1A17; --paper:#FAF7F2; --card:#FFFFFF;
+  --line:#E8E2D8; --line2:#DDD5C8;
+  --accent:#9A5B3F; --accent-deep:#7A4530; --accent-soft:#F0E3D8;
+  --ok:#3F7A5C; --ok-soft:#E3F0E9;
+  --er:#B0463C; --er-soft:#FAE5E2;
+  --muted:#8A8276;
+  --r:18px; --rs:12px;
+  --shadow:0 1px 2px rgba(28,26,23,.04), 0 8px 24px -8px rgba(28,26,23,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:560px;margin:0 auto;padding:0 18px 60px}
+
+/* HEADER */
+header{
+  padding:36px 18px 28px;
+  text-align:center;
+  position:relative;
+}
+header::after{
+  content:'';
+  position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+  width:48px; height:3px; background:var(--accent); border-radius:2px;
+}
+.salon-name{
+  font-family:'Fraunces',serif;
+  font-size:1.8rem; font-weight:600;
+  letter-spacing:-.01em;
+  margin-bottom:6px;
+}
+.salon-sub{font-size:.82rem; color:var(--muted)}
+
+/* STEPS INDICATOR */
+.steps-ind{
+  display:flex; align-items:center; justify-content:center;
+  gap:6px; padding:0 18px 28px; max-width:560px; margin:0 auto;
+}
+.step-dot{
+  width:8px; height:8px; border-radius:50%;
+  background:var(--line2);
+  transition:all .3s;
+}
+.step-dot.on{background:var(--accent); width:22px; border-radius:4px}
+.step-dot.done{background:var(--accent)}
+
+/* CARD */
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.card-hd{
+  padding:22px 24px 4px;
+}
+.eyebrow{
+  font-size:.68rem; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--accent);
+  margin-bottom:6px;
+}
+.card-title{
+  font-family:'Fraunces',serif;
+  font-size:1.35rem; font-weight:500;
+}
+.card-bd{padding:18px 24px 24px}
+
+/* SERVICE LIST */
+.svc-item{
+  display:flex; align-items:center; gap:14px;
+  padding:16px; border:1.5px solid var(--line);
+  border-radius:var(--rs); margin-bottom:10px;
+  cursor:pointer; transition:all .15s;
+}
+.svc-item:hover{border-color:var(--accent); background:var(--accent-soft)}
+.svc-item.sel{border-color:var(--accent); background:var(--accent-soft)}
+.svc-info{flex:1}
+.svc-name{font-weight:600; font-size:.92rem; margin-bottom:2px}
+.svc-meta{font-size:.74rem; color:var(--muted)}
+.svc-price{font-family:'Fraunces',serif; font-weight:600; font-size:1.05rem; color:var(--accent-deep)}
+
+/* PROFISSIONAL GRID */
+.pro-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.pro-item{
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding:18px 12px; border:1.5px solid var(--line);
+  border-radius:var(--rs); cursor:pointer; transition:all .15s; text-align:center;
+}
+.pro-item:hover{border-color:var(--accent)}
+.pro-item.sel{border-color:var(--accent); background:var(--accent-soft)}
+.pro-av{
+  width:48px; height:48px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces',serif; font-weight:600; font-size:1.1rem; color:#fff;
+}
+.pro-name{font-weight:600; font-size:.84rem}
+.pro-esp{font-size:.7rem; color:var(--muted)}
+
+/* CALENDAR */
+.date-scroll{
+  display:flex; gap:8px; overflow-x:auto; padding:2px 2px 10px;
+  scrollbar-width:none;
+}
+.date-scroll::-webkit-scrollbar{display:none}
+.date-pill{
+  flex:0 0 auto; display:flex; flex-direction:column; align-items:center;
+  gap:2px; padding:12px 14px; border:1.5px solid var(--line);
+  border-radius:var(--rs); cursor:pointer; min-width:56px; transition:all .15s;
+}
+.date-pill:hover{border-color:var(--accent)}
+.date-pill.sel{border-color:var(--accent); background:var(--accent); color:#fff}
+.date-dow{font-size:.66rem; text-transform:uppercase; opacity:.7}
+.date-day{font-family:'Fraunces',serif; font-weight:600; font-size:1.15rem}
+.date-mon{font-size:.62rem; opacity:.7}
+
+/* TIME SLOTS */
+.time-grid{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:8px;
+  margin-top:4px;
+}
+.time-slot{
+  padding:11px 4px; border:1.5px solid var(--line);
+  border-radius:10px; text-align:center; font-size:.82rem; font-weight:600;
+  cursor:pointer; transition:all .15s;
+}
+.time-slot:hover{border-color:var(--accent)}
+.time-slot.sel{border-color:var(--accent); background:var(--accent); color:#fff}
+.no-slots{
+  text-align:center; padding:30px 12px; color:var(--muted); font-size:.85rem;
+}
+
+/* FORM */
+.fld{margin-bottom:14px}
+.fld label{
+  display:block; font-size:.74rem; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px;
+}
+.fld input{
+  width:100%; padding:13px 14px; border:1.5px solid var(--line);
+  border-radius:var(--rs); font-size:.92rem; font-family:inherit;
+  background:var(--paper); transition:border-color .15s;
+}
+.fld input:focus{outline:none; border-color:var(--accent); background:#fff}
+
+/* SUMMARY */
+.summary{
+  background:var(--paper); border:1px solid var(--line);
+  border-radius:var(--rs); padding:16px; margin-bottom:18px;
+}
+.sum-row{
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:.84rem; padding:6px 0;
+}
+.sum-row + .sum-row{border-top:1px dashed var(--line2)}
+.sum-label{color:var(--muted)}
+.sum-val{font-weight:600}
+.sum-total{font-family:'Fraunces',serif; font-size:1.3rem; color:var(--accent-deep)}
+
+/* BUTTONS */
+.btn{
+  width:100%; padding:15px; border:none; border-radius:50px;
+  font-family:inherit; font-size:.92rem; font-weight:700;
+  cursor:pointer; transition:all .15s;
+}
+.btn-primary{background:var(--accent); color:#fff}
+.btn-primary:hover{background:var(--accent-deep)}
+.btn-primary:disabled{opacity:.4; cursor:not-allowed}
+.btn-ghost{background:transparent; color:var(--muted); margin-top:10px; font-weight:600}
+.btn-ghost:hover{color:var(--ink)}
+
+/* SUCCESS SCREEN */
+.success-wrap{text-align:center; padding:20px 0}
+.success-icon{
+  width:72px; height:72px; border-radius:50%; background:var(--ok-soft);
+  display:flex; align-items:center; justify-content:center;
+  margin:0 auto 20px; font-size:2rem;
+}
+.success-title{font-family:'Fraunces',serif; font-size:1.5rem; font-weight:600; margin-bottom:8px}
+.success-sub{font-size:.88rem; color:var(--muted); margin-bottom:24px; line-height:1.5}
+
+/* LOADING */
+.spin{
+  width:28px; height:28px; border:3px solid var(--line);
+  border-top-color:var(--accent); border-radius:50%;
+  animation:sp 0.7s linear infinite; margin:30px auto;
+}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.err-box{
+  background:var(--er-soft); color:var(--er); border-radius:var(--rs);
+  padding:12px 14px; font-size:.82rem; font-weight:600; margin-bottom:14px;
+  display:none;
+}
+
+footer{text-align:center; padding:24px 0 0; font-size:.72rem; color:var(--muted)}
+footer a{color:var(--accent); text-decoration:none; font-weight:600}
+
+@media(max-width:380px){
+  .pro-grid{grid-template-columns:1fr}
+  .time-grid{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="salon-name" id="salon-name">Carregando...</div>
+    <div class="salon-sub" id="salon-sub">&nbsp;</div>
+  </header>
+
+  <div class="steps-ind" id="steps-ind">
+    <div class="step-dot on" data-s="1"></div>
+    <div class="step-dot" data-s="2"></div>
+    <div class="step-dot" data-s="3"></div>
+    <div class="step-dot" data-s="4"></div>
+  </div>
+
+  <div class="card">
+    <div id="card-content">
+      <div class="spin"></div>
+    </div>
+  </div>
+
+  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a></footer>
+</div>
+
+<script>
+var API = 'https://salaodebeleza-production-8eaa.up.railway.app';
+var SALAO_ID = new URLSearchParams(window.location.search).get('salao') || '';
+var STATE = { servico:null, profissional:null, data:null, hora:null, servicos:[], profissionais:[] };
+
+function setStep(n) {
+  document.querySelectorAll('.step-dot').forEach(function(d){
+    var s = parseInt(d.dataset.s);
+    d.classList.remove('on','done');
+    if (s === n) d.classList.add('on');
+    else if (s < n) d.classList.add('done');
+  });
+}
+
+function init() {
+  if (!SALAO_ID) {
+    showError('Link inválido. Peça um novo link ao salão.');
+    return;
+  }
+  fetch(API + '/api/publico/salao/' + SALAO_ID)
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+    .then(function(salao){
+      document.getElementById('salon-name').textContent = salao.nome;
+      document.getElementById('salon-sub').textContent = 'Agende seu horário em poucos cliques';
+      loadServicos();
+    })
+    .catch(function(){ showError('Não foi possível carregar este salão.'); });
+}
+
+function showError(msg) {
+  document.getElementById('card-content').innerHTML =
+    '<div class="card-bd"><div class="err-box" style="display:block">' + msg + '</div></div>';
+}
+
+function loadServicos() {
+  setStep(1);
+  fetch(API + '/api/publico/servicos/' + SALAO_ID)
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      STATE.servicos = list;
+      renderServicos(list);
+    })
+    .catch(function(){ showError('Erro ao carregar serviços.'); });
+}
+
+function renderServicos(list) {
+  var html = '<div class="card-hd"><div class="eyebrow">Passo 1 de 4</div><div class="card-title">Qual serviço deseja?</div></div><div class="card-bd">';
+  if (!list.length) {
+    html += '<div class="no-slots">Nenhum serviço disponível no momento.</div>';
+  } else {
+    list.forEach(function(s){
+      html += '<div class="svc-item" onclick="selectServico(\'' + s.id + '\')">' +
+        '<div class="svc-info"><div class="svc-name">' + s.nome + '</div>' +
+        '<div class="svc-meta">' + (s.categoria||'') + ' · ' + s.duracao_min + ' min</div></div>' +
+        '<div class="svc-price">R$ ' + Number(s.preco).toFixed(2).replace('.',',') + '</div></div>';
+    });
+  }
+  html += '</div>';
+  document.getElementById('card-content').innerHTML = html;
+}
+
+function selectServico(id) {
+  STATE.servico = STATE.servicos.find(function(s){ return s.id === id; });
+  loadProfissionais();
+}
+
+function loadProfissionais() {
+  setStep(2);
+  document.getElementById('card-content').innerHTML = '<div class="spin"></div>';
+  fetch(API + '/api/publico/profissionais/' + SALAO_ID)
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      STATE.profissionais = list;
+      renderProfissionais(list);
+    })
+    .catch(function(){ showError('Erro ao carregar profissionais.'); });
+}
+
+function renderProfissionais(list) {
+  var html = '<div class="card-hd"><div class="eyebrow">Passo 2 de 4</div><div class="card-title">Com quem você quer ser atendido?</div></div><div class="card-bd">';
+  if (!list.length) {
+    html += '<div class="no-slots">Nenhum profissional disponível.</div>';
+  } else {
+    html += '<div class="pro-grid">';
+    list.forEach(function(p){
+      var cor = p.cor_agenda || '#9A5B3F';
+      html += '<div class="pro-item" onclick="selectProfissional(\''+p.id+'\')">' +
+        '<div class="pro-av" style="background:'+cor+'">' + p.nome[0].toUpperCase() + '</div>' +
+        '<div class="pro-name">' + p.nome + '</div>' +
+        '<div class="pro-esp">' + (p.especialidade||'') + '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '<button class="btn btn-ghost" onclick="loadServicos()">← Voltar</button></div>';
+  document.getElementById('card-content').innerHTML = html;
+}
+
+function selectProfissional(id) {
+  STATE.profissional = STATE.profissionais.find(function(p){ return p.id === id; });
+  loadCalendario();
+}
+
+function loadCalendario() {
+  setStep(3);
+  var html = '<div class="card-hd"><div class="eyebrow">Passo 3 de 4</div><div class="card-title">Escolha o dia e horário</div></div><div class="card-bd">';
+  html += '<div class="date-scroll" id="date-scroll"></div>';
+  html += '<div id="time-area"><div class="no-slots">Selecione uma data acima</div></div>';
+  html += '<button class="btn btn-ghost" onclick="loadProfissionais()">← Voltar</button></div>';
+  document.getElementById('card-content').innerHTML = html;
+
+  // Gera próximos 14 dias
+  var dowNames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  var monNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var scroll = document.getElementById('date-scroll');
+  var html2 = '';
+  for (var i = 0; i < 14; i++) {
+    var d = new Date();
+    d.setDate(d.getDate() + i);
+    var iso = d.toISOString().split('T')[0];
+    html2 += '<div class="date-pill" data-date="'+iso+'" onclick="selectData(\''+iso+'\', this)">' +
+      '<div class="date-dow">' + dowNames[d.getDay()] + '</div>' +
+      '<div class="date-day">' + d.getDate() + '</div>' +
+      '<div class="date-mon">' + monNames[d.getMonth()] + '</div></div>';
+  }
+  scroll.innerHTML = html2;
+}
+
+function selectData(iso, el) {
+  STATE.data = iso;
+  STATE.hora = null;
+  document.querySelectorAll('.date-pill').forEach(function(p){ p.classList.remove('sel'); });
+  el.classList.add('sel');
+
+  var timeArea = document.getElementById('time-area');
+  timeArea.innerHTML = '<div class="spin"></div>';
+
+  var url = API + '/api/publico/horarios/' + SALAO_ID +
+    '?profissional_id=' + STATE.profissional.id +
+    '&data=' + iso +
+    '&duracao_min=' + STATE.servico.duracao_min;
+
+  fetch(url).then(function(r){ return r.json(); })
+    .then(function(res){
+      var horarios = res.horarios || [];
+      if (!horarios.length) {
+        timeArea.innerHTML = '<div class="no-slots">Nenhum horário disponível neste dia. Tente outra data.</div>';
+        return;
+      }
+      var html = '<div class="time-grid">';
+      horarios.forEach(function(h){
+        html += '<div class="time-slot" onclick="selectHora(\''+h+'\', this)">' + h + '</div>';
+      });
+      html += '</div><button class="btn btn-primary" style="margin-top:16px" onclick="goToForm()" id="btn-continuar" disabled>Continuar</button>';
+      timeArea.innerHTML = html;
+    })
+    .catch(function(){ timeArea.innerHTML = '<div class="no-slots">Erro ao buscar horários.</div>'; });
+}
+
+function selectHora(h, el) {
+  STATE.hora = h;
+  document.querySelectorAll('.time-slot').forEach(function(s){ s.classList.remove('sel'); });
+  el.classList.add('sel');
+  var btn = document.getElementById('btn-continuar');
+  if (btn) btn.disabled = false;
+}
+
+function goToForm() {
+  setStep(4);
+  var html = '<div class="card-hd"><div class="eyebrow">Passo 4 de 4</div><div class="card-title">Seus dados</div></div><div class="card-bd">';
+
+  html += '<div class="summary">';
+  html += '<div class="sum-row"><span class="sum-label">Serviço</span><span class="sum-val">' + STATE.servico.nome + '</span></div>';
+  html += '<div class="sum-row"><span class="sum-label">Profissional</span><span class="sum-val">' + STATE.profissional.nome + '</span></div>';
+  html += '<div class="sum-row"><span class="sum-label">Data e hora</span><span class="sum-val">' + formatData(STATE.data) + ' às ' + STATE.hora + '</span></div>';
+  html += '<div class="sum-row"><span class="sum-label">Total</span><span class="sum-total">R$ ' + Number(STATE.servico.preco).toFixed(2).replace('.',',') + '</span></div>';
+  html += '</div>';
+
+  html += '<div class="err-box" id="form-err"></div>';
+  html += '<div class="fld"><label>Seu nome completo</label><input type="text" id="cli-nome" placeholder="Nome completo"/></div>';
+  html += '<div class="fld"><label>WhatsApp / Telefone</label><input type="tel" id="cli-tel" placeholder="(11) 99999-9999"/></div>';
+  html += '<button class="btn btn-primary" id="btn-confirmar" onclick="confirmarAgendamento()">Confirmar agendamento</button>';
+  html += '<button class="btn btn-ghost" onclick="loadCalendario()">← Voltar</button>';
+  html += '</div>';
+
+  document.getElementById('card-content').innerHTML = html;
+}
+
+function formatData(iso) {
+  var d = new Date(iso + 'T12:00:00');
+  var dowNames = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+  var monNames = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  return dowNames[d.getDay()] + ', ' + d.getDate() + ' de ' + monNames[d.getMonth()];
+}
+
+function confirmarAgendamento() {
+  var nome = document.getElementById('cli-nome').value.trim();
+  var tel  = document.getElementById('cli-tel').value.trim();
+  var err  = document.getElementById('form-err');
+  err.style.display = 'none';
+
+  if (!nome) { err.textContent = 'Informe seu nome completo.'; err.style.display='block'; return; }
+  if (!tel || tel.length < 8) { err.textContent = 'Informe um telefone válido.'; err.style.display='block'; return; }
+
+  var btn = document.getElementById('btn-confirmar');
+  btn.disabled = true; btn.textContent = 'Confirmando...';
+
+  fetch(API + '/api/publico/agendar/' + SALAO_ID, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      nome: nome, telefone: tel,
+      servico_id: STATE.servico.id,
+      profissional_id: STATE.profissional.id,
+      data: STATE.data, hora_inicio: STATE.hora
+    })
+  })
+  .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Erro ao agendar'); return d; }); })
+  .then(function(res){ showSuccess(res); })
+  .catch(function(e){
+    err.textContent = e.message;
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Confirmar agendamento';
+  });
+}
+
+function showSuccess(res) {
+  document.getElementById('steps-ind').style.display = 'none';
+  var html = '<div class="card-bd"><div class="success-wrap">';
+  html += '<div class="success-icon">✓</div>';
+  html += '<div class="success-title">Agendamento confirmado!</div>';
+  html += '<div class="success-sub">Te esperamos em ' + formatData(STATE.data) + ' às ' + STATE.hora + ' para o seu ' + STATE.servico.nome.toLowerCase() + '.</div>';
+  html += '<div class="summary" style="text-align:left">';
+  html += '<div class="sum-row"><span class="sum-label">Serviço</span><span class="sum-val">' + STATE.servico.nome + '</span></div>';
+  html += '<div class="sum-row"><span class="sum-label">Profissional</span><span class="sum-val">' + STATE.profissional.nome + '</span></div>';
+  html += '<div class="sum-row"><span class="sum-label">Quando</span><span class="sum-val">' + formatData(STATE.data) + ', ' + STATE.hora + '</span></div>';
+  html += '</div>';
+  html += '<button class="btn btn-primary" onclick="location.reload()">Fazer novo agendamento</button>';
+  html += '</div></div>';
+  document.getElementById('card-content').innerHTML = html;
+}
+
+init();
+</script>
+</body>
+</html>
