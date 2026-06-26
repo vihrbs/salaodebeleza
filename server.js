@@ -814,6 +814,165 @@ app.get('/api/pagamento/status', auth, async (req, res) => {
   });
 });
 
+// ═══════════════════════════════════════════════════
+// AGENDAMENTO PÚBLICO (sem autenticação)
+// ═══════════════════════════════════════════════════
+
+// Busca dados públicos do salão (nome, logo)
+app.get('/api/publico/salao/:slug', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('saloes')
+      .select('id, nome, telefone, endereco, cidade').eq('id', req.params.slug).single();
+    if (error || !data) return res.status(404).json({ error: 'Salão não encontrado' });
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Lista serviços ativos do salão (público)
+app.get('/api/publico/servicos/:salaoId', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('servicos')
+      .select('id, nome, categoria, duracao_min, preco')
+      .eq('salao_id', req.params.salaoId).eq('ativo', true).order('nome');
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Lista profissionais ativos do salão (público)
+app.get('/api/publico/profissionais/:salaoId', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('profissionais')
+      .select('id, nome, especialidade, cor_agenda')
+      .eq('salao_id', req.params.salaoId).eq('ativo', true).order('nome');
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Busca horários disponíveis para um profissional em uma data
+app.get('/api/publico/horarios/:salaoId', async (req, res) => {
+  const { profissional_id, data, duracao_min } = req.query;
+  if (!profissional_id || !data) return res.status(422).json({ error: 'profissional_id e data obrigatórios' });
+  
+  try {
+    // Busca agendamentos já marcados nesse dia para esse profissional
+    const { data: ocupados } = await supabase.from('agendamentos')
+      .select('hora_inicio, hora_fim')
+      .eq('salao_id', req.params.salaoId)
+      .eq('profissional_id', profissional_id)
+      .eq('data', data)
+      .neq('status', 'cancelado');
+    
+    // Gera slots de horário (08:00 às 19:00, intervalos de 30min)
+    const slots = [];
+    const dur = parseInt(duracao_min) || 60;
+    for (let h = 8; h < 19; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        const inicio = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+        const fimMin = h * 60 + m + dur;
+        const fimH = Math.floor(fimMin / 60);
+        const fimM = fimMin % 60;
+        if (fimH > 19) continue; // não passa das 19h
+        const fim = String(fimH).padStart(2,'0') + ':' + String(fimM).padStart(2,'0');
+        
+        // Verifica conflito com agendamentos existentes
+        const conflito = (ocupados || []).some(ag => {
+          return (inicio < ag.hora_fim && fim > ag.hora_inicio);
+        });
+        
+        if (!conflito) slots.push(inicio);
+      }
+    }
+    
+    // Remove horários passados se for hoje
+    const hoje = new Date().toISOString().split('T')[0];
+    let slotsDisponiveis = slots;
+    if (data === hoje) {
+      const agora = new Date();
+      const horaAtual = agora.getHours() * 60 + agora.getMinutes();
+      slotsDisponiveis = slots.filter(s => {
+        const [sh, sm] = s.split(':').map(Number);
+        return (sh * 60 + sm) > horaAtual + 30; // 30min de antecedência mínima
+      });
+    }
+    
+    res.json({ horarios: slotsDisponiveis });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Cria agendamento público (cliente final)
+app.post('/api/publico/agendar/:salaoId', async (req, res) => {
+  const { nome, telefone, servico_id, profissional_id, data, hora_inicio } = req.body;
+  if (!nome || !telefone || !servico_id || !profissional_id || !data || !hora_inicio) {
+    return res.status(422).json({ error: 'Todos os campos são obrigatórios' });
+  }
+  
+  try {
+    const salao_id = req.params.salaoId;
+    
+    // Busca dados do serviço para calcular hora_fim e valor
+    const { data: servico } = await supabase.from('servicos')
+      .select('nome, duracao_min, preco, comissao_pct').eq('id', servico_id).single();
+    if (!servico) return res.status(404).json({ error: 'Serviço não encontrado' });
+    
+    const [h, m] = hora_inicio.split(':').map(Number);
+    const fimMin = h * 60 + m + servico.duracao_min;
+    const hora_fim = String(Math.floor(fimMin/60)).padStart(2,'0') + ':' + String(fimMin%60).padStart(2,'0');
+    
+    // Busca ou cria cliente pelo telefone
+    let { data: cliente } = await supabase.from('clientes')
+      .select('id').eq('salao_id', salao_id).eq('telefone', telefone).single();
+    
+    if (!cliente) {
+      const { data: novoCliente } = await supabase.from('clientes')
+        .insert({ salao_id, nome, telefone, status: 'novo' })
+        .select('id').single();
+      cliente = novoCliente;
+    }
+    
+    // Verifica conflito de horário novamente (segurança)
+    const { data: conflitos } = await supabase.from('agendamentos')
+      .select('id').eq('salao_id', salao_id).eq('profissional_id', profissional_id)
+      .eq('data', data).neq('status', 'cancelado')
+      .lt('hora_inicio', hora_fim).gt('hora_fim', hora_inicio);
+    
+    if (conflitos && conflitos.length > 0) {
+      return res.status(409).json({ error: 'Este horário já foi reservado. Escolha outro.' });
+    }
+    
+    // Cria o agendamento já confirmado
+    const { data: agendamento, error } = await supabase.from('agendamentos')
+      .insert({
+        salao_id, cliente_id: cliente.id, profissional_id, servico_id,
+        data, hora_inicio, hora_fim,
+        status: 'confirmado',
+        valor_total: servico.preco,
+        origem: 'publico'
+      })
+      .select().single();
+    
+    if (error) throw error;
+    
+    // Cria lançamento financeiro pendente
+    await supabase.from('lancamentos').insert({
+      salao_id, tipo: 'entrada', categoria: 'Serviço',
+      descricao: servico.nome + ' - ' + nome,
+      valor: servico.preco, data, pago: false,
+      agendamento_id: agendamento.id
+    }).catch(() => {});
+    
+    res.status(201).json({ 
+      message: 'Agendamento confirmado!',
+      agendamento: {
+        servico: servico.nome,
+        data, hora_inicio, hora_fim,
+        valor: servico.preco
+      }
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Rota nao encontrada' }));
 
