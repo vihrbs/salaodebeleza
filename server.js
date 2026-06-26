@@ -975,7 +975,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
         salao_id, cliente_id: cliente.id, profissional_id,
         data_hora, duracao_min: servico.duracao_min,
         status: 'confirmado', valor_total: servico.preco,
-        origem: 'publico'
+        origem: 'app_cliente'
       })
       .select().single();
 
