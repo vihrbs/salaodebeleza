@@ -27,6 +27,35 @@ const supabase = createClient(
 
 const JWT_SECRET = process.env.JWT_SECRET || 'beleza_pro_secret_2026';
 
+// ── Helpers de fuso horário (Brasil = UTC-3) ────────
+function utcParaMinutosBrasil(dataHoraUTC) {
+  // dataHoraUTC vem como string tipo '2026-06-27T16:00:00+00:00'
+  var dt = new Date(dataHoraUTC);
+  var totalMinUTC = dt.getUTCHours() * 60 + dt.getUTCMinutes();
+  var totalMinBrasil = totalMinUTC - 180; // UTC-3
+  if (totalMinBrasil < 0) totalMinBrasil += 1440;
+  return totalMinBrasil;
+}
+
+function adicionarDia(dataISO) {
+  var d = new Date(dataISO + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split('T')[0];
+}
+
+function dataAtualBrasil() {
+  var agora = new Date();
+  var brasil = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
+  return brasil.toISOString().split('T')[0];
+}
+
+function minutosAgoraBrasil() {
+  var agora = new Date();
+  var brasil = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
+  return brasil.getUTCHours() * 60 + brasil.getUTCMinutes();
+}
+
+
 // ── Helpers ──────────────────────────────────────────
 function slugify(text) {
   return text.toLowerCase()
@@ -319,11 +348,12 @@ app.get('/api/agendamentos', auth, async (req, res) => {
              agendamento_servicos(id, preco, servicos(id, nome, duracao_min))`)
     .eq('salao_id', req.salao_id).order('data_hora');
 
+  // Janela ampliada em UTC para cobrir o dia completo no fuso do Brasil (UTC-3)
   if (data) {
-    q = q.gte('data_hora', data + 'T00:00:00').lte('data_hora', data + 'T23:59:59');
+    q = q.gte('data_hora', data + 'T03:00:00+00:00').lte('data_hora', adicionarDia(data) + 'T02:59:59+00:00');
   } else {
-    if (data_inicio) q = q.gte('data_hora', data_inicio + 'T00:00:00');
-    if (data_fim)    q = q.lte('data_hora', data_fim + 'T23:59:59');
+    if (data_inicio) q = q.gte('data_hora', data_inicio + 'T03:00:00+00:00');
+    if (data_fim)    q = q.lte('data_hora', adicionarDia(data_fim) + 'T02:59:59+00:00');
   }
   if (profissional_id) q = q.eq('profissional_id', profissional_id);
   if (status)          q = q.eq('status', status);
@@ -425,19 +455,19 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
 // DASHBOARD
 // ═══════════════════════════════════════════════════
 app.get('/api/dashboard/kpis', auth, async (req, res) => {
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = dataAtualBrasil();
   const inicioMes = hoje.slice(0, 7) + '-01';
   const [{ count: agHoje }, { data: lancHoje }, { count: clientes }, { data: novos }] = await Promise.all([
     supabase.from('agendamentos').select('id', { count: 'exact' })
       .eq('salao_id', req.salao_id)
-      .gte('data_hora', hoje + 'T00:00:00').lte('data_hora', hoje + 'T23:59:59')
+      .gte('data_hora', hoje + 'T03:00:00+00:00').lte('data_hora', adicionarDia(hoje) + 'T02:59:59+00:00')
       .not('status', 'in', '("cancelado","nao_compareceu")'),
     supabase.from('lancamentos').select('tipo, valor')
       .eq('salao_id', req.salao_id).eq('data', hoje).eq('pago', true),
     supabase.from('clientes').select('id', { count: 'exact' })
       .eq('salao_id', req.salao_id).eq('ativo', true),
     supabase.from('clientes').select('id')
-      .eq('salao_id', req.salao_id).gte('created_at', inicioMes + 'T00:00:00'),
+      .eq('salao_id', req.salao_id).gte('created_at', inicioMes + 'T03:00:00+00:00'),
   ]);
   const faturamento = (lancHoje || [])
     .filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0);
@@ -446,24 +476,24 @@ app.get('/api/dashboard/kpis', auth, async (req, res) => {
 });
 
 app.get('/api/dashboard/agenda-hoje', auth, async (req, res) => {
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = dataAtualBrasil();
   const { data } = await supabase.from('agendamentos')
     .select(`id, data_hora, status, valor_total,
              clientes(nome, telefone), profissionais(nome, cor_agenda),
              agendamento_servicos(servicos(nome))`)
     .eq('salao_id', req.salao_id)
-    .gte('data_hora', hoje + 'T00:00:00').lte('data_hora', hoje + 'T23:59:59')
+    .gte('data_hora', hoje + 'T03:00:00+00:00').lte('data_hora', adicionarDia(hoje) + 'T02:59:59+00:00')
     .not('status', 'eq', 'cancelado').order('data_hora');
   res.json(data || []);
 });
 
 app.get('/api/dashboard/top-servicos', auth, async (req, res) => {
-  const inicioMes = new Date().toISOString().slice(0, 7) + '-01';
+  const inicioMes = dataAtualBrasil().slice(0, 7) + '-01';
   const { data } = await supabase.from('agendamento_servicos')
     .select('servicos(nome), preco, agendamentos!inner(data_hora, salao_id, status)')
     .eq('agendamentos.salao_id', req.salao_id)
     .eq('agendamentos.status', 'concluido')
-    .gte('agendamentos.data_hora', inicioMes + 'T00:00:00');
+    .gte('agendamentos.data_hora', inicioMes + 'T03:00:00+00:00');
   const map = {};
   (data || []).forEach(row => {
     const nome = row.servicos?.nome || 'Desconhecido';
@@ -577,8 +607,8 @@ app.get('/api/comissoes', auth, async (req, res) => {
       .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
       .eq('agendamentos.profissional_id', p.id)
       .eq('agendamentos.status', 'concluido')
-      .gte('agendamentos.data_hora', ini + 'T00:00:00')
-      .lte('agendamentos.data_hora', fim + 'T23:59:59');
+      .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
+      .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
     const total_bruto    = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
     const total_comissao = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
     const { data: fechamento } = await supabase.from('fechamentos_comissao')
@@ -857,8 +887,9 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
 
   try {
     // Busca agendamentos já marcados nesse dia para esse profissional
-    const inicioDia = data + 'T00:00:00';
-    const fimDia     = data + 'T23:59:59';
+    // Janela ampliada em UTC para cobrir o dia completo no fuso do Brasil (UTC-3)
+    const inicioDia = data + 'T03:00:00+00:00';
+    const fimDia     = adicionarDia(data) + 'T02:59:59+00:00';
     const { data: ocupados } = await supabase.from('agendamentos')
       .select('data_hora, duracao_min')
       .eq('salao_id', req.params.salaoId)
@@ -869,8 +900,7 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
 
     // Converte ocupados para minutos do dia [inicio, fim]
     const ocupadosMin = (ocupados || []).map(function(ag) {
-      var dt = new Date(ag.data_hora);
-      var inicioMin = dt.getHours() * 60 + dt.getMinutes();
+      var inicioMin = utcParaMinutosBrasil(ag.data_hora);
       var fimMin = inicioMin + (ag.duracao_min || 60);
       return [inicioMin, fimMin];
     });
@@ -897,11 +927,10 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
     }
 
     // Remove horários passados se for hoje
-    const hoje = new Date().toISOString().split('T')[0];
+    const hojeBrasil = dataAtualBrasil();
     let slotsDisponiveis = slots;
-    if (data === hoje) {
-      const agora = new Date();
-      const horaAtual = agora.getHours() * 60 + agora.getMinutes();
+    if (data === hojeBrasil) {
+      const horaAtual = minutosAgoraBrasil();
       slotsDisponiveis = slots.filter(function(s) {
         const parts = s.split(':').map(Number);
         return (parts[0] * 60 + parts[1]) > horaAtual + 30;
@@ -927,7 +956,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
       .select('id, nome, duracao_min, preco, comissao_pct').eq('id', servico_id).single();
     if (!servico) return res.status(404).json({ error: 'Serviço não encontrado' });
 
-    const data_hora = data + 'T' + hora_inicio + ':00';
+    const data_hora = data + 'T' + hora_inicio + ':00-03:00';
 
     // Busca ou cria cliente pelo telefone
     let { data: cliente } = await supabase.from('clientes')
@@ -945,8 +974,8 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
     const [h, m] = hora_inicio.split(':').map(Number);
     const inicioMin = h * 60 + m;
     const fimMin = inicioMin + servico.duracao_min;
-    const inicioDia = data + 'T00:00:00';
-    const fimDia     = data + 'T23:59:59';
+    const inicioDia = data + 'T03:00:00+00:00';
+    const fimDia     = adicionarDia(data) + 'T02:59:59+00:00';
 
     const { data: existentes } = await supabase.from('agendamentos')
       .select('data_hora, duracao_min')
@@ -955,8 +984,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
       .neq('status', 'cancelado');
 
     const temConflito = (existentes || []).some(function(ag) {
-      var dt = new Date(ag.data_hora);
-      var agInicio = dt.getHours() * 60 + dt.getMinutes();
+      var agInicio = utcParaMinutosBrasil(ag.data_hora);
       var agFim = agInicio + (ag.duracao_min || 60);
       return (inicioMin < agFim && fimMin > agInicio);
     });
