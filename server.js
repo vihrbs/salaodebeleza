@@ -599,9 +599,19 @@ app.get('/api/comissoes', auth, async (req, res) => {
   const { data: profissionais } = await supabase.from('profissionais')
     .select('id, nome, comissao_pct, cor_agenda').eq('salao_id', req.salao_id).eq('ativo', true);
   if (!profissionais) return res.json([]);
-  const now = new Date();
-  const ini = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  const fim = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
+
+  // Aceita ?mes=2026-06 para navegar entre meses; padrão é o mês atual
+  let ano, mesNum;
+  if (req.query.mes && /^\d{4}-\d{2}$/.test(req.query.mes)) {
+    [ano, mesNum] = req.query.mes.split('-').map(Number);
+  } else {
+    const now = new Date();
+    ano = now.getFullYear();
+    mesNum = now.getMonth() + 1;
+  }
+  const ini = `${ano}-${String(mesNum).padStart(2,'0')}-01`;
+  const fim = new Date(ano, mesNum, 0).toISOString().split('T')[0];
+
   const resultado = await Promise.all(profissionais.map(async p => {
     // Verifica se este período já foi fechado/pago para este profissional
     const { data: fechamento } = await supabase.from('fechamentos_comissao')
@@ -682,6 +692,18 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
     }
     if (error) throw error;
     res.json(data);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reabre um fechamento de comissão pago por engano (volta a calcular normalmente)
+app.delete('/api/comissoes/fechamento/:id', auth, async (req, res) => {
+  try {
+    const { error } = await supabase.from('fechamentos_comissao')
+      .delete().eq('id', req.params.id).eq('salao_id', req.salao_id);
+    if (error) throw error;
+    res.json({ message: 'Fechamento removido, comissão volta a ser calculada normalmente.' });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
