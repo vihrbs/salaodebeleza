@@ -943,7 +943,10 @@ var COLS = ['#6C63FF','#FF6584','#43D9AD','#FFB347','#3B82F6','#EC4899'];
 function brl(v){ return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
 function fdt(d){ return new Date(d).toLocaleDateString('pt-BR'); }
 function fhr(d){ return new Date(d).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
-function today(){ return new Date().toISOString().split('T')[0]; }
+function today(){
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function deb(fn,ms){ var t; return function(){ clearTimeout(t); t = setTimeout(fn, ms); }; }
 
 function toast(msg, type) {
@@ -1249,7 +1252,7 @@ function renderDashChart() {
     var d = new Date();
     d.setDate(d.getDate() - i);
     labels.push(daysNames[d.getDay()]);
-    dates.push(d.toISOString().split('T')[0]);
+    dates.push(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
   }
 
   apiFetch('/api/financeiro/lancamentos?limit=200').then(function(r) {
