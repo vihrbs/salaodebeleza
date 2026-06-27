@@ -1505,14 +1505,16 @@ function renderCom(list) {
 }
 
 function pagarCom(id, nome, val) {
+  if (!confirm('Confirmar pagamento de ' + brl(val) + ' para ' + nome + '?\n\nEsta ação não pode ser desfeita.')) return;
   var now = new Date();
   var ini = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
-  var fim = new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0];
+  var ultimoDiaMes = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  var fim = ultimoDiaMes.getFullYear()+'-'+String(ultimoDiaMes.getMonth()+1).padStart(2,'0')+'-'+String(ultimoDiaMes.getDate()).padStart(2,'0');
   apiFetch('/api/comissoes/fechar',{method:'POST',body:{
-    profissional_id:id, total_comissao:val,
+    profissional_id:id,
     periodo_inicio:ini, periodo_fim:fim
   }})
-  .then(function(){ toast('Comissão de '+nome+' paga e salva! ✅','ok'); loadCom(); })
+  .then(function(){ toast('Comissão de '+nome+' paga e zerada! ✅','ok'); loadCom(); })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 function fecharCom(){ closeM('m-fcom'); toast('Comissões fechadas!','ok'); loadCom(); }
