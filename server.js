@@ -380,9 +380,36 @@ app.post('/api/agendamentos', auth, async (req, res) => {
     const duracao_total = (srvcs || []).reduce((s, sv) => s + sv.duracao_min, 0);
     const valor_total   = (srvcs || []).reduce((s, sv) => s + Number(sv.preco), 0);
 
+    // Corrige data_hora para ter fuso horário explícito (Brasil = UTC-3) se ainda não tiver
+    const data_hora_final = /[+-]\d{2}:\d{2}$|Z$/.test(data_hora) ? data_hora : data_hora + '-03:00';
+
+    // Verifica conflito de horário para este profissional
+    const dataParte = data_hora_final.split('T')[0];
+    const inicioDia = dataParte + 'T03:00:00+00:00';
+    const fimDia     = adicionarDia(dataParte) + 'T02:59:59+00:00';
+
+    const { data: existentes } = await supabase.from('agendamentos')
+      .select('id, data_hora, duracao_min')
+      .eq('salao_id', req.salao_id).eq('profissional_id', profissional_id)
+      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .neq('status', 'cancelado');
+
+    const novoInicioMin = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
+    const novoFimMin    = novoInicioMin + duracao_total;
+
+    const conflito = (existentes || []).find(function(ag) {
+      var agInicio = utcParaMinutosBrasil(ag.data_hora);
+      var agFim = agInicio + (ag.duracao_min || 60);
+      return (novoInicioMin < agFim && novoFimMin > agInicio);
+    });
+
+    if (conflito) {
+      return res.status(409).json({ error: 'Este profissional já tem um agendamento nesse horário. Escolha outro horário ou profissional.' });
+    }
+
     const { data: ag, error } = await supabase
       .from('agendamentos')
-      .insert({ salao_id: req.salao_id, cliente_id, profissional_id, data_hora,
+      .insert({ salao_id: req.salao_id, cliente_id, profissional_id, data_hora: data_hora_final,
                 duracao_min: duracao_total, valor_total, origem: origem || 'backoffice', observacoes })
       .select().single();
     if (error) throw error;
@@ -397,7 +424,7 @@ app.post('/api/agendamentos', auth, async (req, res) => {
     await supabase.from('lancamentos').insert({
       salao_id: req.salao_id, agendamento_id: ag.id, tipo: 'entrada',
       categoria: 'Serviço', descricao: 'Agendamento #' + ag.id.slice(-6).toUpperCase(),
-      valor: valor_total, data: data_hora.split('T')[0], pago: false
+      valor: valor_total, data: dataParte, pago: false
     });
 
     res.status(201).json(ag);
