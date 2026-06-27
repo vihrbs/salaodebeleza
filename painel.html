@@ -1067,13 +1067,14 @@ function enterApp(nome, salon, mode, perfil, permissoes) {
   aplicarPermissoes();
   var b = document.getElementById('apibadge');
   b.textContent = mode; b.className = 'apibadge ' + (mode==='LIVE'?'live':'demo');
-  document.getElementById('ag-dt').value = today();
+  document.getElementById('ag-dt').value = ''; // vazio = visão de "próximos 3 dias"
   document.getElementById('ag-d').value  = today();
   document.getElementById('lan-dt').value = today();
   if (document.getElementById('cfg-api')) document.getElementById('cfg-api').value = API || '';
   updateApiStatus();
   loadAll();
   setTimeout(checkTrial, 2000);
+  iniciarAtualizacaoAutomatica();
   
   // Verifica retorno do Mercado Pago
   var urlParams = new URLSearchParams(window.location.search);
@@ -1092,6 +1093,7 @@ function enterApp(nome, salon, mode, perfil, permissoes) {
 }
 
 function doLogout() {
+  pararAtualizacaoAutomatica();
   localStorage.removeItem('bpro_tk'); TK = ''; DEMO = true;
   document.getElementById('app').style.display = 'none';
   document.getElementById('login').style.display = 'flex';
@@ -1175,6 +1177,34 @@ function loadAll() {
   loadCom(); loadPros(); loadSvcs();
   renderCal(); renderDashChart();
   fillSelects();
+}
+
+// ── ATUALIZAÇÃO AUTOMÁTICA ──────────────────────────────
+// Verifica periodicamente se há agendamentos novos (ex: feitos pelo link público)
+// e atualiza Dashboard/Agenda sem precisar dar F5. Não atualiza se algum modal
+// estiver aberto, para não interromper o usuário no meio de uma ação.
+var INTERVALO_ATUALIZACAO = null;
+
+function iniciarAtualizacaoAutomatica() {
+  if (INTERVALO_ATUALIZACAO) clearInterval(INTERVALO_ATUALIZACAO);
+  INTERVALO_ATUALIZACAO = setInterval(function() {
+    var modalAberto = document.querySelector('.mov.on');
+    if (modalAberto) return; // usuário está preenchendo algo, não interrompe
+
+    var paginaAtiva = document.querySelector('.page.on');
+    if (!paginaAtiva) return;
+    var idPagina = paginaAtiva.id;
+
+    if (idPagina === 'page-dashboard') {
+      loadKPIs(); loadDashTl();
+    } else if (idPagina === 'page-agenda') {
+      loadAgenda();
+    }
+  }, 30000); // verifica a cada 30 segundos
+}
+
+function pararAtualizacaoAutomatica() {
+  if (INTERVALO_ATUALIZACAO) { clearInterval(INTERVALO_ATUALIZACAO); INTERVALO_ATUALIZACAO = null; }
 }
 
 // ── DASHBOARD ───────────────────────────────────────────
