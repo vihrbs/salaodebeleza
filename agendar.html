@@ -372,10 +372,16 @@ function selectData(iso, el) {
   STATE.data = iso;
   STATE.hora = null;
   document.querySelectorAll('.date-pill').forEach(function(p){ p.classList.remove('sel'); });
-  el.classList.add('sel');
+  if (el) el.classList.add('sel');
 
   var timeArea = document.getElementById('time-area');
   timeArea.innerHTML = '<div class="spin"></div>';
+  buscarHorarios(iso, 0);
+}
+
+function buscarHorarios(iso, tentativa) {
+  var timeArea = document.getElementById('time-area');
+  var MAX_TENTATIVAS = 14; // procura até 14 dias adiante
 
   var url = API + '/api/publico/horarios/' + SALAO_ID +
     '?profissional_id=' + STATE.profissional.id +
@@ -385,11 +391,36 @@ function selectData(iso, el) {
   fetch(url).then(function(r){ return r.json(); })
     .then(function(res){
       var horarios = res.horarios || [];
+
       if (!horarios.length) {
-        timeArea.innerHTML = '<div class="no-slots">Nenhum horário disponível neste dia. Tente outra data.</div>';
+        if (tentativa < MAX_TENTATIVAS) {
+          // Tenta o próximo dia automaticamente
+          var d = new Date(iso + 'T12:00:00');
+          d.setDate(d.getDate() + 1);
+          var proximoIso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+          buscarHorarios(proximoIso, tentativa + 1);
+          return;
+        }
+        timeArea.innerHTML = '<div class="no-slots">Nenhum horário disponível nos próximos 14 dias. Tente outro profissional.</div>';
         return;
       }
-      var html = '<div class="time-grid">';
+
+      // Se mudou de data (pulou pra outro dia), atualiza seleção visual e estado
+      if (iso !== STATE.data) {
+        STATE.data = iso;
+        document.querySelectorAll('.date-pill').forEach(function(p){
+          p.classList.toggle('sel', p.dataset.date === iso);
+        });
+        // Garante que a data está visível no scroll (caso tenha pulado pra fora dos 14 dias iniciais)
+        var pillExistente = document.querySelector('.date-pill[data-date="'+iso+'"]');
+        if (pillExistente) pillExistente.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+      }
+
+      var avisoPulo = tentativa > 0
+        ? '<div style="background:var(--accent-soft);color:var(--accent-deep);border-radius:var(--rs);padding:10px 12px;font-size:.78rem;font-weight:600;margin-bottom:12px">📅 Sem horários na data escolhida. Mostrando ' + formatData(iso) + '.</div>'
+        : '';
+
+      var html = avisoPulo + '<div class="time-grid">';
       horarios.forEach(function(h){
         html += '<div class="time-slot" onclick="selectHora(\''+h+'\', this)">' + h + '</div>';
       });
@@ -467,6 +498,7 @@ function confirmarAgendamento() {
 }
 
 function showSuccess(res) {
+  STATE.agendamentoId = res.agendamento && res.agendamento.id;
   document.getElementById('steps-ind').style.display = 'none';
   var html = '<div class="card-bd"><div class="success-wrap">';
   html += '<div class="success-icon">✓</div>';
@@ -478,8 +510,53 @@ function showSuccess(res) {
   html += '<div class="sum-row"><span class="sum-label">Quando</span><span class="sum-val">' + formatData(STATE.data) + ', ' + STATE.hora + '</span></div>';
   html += '</div>';
   html += '<button class="btn btn-primary" onclick="location.reload()">Fazer novo agendamento</button>';
+  if (STATE.agendamentoId) {
+    html += '<button class="btn btn-ghost" onclick="abrirCancelamento()">Cancelar este agendamento</button>';
+  }
+  html += '<div id="cancel-area"></div>';
   html += '</div></div>';
   document.getElementById('card-content').innerHTML = html;
+}
+
+function abrirCancelamento() {
+  var area = document.getElementById('cancel-area');
+  area.innerHTML =
+    '<div class="fld" style="margin-top:16px;text-align:left">' +
+    '<label>Confirme seu telefone para cancelar</label>' +
+    '<input type="tel" id="cancel-tel" placeholder="(11) 99999-9999"/>' +
+    '</div>' +
+    '<div class="err-box" id="cancel-err"></div>' +
+    '<button class="btn" style="width:100%;background:var(--er);color:#fff" onclick="confirmarCancelamento()">Confirmar cancelamento</button>';
+}
+
+function confirmarCancelamento() {
+  var tel = document.getElementById('cancel-tel').value.trim();
+  var err = document.getElementById('cancel-err');
+  err.style.display = 'none';
+  if (!tel || tel.replace(/\D/g,'').length < 8) {
+    err.textContent = 'Informe o telefone usado no agendamento.';
+    err.style.display = 'block';
+    return;
+  }
+  fetch(API + '/api/publico/cancelar/' + STATE.agendamentoId, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ telefone: tel })
+  })
+  .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Erro ao cancelar'); return d; }); })
+  .then(function(){
+    document.getElementById('card-content').innerHTML =
+      '<div class="card-bd"><div class="success-wrap">' +
+      '<div class="success-icon" style="background:var(--er-soft)">✕</div>' +
+      '<div class="success-title">Agendamento cancelado</div>' +
+      '<div class="success-sub">Seu horário foi liberado. Pode agendar novamente quando quiser.</div>' +
+      '<button class="btn btn-primary" onclick="location.reload()">Fazer novo agendamento</button>' +
+      '</div></div>';
+  })
+  .catch(function(e){
+    err.textContent = e.message;
+    err.style.display = 'block';
+  });
 }
 
 init();
