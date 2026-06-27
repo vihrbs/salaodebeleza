@@ -319,6 +319,25 @@ app.get('/api/clientes', auth, async (req, res) => {
   res.json({ data: data || [], total: count });
 });
 
+// Lista clientes inativos (sem agendamento há 60+ dias, ou nunca agendaram)
+app.get('/api/clientes/inativos', auth, async (req, res) => {
+  const dias = parseInt(req.query.dias) || 60;
+  const limite = new Date();
+  limite.setDate(limite.getDate() - dias);
+  const limiteStr = limite.toISOString().split('T')[0];
+
+  try {
+    const { data, error } = await supabase.from('clientes')
+      .select('id, nome, telefone, total_gasto, historico_count, ultimo_agendamento, status')
+      .eq('salao_id', req.salao_id)
+      .or('ultimo_agendamento.lt.' + limiteStr + ',ultimo_agendamento.is.null')
+      .neq('status', 'inativo')
+      .order('ultimo_agendamento', { ascending: true, nullsFirst: true });
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/clientes', auth, async (req, res) => {
   const { data, error } = await supabase
     .from('clientes')
@@ -441,7 +460,9 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     .from('agendamentos').update(updates)
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
   if (error || !data) return res.status(404).json({ error: 'Não encontrado' });
-  
+
+  let whatsapp_link = null;
+
   if (status === 'concluido') {
     // Atualiza lancamento como pago
     await supabase.from('lancamentos')
@@ -474,8 +495,27 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
         }).eq('id', data.cliente_id).eq('salao_id', req.salao_id);
       } catch(e) { console.error('Erro ao atualizar stats cliente:', e.message); }
     }
+
+    // Gera link de WhatsApp para pedir avaliação e convidar retorno
+    try {
+      const { data: cliente } = await supabase.from('clientes')
+        .select('nome, telefone').eq('id', data.cliente_id).single();
+      const { data: salao } = await supabase.from('saloes')
+        .select('nome').eq('id', req.salao_id).single();
+
+      if (cliente && cliente.telefone) {
+        const telLimpo = cliente.telefone.replace(/\D/g, '');
+        const telComPais = telLimpo.length === 11 ? '55' + telLimpo : telLimpo;
+        const linkAgendar = 'https://belezaprooficial.com.br/agendar.html?salao=' + req.salao_id;
+        const msg = 'Oi ' + cliente.nome.split(' ')[0] + '! Foi um prazer te atender hoje na ' +
+          (salao?.nome || 'nossa loja') + '. Como foi sua experiência? ' +
+          'Quando quiser marcar seu próximo horário, é só acessar: ' + linkAgendar;
+        whatsapp_link = 'https://wa.me/' + telComPais + '?text=' + encodeURIComponent(msg);
+      }
+    } catch(e) { console.error('Erro ao gerar link WhatsApp:', e.message); }
   }
-  res.json(data);
+
+  res.json({ ...data, whatsapp_link });
 });
 
 // ═══════════════════════════════════════════════════
@@ -564,6 +604,20 @@ app.post('/api/financeiro/lancamentos', auth, async (req, res) => {
     .from('lancamentos').insert({ ...req.body, salao_id: req.salao_id }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// Marca um lançamento como pago ou não pago
+app.patch('/api/financeiro/lancamentos/:id', auth, async (req, res) => {
+  const { pago, forma_pgto } = req.body;
+  const updates = {};
+  if (typeof pago === 'boolean') updates.pago = pago;
+  if (forma_pgto) updates.forma_pgto = forma_pgto;
+  const { data, error } = await supabase
+    .from('lancamentos').update(updates)
+    .eq('id', req.params.id).eq('salao_id', req.salao_id)
+    .select().single();
+  if (error || !data) return res.status(404).json({ error: 'Lançamento não encontrado' });
+  res.json(data);
 });
 
 // ═══════════════════════════════════════════════════
@@ -812,9 +866,11 @@ app.get('/api/saloes/meu', auth, async (req, res) => {
 });
 
 app.put('/api/saloes/meu', auth, async (req, res) => {
-  const { nome, telefone, whatsapp, email, endereco, cidade, estado } = req.body;
+  const { nome, telefone, whatsapp, email, endereco, cidade, estado, configuracoes } = req.body;
+  const updates = { nome, telefone, whatsapp, email, endereco, cidade, estado };
+  if (configuracoes) updates.configuracoes = configuracoes;
   const { data, error } = await supabase.from('saloes')
-    .update({ nome, telefone, whatsapp, email, endereco, cidade, estado })
+    .update(updates)
     .eq('id', req.salao_id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -970,6 +1026,21 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
   if (!profissional_id || !data) return res.status(422).json({ error: 'profissional_id e data obrigatórios' });
 
   try {
+    // Busca horário de funcionamento configurado (padrão 08:00-19:00 se não definido)
+    const { data: salao } = await supabase.from('saloes')
+      .select('configuracoes').eq('id', req.params.salaoId).single();
+    const horaAbreCfg  = salao?.configuracoes?.horario_abre  || '08:00';
+    const horaFechaCfg = salao?.configuracoes?.horario_fecha || '19:00';
+    const [horaAbre]  = horaAbreCfg.split(':').map(Number);
+    const [horaFecha] = horaFechaCfg.split(':').map(Number);
+
+    // Verifica se o salão funciona nesse dia da semana (padrão: todos os dias)
+    const diasFechado = salao?.configuracoes?.dias_fechado || []; // ex: [0] = domingo fechado
+    const diaSemana = new Date(data + 'T12:00:00').getDay();
+    if (diasFechado.includes(diaSemana)) {
+      return res.json({ horarios: [], fechado: true });
+    }
+
     // Busca agendamentos já marcados nesse dia para esse profissional
     // Janela ampliada em UTC para cobrir o dia completo no fuso do Brasil (UTC-3)
     const inicioDia = data + 'T03:00:00+00:00';
@@ -989,14 +1060,14 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
       return [inicioMin, fimMin];
     });
 
-    // Gera slots de horário (08:00 às 19:00, intervalos de 30min)
+    // Gera slots de horário dentro do funcionamento configurado, intervalos de 30min
     const slots = [];
     const dur = parseInt(duracao_min) || 60;
-    for (let h = 8; h < 19; h++) {
+    for (let h = horaAbre; h < horaFecha; h++) {
       for (let m = 0; m < 60; m += 30) {
         const inicioMin = h * 60 + m;
         const fimMin = inicioMin + dur;
-        if (fimMin > 19 * 60) continue; // não passa das 19h
+        if (fimMin > horaFecha * 60) continue; // não passa do horário de fechamento
 
         const conflito = ocupadosMin.some(function(o) {
           return (inicioMin < o[1] && fimMin > o[0]);
@@ -1113,6 +1184,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
     res.status(201).json({
       message: 'Agendamento confirmado!',
       agendamento: {
+        id: agendamento.id,
         servico: servico.nome,
         data: data, hora_inicio: hora_inicio,
         valor: servico.preco
@@ -1121,9 +1193,37 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// 404
-app.use((req, res) => res.status(404).json({ error: 'Rota nao encontrada' }));
+// Cliente cancela seu próprio agendamento pelo link público (validado por telefone)
+app.post('/api/publico/cancelar/:agendamentoId', async (req, res) => {
+  const { telefone } = req.body;
+  if (!telefone) return res.status(422).json({ error: 'Telefone obrigatório para confirmar o cancelamento' });
 
+  try {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select('id, status, data_hora, cliente_id, clientes(telefone)')
+      .eq('id', req.params.agendamentoId).single();
+
+    if (!ag) return res.status(404).json({ error: 'Agendamento não encontrado' });
+
+    const telefoneLimpo = telefone.replace(/\D/g, '');
+    const telefoneCadastrado = (ag.clientes && ag.clientes.telefone || '').replace(/\D/g, '');
+    if (telefoneLimpo !== telefoneCadastrado) {
+      return res.status(403).json({ error: 'Telefone não corresponde ao agendamento' });
+    }
+
+    if (ag.status === 'cancelado') {
+      return res.status(409).json({ error: 'Este agendamento já está cancelado' });
+    }
+    if (ag.status === 'concluido') {
+      return res.status(409).json({ error: 'Este agendamento já foi concluído, não pode ser cancelado' });
+    }
+
+    await supabase.from('agendamentos').update({ status: 'cancelado' }).eq('id', ag.id);
+    await supabase.from('lancamentos').update({ pago: false }).eq('agendamento_id', ag.id);
+
+    res.json({ message: 'Agendamento cancelado com sucesso' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Rota nao encontrada' }));
