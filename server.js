@@ -603,6 +603,18 @@ app.get('/api/comissoes', auth, async (req, res) => {
   const ini = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
   const fim = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
   const resultado = await Promise.all(profissionais.map(async p => {
+    // Verifica se este período já foi fechado/pago para este profissional
+    const { data: fechamento } = await supabase.from('fechamentos_comissao')
+      .select('id, status, pago_em, total_comissao, total_bruto, total_servicos')
+      .eq('salao_id', req.salao_id)
+      .eq('profissional_id', p.id).eq('periodo_inicio', ini).maybeSingle();
+
+    // Se já está pago, mostra zerado (já foi quitado, não soma de novo)
+    if (fechamento && fechamento.status === 'pago') {
+      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, fechamento };
+    }
+
+    // Senão, calcula normalmente a partir dos agendamentos concluídos
     const { data: svcs } = await supabase.from('agendamento_servicos')
       .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
       .eq('agendamentos.profissional_id', p.id)
@@ -611,38 +623,61 @@ app.get('/api/comissoes', auth, async (req, res) => {
       .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
     const total_bruto    = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
     const total_comissao = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
-    const { data: fechamento } = await supabase.from('fechamentos_comissao')
-      .select('id, status, pago_em').eq('salao_id', req.salao_id)
-      .eq('profissional_id', p.id).eq('periodo_inicio', ini).maybeSingle();
     return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao, fechamento };
   }));
   res.json(resultado);
 });
 
 app.post('/api/comissoes/fechar', auth, async (req, res) => {
-  const { profissional_id, total_comissao, periodo_inicio, periodo_fim } = req.body;
+  const { profissional_id, periodo_inicio, periodo_fim } = req.body;
   const now = new Date();
   const ini = periodo_inicio || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
   const fim = periodo_fim    || new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
 
   try {
+    // Calcula os totais reais a partir dos agendamentos concluídos do período
+    // (não confia em valor mandado pelo frontend — sempre recalcula no servidor)
+    const { data: svcs } = await supabase.from('agendamento_servicos')
+      .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
+      .eq('agendamentos.profissional_id', profissional_id)
+      .eq('agendamentos.status', 'concluido')
+      .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
+      .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
+
+    const total_servicos = svcs?.length || 0;
+    const total_bruto     = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
+    const total_comissao  = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+
+    if (total_servicos === 0) {
+      return res.status(400).json({ error: 'Nenhum serviço concluído neste período para fechar.' });
+    }
+
     // Verifica se já existe fechamento para este período
     const { data: existing } = await supabase.from('fechamentos_comissao')
-      .select('id').eq('salao_id', req.salao_id)
+      .select('id, status').eq('salao_id', req.salao_id)
       .eq('profissional_id', profissional_id).eq('periodo_inicio', ini).maybeSingle();
+
+    if (existing && existing.status === 'pago') {
+      return res.status(409).json({ error: 'Este período já foi fechado e pago anteriormente.' });
+    }
 
     let data, error;
     if (existing) {
       // Atualiza o existente
       ({ data, error } = await supabase.from('fechamentos_comissao')
-        .update({ total_comissao: total_comissao || 0, status: 'pago', pago_em: new Date(), periodo_fim: fim })
+        .update({
+          total_comissao, total_bruto, total_servicos,
+          status: 'pago', pago_em: new Date(), periodo_fim: fim
+        })
         .eq('id', existing.id).select().single());
     } else {
       // Insere novo
       ({ data, error } = await supabase.from('fechamentos_comissao')
-        .insert({ salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
-                  total_comissao: total_comissao || 0, total_servicos: 0, total_bruto: 0,
-                  status: 'pago', pago_em: new Date() })
+        .insert({
+          salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
+          total_comissao, total_bruto, total_servicos,
+          status: 'pago', pago_em: new Date()
+        })
         .select().single());
     }
     if (error) throw error;
