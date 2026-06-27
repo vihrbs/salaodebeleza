@@ -349,7 +349,7 @@ tbody tr:hover{background:#F9FAFB}
       </div>
       <div class="g31" style="margin-bottom:14px">
         <div class="card">
-          <div class="crow"><span class="ch">Agenda de Hoje</span><button class="btn btnp btnsm" onclick="openM('m-ag')">+ Novo</button></div>
+          <div class="crow"><span class="ch">Próximos 3 Dias</span><button class="btn btnp btnsm" onclick="openM('m-ag')">+ Novo</button></div>
           <div id="dash-tl"><div class="lc"><div class="spin"></div></div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:13px">
@@ -368,7 +368,7 @@ tbody tr:hover{background:#F9FAFB}
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-wrap:wrap">
         <input type="date" class="fc" id="ag-dt" style="width:auto" onchange="loadAgenda()"/>
         <select class="fc" id="ag-prf" style="width:auto" onchange="loadAgenda()"><option value="">Todos profissionais</option></select>
-        <button class="btn btns btnsm" onclick="document.getElementById('ag-dt').value=today();loadAgenda()">Hoje</button>
+        <button class="btn btns btnsm" onclick="document.getElementById('ag-dt').value='';loadAgenda()">Próximos 3 dias</button>
         <button class="btn btnp" style="margin-left:auto" onclick="openM('m-ag')">+ Novo Agendamento</button>
       </div>
       <div class="card">
@@ -1189,15 +1189,20 @@ function loadKPIs() {
 }
 
 function loadDashTl() {
-  apiFetch('/api/dashboard/agenda-hoje').then(function(r){
+  var hojeStr = today();
+  var d3 = new Date(); d3.setDate(d3.getDate()+2);
+  var fimStr = d3.getFullYear()+'-'+String(d3.getMonth()+1).padStart(2,'0')+'-'+String(d3.getDate()).padStart(2,'0');
+  var params = new URLSearchParams({ data_inicio: hojeStr, data_fim: fimStr });
+  apiFetch('/api/agendamentos?' + params).then(function(r){
     renderTl(r || []);
   }).catch(function(){ renderTl(DEMO ? D.ags : []); });
 }
 
 function renderTl(list) {
   var el = document.getElementById('dash-tl');
-  if (!list || !list.length) { el.innerHTML='<div class="empty">📅 Nenhum agendamento hoje</div>'; return; }
-  el.innerHTML = list.map(function(a){
+  if (!list || !list.length) { el.innerHTML='<div class="empty">📅 Nenhum agendamento nos próximos 3 dias</div>'; return; }
+
+  function itemAgendamento(a) {
     var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos && s.servicos.nome; }).join(', ') || '—';
     return '<div class="tli" onclick="toast(\'' + (a.clientes&&a.clientes.nome||'').replace(/'/g,"\\'") + '\',\'inf\')">' +
       '<div style="font-size:.73rem;font-weight:700;min-width:38px">' + fhr(a.data_hora) + '</div>' +
@@ -1208,7 +1213,29 @@ function renderTl(list) {
       '<strong style="font-size:.78rem;min-width:58px;text-align:right">' + brl(a.valor_total) + '</strong>' +
       '<button class="btnic btn" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'concluido\')" title="Concluir">✅</button>' +
       '</div>';
-  }).join('');
+  }
+
+  // Agrupa por dia (horário de Brasília)
+  var grupos = {};
+  list.forEach(function(a){
+    var dt = new Date(a.data_hora);
+    var brasil = new Date(dt.getTime() - 3*60*60*1000);
+    var chave = brasil.getUTCFullYear()+'-'+String(brasil.getUTCMonth()+1).padStart(2,'0')+'-'+String(brasil.getUTCDate()).padStart(2,'0');
+    if (!grupos[chave]) grupos[chave] = [];
+    grupos[chave].push(a);
+  });
+
+  var diasOrdenados = Object.keys(grupos).sort();
+  var hojeStr = today();
+  var html = '';
+  diasOrdenados.forEach(function(dia){
+    var dt = new Date(dia+'T12:00:00');
+    var rotulo = dia === hojeStr ? 'Hoje' : dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+    rotulo = rotulo.charAt(0).toUpperCase() + rotulo.slice(1);
+    html += '<div style="font-size:.72rem;font-weight:800;color:var(--ac3);padding:8px 4px 4px;text-transform:uppercase;letter-spacing:.02em">' + rotulo + '</div>';
+    html += grupos[dia].map(itemAgendamento).join('');
+  });
+  el.innerHTML = html;
 }
 
 function mudaStatus(id, status) {
@@ -1303,22 +1330,40 @@ function renderCal() {
 function loadAgenda() {
   var data = document.getElementById('ag-dt').value;
   var pro  = document.getElementById('ag-prf').value;
+  var params = new URLSearchParams();
+
   if (data) {
+    // Visão de um dia específico
     var dt = new Date(data+'T12:00');
     document.getElementById('ag-ttl').textContent = 'Agenda — ' + dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+    params.set('data', data);
+    if (pro) params.set('profissional_id', pro);
+    apiFetch('/api/agendamentos?' + params).then(function(r){
+      renderAgenda(r || (DEMO ? D.ags.filter(function(a){ return a.data_hora.startsWith(data); }) : []), false);
+    }).catch(function(){ renderAgenda(DEMO ? D.ags.filter(function(a){ return a.data_hora.startsWith(data); }) : [], false); });
+  } else {
+    // Visão padrão: próximos 3 dias agrupados
+    var hojeStr = today();
+    var d3 = new Date(); d3.setDate(d3.getDate()+2);
+    var fimStr = d3.getFullYear()+'-'+String(d3.getMonth()+1).padStart(2,'0')+'-'+String(d3.getDate()).padStart(2,'0');
+    document.getElementById('ag-ttl').textContent = 'Agenda — Próximos 3 dias';
+    params.set('data_inicio', hojeStr);
+    params.set('data_fim', fimStr);
+    if (pro) params.set('profissional_id', pro);
+    apiFetch('/api/agendamentos?' + params).then(function(r){
+      renderAgenda(r || (DEMO ? D.ags : []), true);
+    }).catch(function(){ renderAgenda(DEMO ? D.ags : [], true); });
   }
-  var params = new URLSearchParams();
-  if (data) params.set('data', data);
-  if (pro)  params.set('profissional_id', pro);
-  apiFetch('/api/agendamentos?' + params).then(function(r){
-    renderAgenda(r || (DEMO ? D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); }) : []));
-  }).catch(function(){ renderAgenda(DEMO ? D.ags.filter(function(a){ return !data || a.data_hora.startsWith(data); }) : []); });
 }
 
-function renderAgenda(list) {
+function renderAgenda(list, agrupado) {
   var tb = document.getElementById('ag-tb');
-  if (!list || !list.length) { tb.innerHTML='<tr><td colspan="7" class="empty">📅 Nenhum agendamento neste dia</td></tr>'; return; }
-  tb.innerHTML = list.map(function(a){
+  if (!list || !list.length) {
+    tb.innerHTML='<tr><td colspan="7" class="empty">📅 Nenhum agendamento ' + (agrupado ? 'nos próximos 3 dias' : 'neste dia') + '</td></tr>';
+    return;
+  }
+
+  function linhaAgendamento(a) {
     var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).join(', ') || '—';
     return '<tr onclick="toast(\'' + (a.clientes&&a.clientes.nome||'').replace(/'/g,"\\'") + '\',\'inf\')">' +
       '<td><strong>' + fhr(a.data_hora) + '</strong></td>' +
@@ -1332,7 +1377,34 @@ function renderAgenda(list) {
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'concluido\')" title="Concluir">✅</button>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'cancelado\')" title="Cancelar">✕</button>' +
       '</div></td></tr>';
-  }).join('');
+  }
+
+  if (!agrupado) {
+    tb.innerHTML = list.map(linhaAgendamento).join('');
+    return;
+  }
+
+  // Agrupa por dia (chave AAAA-MM-DD em horário de Brasília)
+  var grupos = {};
+  list.forEach(function(a){
+    var dt = new Date(a.data_hora);
+    var brasil = new Date(dt.getTime() - 3*60*60*1000);
+    var chave = brasil.getUTCFullYear()+'-'+String(brasil.getUTCMonth()+1).padStart(2,'0')+'-'+String(brasil.getUTCDate()).padStart(2,'0');
+    if (!grupos[chave]) grupos[chave] = [];
+    grupos[chave].push(a);
+  });
+
+  var diasOrdenados = Object.keys(grupos).sort();
+  var hojeStr = today();
+  var html = '';
+  diasOrdenados.forEach(function(dia){
+    var dt = new Date(dia+'T12:00:00');
+    var rotulo = dia === hojeStr ? 'Hoje' : dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+    rotulo = rotulo.charAt(0).toUpperCase() + rotulo.slice(1);
+    html += '<tr style="background:var(--bg)"><td colspan="7" style="font-weight:800;font-size:.78rem;padding:10px 14px;color:var(--ac3)">📅 ' + rotulo + '</td></tr>';
+    html += grupos[dia].map(linhaAgendamento).join('');
+  });
+  tb.innerHTML = html;
 }
 
 // ── CLIENTES ────────────────────────────────────────────
