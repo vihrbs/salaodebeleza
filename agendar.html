@@ -359,7 +359,7 @@ function loadCalendario() {
   for (var i = 0; i < 14; i++) {
     var d = new Date();
     d.setDate(d.getDate() + i);
-    var iso = d.toISOString().split('T')[0];
+    var iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
     html2 += '<div class="date-pill" data-date="'+iso+'" onclick="selectData(\''+iso+'\', this)">' +
       '<div class="date-dow">' + dowNames[d.getDay()] + '</div>' +
       '<div class="date-day">' + d.getDate() + '</div>' +
