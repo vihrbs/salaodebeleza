@@ -382,6 +382,7 @@ tbody tr:hover{background:#F9FAFB}
     <div class="page" id="page-clientes">
       <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
         <input class="fc" style="max-width:240px" placeholder="🔍 Buscar cliente..." oninput="deb(()=>loadClientes(this.value),400)()"/>
+        <button class="btn btns" onclick="abrirClientesInativos()">⏳ Inativos</button>
         <button class="btn btns" onclick="openImport('clientes')" style="margin-left:auto">📥 Importar</button>
         <button class="btn btnp" onclick="openM('m-cli')">+ Novo Cliente</button>
       </div>
@@ -485,6 +486,26 @@ tbody tr:hover{background:#F9FAFB}
           <div style="font-size:.7rem;color:var(--t3);margin-bottom:10px">A URL padrão já está configurada no sistema. Altere apenas se mudar o Railway.</div>
           <button class="btn btnp" onclick="saveApi()" style="margin-bottom:14px">Atualizar URL da API</button>
           <div style="padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.7rem;color:var(--t2)" id="api-st">Carregando...</div>
+        </div>
+
+        <div class="card">
+          <div class="ct">Horário de Funcionamento</div>
+          <div style="font-size:.75rem;color:var(--t3);margin-bottom:12px">Define os horários disponíveis no link de agendamento online.</div>
+          <div class="fr fg">
+            <div><label class="fl">Abre às</label><input type="time" class="fc" id="cfg-h-abre" value="08:00"/></div>
+            <div><label class="fl">Fecha às</label><input type="time" class="fc" id="cfg-h-fecha" value="19:00"/></div>
+          </div>
+          <label class="fl">Dias fechados</label>
+          <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap" id="cfg-dias-fechado">
+            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="0" style="accent-color:var(--ac)"/>Dom</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="1" style="accent-color:var(--ac)"/>Seg</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="2" style="accent-color:var(--ac)"/>Ter</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="3" style="accent-color:var(--ac)"/>Qua</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="4" style="accent-color:var(--ac)"/>Qui</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="5" style="accent-color:var(--ac)"/>Sex</label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="6" style="accent-color:var(--ac)"/>Sáb</label>
+          </div>
+          <button class="btn btnp" onclick="saveHorarioFuncionamento()">Salvar Horário</button>
         </div>
         <div class="card" style="grid-column:1/-1;background:linear-gradient(135deg,#9A5B3F,#7A4530);color:#fff">
           <div class="crow"><span class="ch" style="color:#fff">🔗 Link de Agendamento Online</span></div>
@@ -856,6 +877,18 @@ tbody tr:hover{background:#F9FAFB}
   </div>
 </div>
 
+<!-- Modal Clientes Inativos -->
+<div class="mov" id="m-inativos">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt">⏳ Clientes Inativos</span><button class="mx" onclick="closeM('m-inativos')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Clientes sem agendamento há 60 dias ou mais. Use o link de WhatsApp para convidar de volta.</div>
+      <div id="inativos-lst"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-inativos')">Fechar</button></div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <!-- Modal Perfil Cliente -->
@@ -1105,7 +1138,7 @@ function nav(page, el) {
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('page-'+page).classList.add('on');
   el.classList.add('on');
-  if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); }
+  if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
 }
 
 // ── MODALS ──────────────────────────────────────────────
@@ -1273,9 +1306,27 @@ function renderTl(list) {
 
 function mudaStatus(id, status) {
   apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{status:status}})
-    .then(function(){ loadDashTl(); loadAgenda(); })
+    .then(function(r){
+      loadDashTl(); loadAgenda();
+      if (status === 'concluido' && r && r.whatsapp_link) {
+        mostrarToastWhatsapp(r.whatsapp_link);
+      }
+    })
     .catch(function(){});
   toast('Status: ' + (SL[status]||status), 'ok');
+}
+
+function mostrarToastWhatsapp(link) {
+  var div = document.createElement('div');
+  div.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#fff;border:1px solid var(--bd);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.12);padding:14px 16px;z-index:9999;display:flex;align-items:center;gap:12px;max-width:340px;animation:slideUp .3s';
+  div.innerHTML =
+    '<div style="font-size:1.6rem">💬</div>' +
+    '<div style="flex:1"><div style="font-size:.82rem;font-weight:700;margin-bottom:2px">Atendimento concluído!</div>' +
+    '<div style="font-size:.74rem;color:var(--t2)">Enviar mensagem de avaliação?</div></div>' +
+    '<button onclick="window.open(\'' + link + '\',\'_blank\');this.closest(\'div[style*=fixed]\').remove()" style="background:#25D366;color:#fff;border:none;border-radius:50px;padding:8px 14px;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap">Enviar</button>' +
+    '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:1rem;padding:0 4px">✕</button>';
+  document.body.appendChild(div);
+  setTimeout(function(){ if (div.parentNode) div.remove(); }, 15000);
 }
 
 function loadTopSvc() {
@@ -1441,6 +1492,39 @@ function renderAgenda(list, agrupado) {
 }
 
 // ── CLIENTES ────────────────────────────────────────────
+function abrirClientesInativos() {
+  openM('m-inativos');
+  document.getElementById('inativos-lst').innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  apiFetch('/api/clientes/inativos?dias=60').then(function(r){
+    renderInativos(r || []);
+  }).catch(function(e){
+    document.getElementById('inativos-lst').innerHTML = '<div class="empty">Erro ao carregar lista de inativos.</div>';
+  });
+}
+
+function renderInativos(list) {
+  var el = document.getElementById('inativos-lst');
+  if (!list.length) {
+    el.innerHTML = '<div class="empty">🎉 Nenhum cliente inativo — todos voltaram recentemente!</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(c){
+    var ultimaVisita = c.ultimo_agendamento ? fdt(c.ultimo_agendamento+'T12:00') : 'Nunca agendou';
+    var msg = 'Oi ' + c.nome.split(' ')[0] + '! Notamos que você não vem nos visitar há um tempo. Que tal agendar um horário? Estamos com saudade! 😊';
+    var telLimpo = (c.telefone||'').replace(/\D/g,'');
+    var telComPais = telLimpo.length === 11 ? '55'+telLimpo : telLimpo;
+    var linkWpp = telLimpo ? 'https://wa.me/' + telComPais + '?text=' + encodeURIComponent(msg) : null;
+    return '<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:8px">' +
+      '<div style="width:36px;height:36px;border-radius:50%;background:' + (c.cor||COLS[0]) + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.82rem;flex-shrink:0">' + c.nome[0] + '</div>' +
+      '<div style="flex:1"><div style="font-weight:600;font-size:.85rem">' + c.nome + '</div>' +
+      '<div style="font-size:.7rem;color:var(--t3)">Última visita: ' + ultimaVisita + ' · ' + (c.historico_count||0) + ' visitas no total</div></div>' +
+      (linkWpp
+        ? '<a href="'+linkWpp+'" target="_blank" style="background:#25D366;color:#fff;border-radius:50px;padding:7px 14px;font-size:.74rem;font-weight:700;text-decoration:none;white-space:nowrap">💬 Chamar</a>'
+        : '<span style="font-size:.7rem;color:var(--t3)">Sem telefone</span>') +
+      '</div>';
+  }).join('');
+}
+
 function loadClientes(q) {
   q = q || '';
   apiFetch('/api/clientes?q=' + encodeURIComponent(q) + '&limit=100').then(function(r){
@@ -1536,11 +1620,21 @@ function loadLan(tipo) {
 
 function renderLan(list) {
   document.getElementById('lan-lst').innerHTML = list.map(function(l){
+    var statusBadge = l.pago
+      ? '<span class="badge bs" style="font-size:.62rem">Pago</span>'
+      : '<span class="badge bw" style="font-size:.62rem;cursor:pointer" onclick="event.stopPropagation();marcarPago(\'' + l.id + '\',true)" title="Clique para marcar como pago">Pendente</span>';
     return '<div style="display:flex;align-items:center;gap:11px;padding:8px 9px;border-radius:var(--rs);transition:background .1s;cursor:pointer" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
       '<div style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.85rem;background:' + (l.tipo==='entrada'?'#D6FAF0':'#FEE2E2') + ';flex-shrink:0">' + (l.tipo==='entrada'?'💰':'📤') + '</div>' +
       '<div style="flex:1"><div style="font-size:.78rem;font-weight:600">' + l.descricao + '</div><div style="font-size:.68rem;color:var(--t3)">' + fdt(l.data+'T12:00') + ' · ' + (l.forma_pgto||'') + '</div></div>' +
+      statusBadge +
       '<div style="font-size:.82rem;font-weight:700;color:' + (l.tipo==='entrada'?'var(--ok)':'var(--er)') + '">' + (l.tipo==='entrada'?'+':'-') + brl(l.valor) + '</div></div>';
   }).join('');
+}
+
+function marcarPago(id, pago) {
+  apiFetch('/api/financeiro/lancamentos/' + id, {method:'PATCH', body:{pago:pago}})
+  .then(function(){ toast(pago ? 'Marcado como pago! ✅' : 'Marcado como pendente','ok'); loadLan(); loadFin(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // ── ESTOQUE ─────────────────────────────────────────────
@@ -1858,6 +1952,37 @@ function saveConfig() {
   })
   .catch(function(e){ toast('Erro ao salvar: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled=false; btn.textContent='Salvar Alterações'; });
+}
+
+function saveHorarioFuncionamento() {
+  var btn = document.querySelector('[onclick="saveHorarioFuncionamento()"]');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  var diasFechado = Array.from(document.querySelectorAll('#cfg-dias-fechado input:checked')).map(function(cb){ return parseInt(cb.value); });
+  var body = {
+    configuracoes: {
+      horario_abre: document.getElementById('cfg-h-abre').value || '08:00',
+      horario_fecha: document.getElementById('cfg-h-fecha').value || '19:00',
+      dias_fechado: diasFechado
+    }
+  };
+  apiFetch('/api/saloes/meu', {method:'PUT', body:body})
+  .then(function(){ toast('Horário de funcionamento salvo! ✅','ok'); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Horário'; });
+}
+
+function carregarHorarioFuncionamento() {
+  apiFetch('/api/saloes/meu').then(function(r){
+    if (!r || !r.configuracoes) return;
+    var cfg = r.configuracoes;
+    if (cfg.horario_abre)  document.getElementById('cfg-h-abre').value  = cfg.horario_abre;
+    if (cfg.horario_fecha) document.getElementById('cfg-h-fecha').value = cfg.horario_fecha;
+    if (cfg.dias_fechado) {
+      document.querySelectorAll('#cfg-dias-fechado input').forEach(function(cb){
+        cb.checked = cfg.dias_fechado.includes(parseInt(cb.value));
+      });
+    }
+  }).catch(function(){});
 }
 function saveApi() {
   var url = (document.getElementById('cfg-api').value||'').trim().replace(/\/+$/,'');
