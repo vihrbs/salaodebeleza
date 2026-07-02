@@ -495,18 +495,29 @@ tbody tr:hover{background:#F9FAFB}
             <div><label class="fl">Abre às</label><input type="time" class="fc" id="cfg-h-abre" value="08:00"/></div>
             <div><label class="fl">Fecha às</label><input type="time" class="fc" id="cfg-h-fecha" value="19:00"/></div>
           </div>
-          <label class="fl">Dias fechados</label>
-          <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap" id="cfg-dias-fechado">
-            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="0" style="accent-color:var(--ac)"/>Dom</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="1" style="accent-color:var(--ac)"/>Seg</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="2" style="accent-color:var(--ac)"/>Ter</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="3" style="accent-color:var(--ac)"/>Qua</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="4" style="accent-color:var(--ac)"/>Qui</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="5" style="accent-color:var(--ac)"/>Sex</label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;padding:6px 10px;border:1px solid var(--bd);border-radius:50px;cursor:pointer"><input type="checkbox" value="6" style="accent-color:var(--ac)"/>Sáb</label>
+          <label class="fl">Dias da semana — clique para marcar como <strong>fechado</strong></label>
+          <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap" id="cfg-dias-fechado">
+            <button type="button" class="dia-toggle" data-dia="0" data-fechado="false" onclick="toggleDiaFechado(this)">Dom</button>
+            <button type="button" class="dia-toggle" data-dia="1" data-fechado="false" onclick="toggleDiaFechado(this)">Seg</button>
+            <button type="button" class="dia-toggle" data-dia="2" data-fechado="false" onclick="toggleDiaFechado(this)">Ter</button>
+            <button type="button" class="dia-toggle" data-dia="3" data-fechado="false" onclick="toggleDiaFechado(this)">Qua</button>
+            <button type="button" class="dia-toggle" data-dia="4" data-fechado="false" onclick="toggleDiaFechado(this)">Qui</button>
+            <button type="button" class="dia-toggle" data-dia="5" data-fechado="false" onclick="toggleDiaFechado(this)">Sex</button>
+            <button type="button" class="dia-toggle" data-dia="6" data-fechado="false" onclick="toggleDiaFechado(this)">Sáb</button>
           </div>
+          <div style="font-size:.68rem;color:var(--t3);margin-bottom:14px">🟢 verde = aberto neste dia · 🔴 vermelho = fechado neste dia</div>
           <button class="btn btnp" onclick="saveHorarioFuncionamento()">Salvar Horário</button>
         </div>
+
+        <style>
+          .dia-toggle {
+            font-size:.74rem; font-weight:700; padding:8px 14px; border-radius:50px; cursor:pointer;
+            border:1.5px solid #16A34A; background:#DCFCE7; color:#16A34A; transition:all .15s;
+          }
+          .dia-toggle[data-fechado="true"] {
+            border-color:#DC2626; background:#FEE2E2; color:#DC2626;
+          }
+        </style>
         <div class="card" style="grid-column:1/-1;background:linear-gradient(135deg,#9A5B3F,#7A4530);color:#fff">
           <div class="crow"><span class="ch" style="color:#fff">🔗 Link de Agendamento Online</span></div>
           <div style="font-size:.82rem;opacity:.9;margin:6px 0 14px;line-height:1.5">Envie esse link para seus clientes agendarem horário sozinhos, sem precisar te ligar.</div>
@@ -1401,13 +1412,64 @@ function renderDashChart() {
 }
 
 function renderCal() {
+  var agora = new Date();
+  var ano   = agora.getFullYear();
+  var mes   = agora.getMonth(); // 0-indexed
+  var hoje  = agora.getDate();
+
+  var nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  // Atualiza o título do card com o mês real
+  var cardTitle = document.querySelector('#page-dashboard .ct');
+  if (cardTitle) cardTitle.textContent = nomesMes[mes] + ' ' + ano;
+
+  var primeiroDia = new Date(ano, mes, 1).getDay(); // dia da semana do dia 1
+  var ultimoDia   = new Date(ano, mes + 1, 0).getDate(); // total de dias no mês
+
   var el = document.getElementById('mcal');
-  var hev = [5,8,10,15,18,22,25,26,27,28,29];
-  el.innerHTML = ['D','S','T','Q','Q','S','S'].map(function(d){ return '<div class="mcdn">' + d + '</div>'; }).join('');
-  for (var i=0; i<5; i++) el.innerHTML += '<div class="mcd oth">' + (25+i) + '</div>';
-  for (var d=1; d<=31; d++) {
-    el.innerHTML += '<div class="mcd ' + (d===29?'today':'') + ' ' + (hev.indexOf(d)>=0&&d!==29?'hev':'') + '">' + d + '</div>';
+  var html = ['D','S','T','Q','Q','S','S'].map(function(d){ return '<div class="mcdn">' + d + '</div>'; }).join('');
+
+  // Dias do mês anterior (preenchimento)
+  var diasMesAnterior = new Date(ano, mes, 0).getDate();
+  for (var i = primeiroDia - 1; i >= 0; i--) {
+    html += '<div class="mcd oth">' + (diasMesAnterior - i) + '</div>';
   }
+
+  // Dias do mês atual
+  for (var d = 1; d <= ultimoDia; d++) {
+    var isHoje = d === hoje;
+    html += '<div class="mcd' + (isHoje ? ' today' : '') + '" data-dia="' + d + '">' + d + '</div>';
+  }
+
+  el.innerHTML = html;
+
+  // Busca agendamentos do mês real e marca os dias
+  var anoStr = String(ano);
+  var mesStr = String(mes + 1).padStart(2,'0');
+  var ini = anoStr + '-' + mesStr + '-01';
+  var fim = anoStr + '-' + mesStr + '-' + String(ultimoDia).padStart(2,'0');
+
+  apiFetch('/api/agendamentos?data_inicio=' + ini + '&data_fim=' + fim).then(function(r) {
+    var list = r || [];
+    var diasComAg = {};
+    list.forEach(function(a) {
+      if (!a.data_hora) return;
+      var dt = new Date(a.data_hora);
+      var dtBrasil = new Date(dt.getTime() - 3*60*60*1000);
+      if (dtBrasil.getUTCMonth() === mes && dtBrasil.getUTCFullYear() === ano) {
+        var dia = dtBrasil.getUTCDate();
+        if (!diasComAg[dia]) diasComAg[dia] = 0;
+        diasComAg[dia]++;
+      }
+    });
+    // Marca os dias com agendamentos
+    Object.keys(diasComAg).forEach(function(dia) {
+      var cell = el.querySelector('[data-dia="' + dia + '"]');
+      if (cell && !cell.classList.contains('today')) {
+        cell.classList.add('hev');
+      }
+    });
+  }).catch(function(){}); // silencioso se falhar
 }
 
 // ── AGENDA ──────────────────────────────────────────────
@@ -1954,10 +2016,17 @@ function saveConfig() {
   .finally(function(){ btn.disabled=false; btn.textContent='Salvar Alterações'; });
 }
 
+function toggleDiaFechado(btn) {
+  var fechado = btn.dataset.fechado === 'true';
+  btn.dataset.fechado = (!fechado).toString();
+}
+
 function saveHorarioFuncionamento() {
   var btn = document.querySelector('[onclick="saveHorarioFuncionamento()"]');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  var diasFechado = Array.from(document.querySelectorAll('#cfg-dias-fechado input:checked')).map(function(cb){ return parseInt(cb.value); });
+  var diasFechado = Array.from(document.querySelectorAll('#cfg-dias-fechado .dia-toggle'))
+    .filter(function(b){ return b.dataset.fechado === 'true'; })
+    .map(function(b){ return parseInt(b.dataset.dia); });
   var body = {
     configuracoes: {
       horario_abre: document.getElementById('cfg-h-abre').value || '08:00',
@@ -1977,11 +2046,11 @@ function carregarHorarioFuncionamento() {
     var cfg = r.configuracoes;
     if (cfg.horario_abre)  document.getElementById('cfg-h-abre').value  = cfg.horario_abre;
     if (cfg.horario_fecha) document.getElementById('cfg-h-fecha').value = cfg.horario_fecha;
-    if (cfg.dias_fechado) {
-      document.querySelectorAll('#cfg-dias-fechado input').forEach(function(cb){
-        cb.checked = cfg.dias_fechado.includes(parseInt(cb.value));
-      });
-    }
+    var diasFechado = cfg.dias_fechado || [];
+    document.querySelectorAll('#cfg-dias-fechado .dia-toggle').forEach(function(btn){
+      var dia = parseInt(btn.dataset.dia);
+      btn.dataset.fechado = diasFechado.includes(dia) ? 'true' : 'false';
+    });
   }).catch(function(){});
 }
 function saveApi() {
