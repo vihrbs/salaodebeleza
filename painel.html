@@ -900,6 +900,25 @@ tbody tr:hover{background:#F9FAFB}
   </div>
 </div>
 
+<!-- ── TUTORIAL PRIMEIRO ACESSO ─────────────────── -->
+<div id="tutorial-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,13,.82);z-index:10000;backdrop-filter:blur(3px)"></div>
+<div id="tutorial-box" style="display:none;position:fixed;z-index:10001;background:#fff;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.18);padding:28px 28px 22px;max-width:380px;width:calc(100vw - 32px)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+    <div style="font-size:2rem" id="tut-icon">🏠</div>
+    <button onclick="fecharTutorial()" style="background:none;border:none;font-size:1.2rem;color:#9CA3AF;cursor:pointer;padding:0;line-height:1">✕</button>
+  </div>
+  <div style="font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7C5CFC;margin-bottom:6px" id="tut-step-label">Passo 1 de 6</div>
+  <div style="font-size:1.1rem;font-weight:800;color:#1C1A17;margin-bottom:8px;line-height:1.3" id="tut-title">Bem-vindo ao Beleza Pro! 👋</div>
+  <div style="font-size:.84rem;color:#6B7280;line-height:1.6;margin-bottom:20px" id="tut-desc">Vamos te mostrar em menos de 1 minuto como usar o sistema. Você pode pular a qualquer momento.</div>
+  <div style="display:flex;gap:6px;margin-bottom:18px" id="tut-dots"></div>
+  <div style="display:flex;gap:10px">
+    <button onclick="fecharTutorial()" style="flex:1;padding:11px;border:1.5px solid #E5E7EB;border-radius:50px;background:none;font-size:.82rem;font-weight:600;color:#6B7280;cursor:pointer">Pular tutorial</button>
+    <button onclick="proximoPasso()" id="tut-btn-next" style="flex:2;padding:11px;border:none;border-radius:50px;background:#7C5CFC;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer">Próximo →</button>
+  </div>
+</div>
+
+<div id="tutorial-highlight" style="display:none;position:fixed;z-index:9999;border-radius:12px;box-shadow:0 0 0 9999px rgba(15,15,13,.75);pointer-events:none;transition:all .35s"></div>
+
 <div id="toasts"></div>
 
 <!-- Modal Perfil Cliente -->
@@ -1119,6 +1138,7 @@ function enterApp(nome, salon, mode, perfil, permissoes) {
   loadAll();
   setTimeout(checkTrial, 2000);
   iniciarAtualizacaoAutomatica();
+  setTimeout(iniciarTutorial, 1200);
   
   // Verifica retorno do Mercado Pago
   var urlParams = new URLSearchParams(window.location.search);
@@ -2657,6 +2677,157 @@ function salvarEditPerms() {
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled=false; btn.textContent='Salvar Permissões'; });
+}
+
+// ── TUTORIAL PRIMEIRO ACESSO ────────────────────────
+var TUT_PASSO = 0;
+var TUT_PASSOS = [
+  {
+    icon: '👋',
+    titulo: 'Bem-vindo ao Beleza Pro!',
+    desc: 'Seu sistema completo de gestão para salões. Vamos te mostrar os módulos principais em poucos passos.',
+    alvo: null
+  },
+  {
+    icon: '📅',
+    titulo: 'Agenda',
+    desc: 'Aqui ficam todos os agendamentos. Você vê os próximos 3 dias automaticamente, e pode filtrar por data ou profissional.',
+    alvo: '#tb-nav .nb:nth-child(2)',
+    pagina: 'agenda'
+  },
+  {
+    icon: '👥',
+    titulo: 'Clientes',
+    desc: 'Cadastro completo dos seus clientes. O sistema conta visitas, total gasto e avisa quem está inativo há mais de 60 dias.',
+    alvo: '#tb-nav .nb:nth-child(3)',
+    pagina: 'clientes'
+  },
+  {
+    icon: '💰',
+    titulo: 'Financeiro',
+    desc: 'Controle entradas e saídas. Clique em "Pendente" para marcar um lançamento como pago.',
+    alvo: '#tb-nav .nb:nth-child(4)',
+    pagina: 'financeiro'
+  },
+  {
+    icon: '🔗',
+    titulo: 'Link de Agendamento',
+    desc: 'Vá em Config para pegar o link do seu salão. Mande para clientes agendarem sozinhos, sem precisar te ligar.',
+    alvo: '#tb-nav .nb:last-child',
+    pagina: 'config'
+  },
+  {
+    icon: '🎉',
+    titulo: 'Tudo pronto!',
+    desc: 'Você já sabe o essencial. Explore à vontade — qualquer dúvida, clique no ícone ❓ no canto superior direito.',
+    alvo: null
+  }
+];
+
+function iniciarTutorial() {
+  if (localStorage.getItem('bpro_tutorial_ok')) return; // já viu
+  TUT_PASSO = 0;
+  renderPasso();
+  document.getElementById('tutorial-overlay').style.display = 'block';
+  document.getElementById('tutorial-box').style.display = 'block';
+  posicionarBox();
+}
+
+function fecharTutorial() {
+  document.getElementById('tutorial-overlay').style.display = 'none';
+  document.getElementById('tutorial-box').style.display = 'none';
+  document.getElementById('tutorial-highlight').style.display = 'none';
+  localStorage.setItem('bpro_tutorial_ok', '1');
+}
+
+function proximoPasso() {
+  if (TUT_PASSO >= TUT_PASSOS.length - 1) { fecharTutorial(); return; }
+  TUT_PASSO++;
+  renderPasso();
+  posicionarBox();
+}
+
+function renderPasso() {
+  var p = TUT_PASSOS[TUT_PASSO];
+  var total = TUT_PASSOS.length;
+
+  document.getElementById('tut-icon').textContent = p.icon;
+  document.getElementById('tut-step-label').textContent = 'Passo ' + (TUT_PASSO+1) + ' de ' + total;
+  document.getElementById('tut-title').textContent = p.titulo;
+  document.getElementById('tut-desc').textContent = p.desc;
+
+  // Botão final
+  var btn = document.getElementById('tut-btn-next');
+  btn.textContent = TUT_PASSO === total - 1 ? 'Começar a usar! 🚀' : 'Próximo →';
+
+  // Dots de progresso
+  var dots = '';
+  for (var i = 0; i < total; i++) {
+    dots += '<div style="width:' + (i===TUT_PASSO?'22px':'8px') + ';height:8px;border-radius:4px;background:' + (i===TUT_PASSO?'#7C5CFC':'#E5E7EB') + ';transition:all .3s"></div>';
+  }
+  document.getElementById('tut-dots').innerHTML = dots;
+
+  // Navega para a página do passo (se definida)
+  if (p.pagina) {
+    // Usa nav() diretamente em vez de simular clique
+    nav(p.pagina, null);
+  }
+
+  // Destaca o elemento alvo
+  var hl = document.getElementById('tutorial-highlight');
+  setTimeout(function(){
+  if (p.alvo) {
+    var el = document.querySelector(p.alvo);
+    if (el) {
+      var rect = el.getBoundingClientRect();
+      hl.style.display = 'block';
+      hl.style.top    = (rect.top    - 6) + 'px';
+      hl.style.left   = (rect.left   - 6) + 'px';
+      hl.style.width  = (rect.width  + 12) + 'px';
+      hl.style.height = (rect.height + 12) + 'px';
+    } else {
+      hl.style.display = 'none';
+    }
+  } else {
+    hl.style.display = 'none';
+  }
+  }, 300); // aguarda a página renderizar antes de calcular posição
+}
+
+function posicionarBox() {
+  var box = document.getElementById('tutorial-box');
+  var p = TUT_PASSOS[TUT_PASSO];
+  if (!p.alvo) {
+    // Centraliza na tela
+    box.style.top = '50%';
+    box.style.left = '50%';
+    box.style.transform = 'translate(-50%, -50%)';
+    return;
+  }
+  var el = document.querySelector(p.alvo);
+  if (!el) {
+    box.style.top = '50%';
+    box.style.left = '50%';
+    box.style.transform = 'translate(-50%, -50%)';
+    return;
+  }
+  var rect = el.getBoundingClientRect();
+  var bW = Math.min(380, window.innerWidth - 32);
+  var margin = 16;
+
+  // Tenta posicionar abaixo do elemento
+  var top = rect.bottom + margin;
+  var left = rect.left;
+
+  // Ajusta se sair da tela
+  if (left + bW > window.innerWidth - margin) left = window.innerWidth - bW - margin;
+  if (left < margin) left = margin;
+  if (top + 260 > window.innerHeight) top = rect.top - 260 - margin;
+  if (top < margin) top = margin;
+
+  box.style.top = top + 'px';
+  box.style.left = left + 'px';
+  box.style.transform = 'none';
 }
 
 // ── INIT ────────────────────────────────────────────────
