@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Beleza Pro">
+<meta name="theme-color" content="#9A5B3F">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <title>Beleza Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,wght@0,700;1,400&display=swap" rel="stylesheet"/>
 <style>
@@ -2929,6 +2937,105 @@ window.addEventListener('load', function(){
     <path d="M12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.107 1.51 5.845L.057 23.428a.75.75 0 0 0 .92.92l5.638-1.459A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.726 9.726 0 0 1-4.964-1.358l-.356-.211-3.685.953.977-3.596-.232-.37A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
   </svg>
 </a>
+
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js')
+      .then(function(reg) { console.log('SW registrado:', reg.scope); })
+      .catch(function(e) { console.log('SW falhou:', e); });
+  });
+}
+
+// ── BANNER DE INSTALAÇÃO PWA ─────────────────────────
+var deferredPrompt = null;
+
+// Captura o evento de instalação (Android/Chrome)
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Só mostra se ainda não instalou e não dispensou
+  if (!localStorage.getItem('pwa_dispensado')) {
+    setTimeout(mostrarBannerPWA, 3000); // espera 3s após logar
+  }
+});
+
+function mostrarBannerPWA() {
+  if (document.getElementById('pwa-banner')) return;
+  
+  // Detecta iOS (Safari não tem beforeinstallprompt)
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  
+  // Não mostra se já está instalado como app
+  if (isStandalone) return;
+  // Não mostra em desktop
+  if (window.innerWidth > 900 && !isIOS) return;
+
+  var banner = document.createElement('div');
+  banner.id = 'pwa-banner';
+  banner.style.cssText = 'position:fixed;bottom:72px;left:12px;right:12px;background:#1C1A17;color:#fff;border-radius:16px;padding:14px 16px;z-index:9990;display:flex;align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);animation:slideUp .4s ease';
+
+  if (isIOS) {
+    // iOS: instrução manual pois não tem API de instalação
+    banner.innerHTML =
+      '<div style="width:40px;height:40px;background:#9A5B3F;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.3rem">💇</div>' +
+      '<div style="flex:1">' +
+        '<div style="font-size:.82rem;font-weight:700;margin-bottom:2px">Instale o app!</div>' +
+        '<div style="font-size:.72rem;color:rgba(255,255,255,.7);line-height:1.4">Toque em <strong style="color:#fff">⬆ Compartilhar</strong> e depois <strong style="color:#fff">"Adicionar à tela inicial"</strong></div>' +
+      '</div>' +
+      '<button onclick="dispensarBannerPWA()" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:1.1rem;cursor:pointer;padding:0;flex-shrink:0">✕</button>';
+  } else {
+    // Android: tem API, mostra botão de instalar direto
+    banner.innerHTML =
+      '<div style="width:40px;height:40px;background:#9A5B3F;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.3rem">💇</div>' +
+      '<div style="flex:1">' +
+        '<div style="font-size:.82rem;font-weight:700;margin-bottom:2px">Instale o app!</div>' +
+        '<div style="font-size:.72rem;color:rgba(255,255,255,.7)">Acesse mais rápido, como um app nativo</div>' +
+      '</div>' +
+      '<button onclick="instalarPWA()" style="background:#9A5B3F;color:#fff;border:none;border-radius:50px;padding:8px 16px;font-size:.74rem;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap">Instalar</button>' +
+      '<button onclick="dispensarBannerPWA()" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:1.1rem;cursor:pointer;padding:0 0 0 4px;flex-shrink:0">✕</button>';
+  }
+
+  document.body.appendChild(banner);
+}
+
+function instalarPWA() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function(result) {
+    if (result.outcome === 'accepted') {
+      localStorage.setItem('pwa_dispensado', '1');
+      dispensarBannerPWA();
+    }
+    deferredPrompt = null;
+  });
+}
+
+function dispensarBannerPWA() {
+  var banner = document.getElementById('pwa-banner');
+  if (banner) {
+    banner.style.animation = 'slideDown .3s ease forwards';
+    setTimeout(function(){ if (banner.parentNode) banner.remove(); }, 300);
+  }
+  localStorage.setItem('pwa_dispensado', '1');
+}
+
+// Detecta iOS manualmente (beforeinstallprompt não dispara no Safari)
+(function() {
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isIOS && !isStandalone && !localStorage.getItem('pwa_dispensado')) {
+    setTimeout(mostrarBannerPWA, 3000);
+  }
+})();
+</script>
+
+<style>
+@keyframes slideUp { from { transform: translateY(20px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+@keyframes slideDown { from { transform: translateY(0); opacity:1; } to { transform: translateY(20px); opacity:0; } }
+</style>
 
 </body>
 </html>
