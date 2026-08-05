@@ -632,383 +632,6 @@ select.fc option{background:var(--bg2)}
   </div>
 </div>
 
-<!-- MODALS -->
-<div class="mov" id="m-ag">
-  <div class="mbox lg">
-    <div class="mh"><span class="mt">Novo Agendamento</span><button class="mx" onclick="closeM('m-ag')">✕</button></div>
-    <div class="mb">
-      <div class="fr">
-        <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli"><option value="">Selecionar...</option></select></div>
-        <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro"><option value="">Selecionar...</option></select></div>
-      </div>
-      <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label><div id="ag-svcs" style="padding:4px 0"></div></div>
-      <div class="fr">
-        <div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="ag-d"/></div>
-        <div class="fg"><label class="fl">Horário*</label>
-          <select class="fc" id="ag-h">
-            <option>08:00</option><option>08:30</option><option>09:00</option><option>09:30</option>
-            <option>10:00</option><option>10:30</option><option>11:00</option><option>11:30</option>
-            <option>13:00</option><option>13:30</option><option>14:00</option><option>14:30</option>
-            <option>15:00</option><option>15:30</option><option>16:00</option><option>16:30</option>
-            <option>17:00</option><option>17:30</option>
-          </select>
-        </div>
-      </div>
-      <div class="fg"><label class="fl">Origem</label>
-        <select class="fc" id="ag-or"><option value="backoffice">Backoffice</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option></select>
-      </div>
-      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ag-obs" rows="2" placeholder="Preferências, alergias..."></textarea></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-ag')">Cancelar</button><button class="btn btnp" onclick="saveAg()">✅ Confirmar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-concluir">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">✅ Concluir Atendimento</span><button class="mx" onclick="closeM('m-concluir')">✕</button></div>
-    <div class="mb">
-      <div style="background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs);padding:14px;margin-bottom:16px;font-size:.82rem;color:var(--ink2)" id="concluir-info">—</div>
-      <input type="hidden" id="concluir-id"/>
-      <div class="fg">
-        <label class="fl">Forma de pagamento</label>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="fpg-options">
-          <button type="button" class="fpg-btn" data-val="PIX" onclick="selecionarFpg(this)">💠 PIX</button>
-          <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpg(this)">💵 Dinheiro</button>
-          <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpg(this)">💳 Débito</button>
-          <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpg(this)">💳 Crédito</button>
-        </div>
-      </div>
-    </div>
-    <div class="mf">
-      <button class="btn btns" onclick="closeM('m-concluir')">Cancelar</button>
-      <button class="btn btnp" id="btn-concluir-ok" onclick="confirmarConclusao()">Confirmar pagamento ✅</button>
-    </div>
-  </div>
-</div>
-
-<style>
-.fpg-btn{
-  padding:12px;border:1.5px solid var(--bd);border-radius:var(--rs);
-  background:var(--bg3);color:var(--ink2);font-size:.82rem;font-weight:600;
-  cursor:pointer;transition:all .15s;font-family:inherit;
-}
-.fpg-btn:hover{border-color:var(--bd2);color:var(--ink)}
-.fpg-btn.on{border-color:var(--gold);background:rgba(201,169,110,.1);color:var(--gold)}
-</style>
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Cliente</span><button class="mx" onclick="closeM('m-cli')">✕</button></div>
-    <div class="mb">
-      <div class="fr"><div class="fg"><label class="fl">Nome completo*</label><input class="fc" id="cli-n" placeholder="Ana Paula Silva"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="cli-nasc"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone/WhatsApp</label><input class="fc" id="cli-t" placeholder="(11) 99999-0000"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="cli-e" placeholder="email@email.com"/></div></div>
-      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="cli-o" rows="2" placeholder="Alergias, preferências..."></textarea></div>
-      <div class="fg"><label class="fl">Como nos conheceu?</label><select class="fc" id="cli-k"><option>Instagram</option><option>Indicação</option><option>Google</option><option>Passante</option><option>Outro</option></select></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-cli')">Cancelar</button><button class="btn btnp" onclick="saveCli()">Salvar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-lan">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Lançamento</span><button class="mx" onclick="closeM('m-lan')">✕</button></div>
-    <div class="mb">
-      <div class="fg"><label class="fl">Tipo</label><select class="fc" id="lan-t"><option value="entrada">Entrada (Receita)</option><option value="saida">Saída (Despesa)</option></select></div>
-      <div class="fg"><label class="fl">Descrição*</label><input class="fc" id="lan-d" placeholder="Descrição do lançamento"/></div>
-      <div class="fr"><div class="fg"><label class="fl">Valor (R$)*</label><input type="number" class="fc" id="lan-v" step="0.01" placeholder="0,00"/></div><div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="lan-dt"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Pagamento</label><select class="fc" id="lan-p"><option>PIX</option><option>Dinheiro</option><option>Cartão</option><option>Boleto</option></select></div><div class="fg"><label class="fl">Categoria</label><select class="fc" id="lan-c"><option>Serviço</option><option>Produto</option><option>Aluguel</option><option>Comissão</option><option>Material</option><option>Outros</option></select></div></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-lan')">Cancelar</button><button class="btn btnp" onclick="saveLan()">Lançar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-prod">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Produto</span><button class="mx" onclick="closeM('m-prod')">✕</button></div>
-    <div class="mb">
-      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="p-n" placeholder="Ex.: Tintura L'Oréal 6.0"/></div>
-      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="p-c"><option>Tintura</option><option>Shampoo</option><option>Tratamento</option><option>Acessório</option><option>Outro</option></select></div><div class="fg"><label class="fl">Fornecedor</label><input class="fc" id="p-f" placeholder="Fornecedor"/></div></div>
-      <div class="fr3"><div class="fg"><label class="fl">Qtd. Atual</label><input type="number" class="fc" id="p-q" value="0"/></div><div class="fg"><label class="fl">Qtd. Mínima</label><input type="number" class="fc" id="p-m" value="5"/></div><div class="fg"><label class="fl">Preço (R$)</label><input type="number" class="fc" id="p-p" step="0.01"/></div></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-prod')">Cancelar</button><button class="btn btnp" onclick="saveProd()">Salvar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-pro">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Profissional</span><button class="mx" onclick="closeM('m-pro')">✕</button></div>
-    <div class="mb">
-      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="pr-n" placeholder="Nome completo"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="pr-e" placeholder="Ex.: Cabeleireira"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="pr-t" placeholder="(11) 99..."/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="pr-c" value="40"/></div></div>
-      <div class="fg"><label class="fl">Cor na agenda</label>
-        <div style="display:flex;gap:8px;margin-top:5px" id="cor-wrap">
-          <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer;border:3px solid #6C63FF" data-cor="#6C63FF" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#FF6584;cursor:pointer" data-cor="#FF6584" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#43D9AD;cursor:pointer" data-cor="#43D9AD" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#FFB347;cursor:pointer" data-cor="#FFB347" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#3B82F6;cursor:pointer" data-cor="#3B82F6" onclick="pickCor(this)"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#EC4899;cursor:pointer" data-cor="#EC4899" onclick="pickCor(this)"></div>
-        </div>
-        <input type="hidden" id="pr-cor" value="#6C63FF"/>
-      </div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-pro')">Cancelar</button><button class="btn btnp" onclick="savePro()">Salvar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-svc">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Novo Serviço</span><button class="mx" onclick="closeM('m-svc')">✕</button></div>
-    <div class="mb">
-      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="sv-n" placeholder="Ex.: Corte Feminino"/></div>
-      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="sv-c"><option>Cabelo</option><option>Unhas</option><option>Estética</option><option>Barba</option><option>Outro</option></select></div><div class="fg"><label class="fl">Duração (min)*</label><input type="number" class="fc" id="sv-d" value="60"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="sv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="sv-com" value="40"/></div></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-svc')">Cancelar</button><button class="btn btnp" onclick="saveSvc()">Salvar</button></div>
-  </div>
-</div>
-
-<div class="mov" id="m-fcom">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Fechar Comissões</span><button class="mx" onclick="closeM('m-fcom')">✕</button></div>
-    <div class="mb">
-      <div style="background:#FEF3C7;border-radius:var(--rs);padding:9px 11px;font-size:.76rem;color:#92400E;margin-bottom:11px">⚠️ Esta ação marca comissões como pagas e não pode ser desfeita.</div>
-      <div id="fcom-t"></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-fcom')">Cancelar</button><button class="btn btnp" onclick="fecharCom()">Confirmar</button></div>
-  </div>
-</div>
-
-<!-- Modal Editar Profissional -->
-<div class="mov" id="m-edit-pro">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Editar Profissional</span><button class="mx" onclick="closeM('m-edit-pro')">✕</button></div>
-    <div class="mb">
-      <input type="hidden" id="epr-id"/>
-      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="epr-n"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="epr-e"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
-      <div class="fg"><label class="fl">Cor na agenda</label>
-        <div style="display:flex;gap:8px;margin-top:5px" id="epr-cor-wrap">
-          <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer" data-cor="#6C63FF" onclick="pickCorEdit(this,'epr-cor')"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#FF6584;cursor:pointer" data-cor="#FF6584" onclick="pickCorEdit(this,'epr-cor')"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#43D9AD;cursor:pointer" data-cor="#43D9AD" onclick="pickCorEdit(this,'epr-cor')"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#FFB347;cursor:pointer" data-cor="#FFB347" onclick="pickCorEdit(this,'epr-cor')"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#3B82F6;cursor:pointer" data-cor="#3B82F6" onclick="pickCorEdit(this,'epr-cor')"></div>
-          <div style="width:26px;height:26px;border-radius:50%;background:#EC4899;cursor:pointer" data-cor="#EC4899" onclick="pickCorEdit(this,'epr-cor')"></div>
-        </div>
-        <input type="hidden" id="epr-cor" value="#6C63FF"/>
-      </div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-pro')">Cancelar</button><button class="btn btnp" onclick="updatePro()">Salvar</button></div>
-  </div>
-</div>
-
-<!-- Modal Editar Serviço -->
-<div class="mov" id="m-edit-svc">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Editar Serviço</span><button class="mx" onclick="closeM('m-edit-svc')">✕</button></div>
-    <div class="mb">
-      <input type="hidden" id="esv-id"/>
-      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="esv-n"/></div>
-      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="esv-c"><option>Cabelo</option><option>Unhas</option><option>Estética</option><option>Barba</option><option>Outro</option></select></div><div class="fg"><label class="fl">Duração (min)</label><input type="number" class="fc" id="esv-d"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="esv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="esv-com"/></div></div>
-      <div class="fg"><label class="fl">Ativo</label><select class="fc" id="esv-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-svc')">Cancelar</button><button class="btn btnp" onclick="updateSvc()">Salvar</button></div>
-  </div>
-</div>
-
-<!-- Modal Editar Cliente -->
-<div class="mov" id="m-edit-cli">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Editar Cliente</span><button class="mx" onclick="closeM('m-edit-cli')">✕</button></div>
-    <div class="mb">
-      <input type="hidden" id="ecl-id"/>
-      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="ecl-n"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="ecl-nasc"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="ecl-t"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="ecl-e"/></div></div>
-      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ecl-o" rows="2"></textarea></div>
-      <div class="fg"><label class="fl">Status</label><select class="fc" id="ecl-s"><option value="ativo">Ativo</option><option value="vip">VIP</option><option value="inativo">Inativo</option><option value="novo">Novo</option></select></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-cli')">Cancelar</button><button class="btn btnp" onclick="updateCli()">Salvar</button></div>
-  </div>
-</div>
-
-<!-- Modal Importar -->
-<div class="mov" id="m-import">
-  <div class="mbox lg">
-    <div class="mh"><span class="mt" id="import-title">Importar Dados</span><button class="mx" onclick="closeM('m-import')">✕</button></div>
-    <div class="mb">
-      <input type="hidden" id="import-tipo"/>
-      
-      <!-- Instruções -->
-      <div style="background:var(--bg);border-radius:var(--rs);padding:14px;margin-bottom:16px">
-        <div style="font-size:.8rem;font-weight:700;margin-bottom:8px">📋 Como importar:</div>
-        <div style="font-size:.78rem;color:var(--t2);line-height:1.7">
-          1. Baixe o modelo de planilha abaixo<br>
-          2. Preencha com seus dados<br>
-          3. Salve como Excel (.xlsx) ou CSV<br>
-          4. Faça o upload aqui
-        </div>
-      </div>
-
-      <!-- Download modelo -->
-      <div style="display:flex;gap:10px;margin-bottom:16px">
-        <button class="btn btns" onclick="downloadModelo()" style="flex:1">📄 Baixar modelo Excel</button>
-      </div>
-
-      <!-- Upload -->
-      <div id="import-drop" style="border:2px dashed var(--bd);border-radius:var(--r);padding:32px;text-align:center;cursor:pointer;transition:all .2s" 
-           onclick="document.getElementById('import-file').click()"
-           ondragover="event.preventDefault();this.style.borderColor='var(--ac)'"
-           ondragleave="this.style.borderColor='var(--bd)'"
-           ondrop="handleDrop(event)">
-        <div style="font-size:2rem;margin-bottom:8px">📁</div>
-        <div style="font-size:.85rem;font-weight:600;color:var(--text)">Clique ou arraste o arquivo aqui</div>
-        <div style="font-size:.75rem;color:var(--t2);margin-top:4px">Suporta .xlsx, .xls e .csv</div>
-      </div>
-      <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(this)"/>
-
-      <!-- Preview -->
-      <div id="import-preview" style="display:none;margin-top:16px">
-        <div style="font-size:.8rem;font-weight:700;margin-bottom:8px" id="import-preview-title"></div>
-        <div style="max-height:200px;overflow-y:auto;border:1px solid var(--bd);border-radius:var(--rs)">
-          <table style="width:100%;border-collapse:collapse;font-size:.75rem">
-            <thead id="import-thead" style="background:var(--bg);position:sticky;top:0"></thead>
-            <tbody id="import-tbody"></tbody>
-          </table>
-        </div>
-        <div style="margin-top:10px;font-size:.78rem;color:var(--t2)" id="import-count"></div>
-      </div>
-
-      <!-- Resultado -->
-      <div id="import-result" style="display:none;margin-top:14px;padding:12px;border-radius:var(--rs);font-size:.82rem;font-weight:600"></div>
-    </div>
-    <div class="mf">
-      <button class="btn btns" onclick="closeM('m-import')">Cancelar</button>
-      <button class="btn btnp" id="import-btn" onclick="executarImport()" style="display:none">⬆️ Importar dados</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Novo Usuário -->
-<div class="mov" id="m-novo-user">
-  <div class="mbox lg">
-    <div class="mh"><span class="mt">Novo Usuário</span><button class="mx" onclick="closeM('m-novo-user')">✕</button></div>
-    <div class="mb">
-      <div style="background:#EDE9FF;border-radius:var(--rs);padding:10px 12px;font-size:.78rem;color:#6C63FF;margin-bottom:14px">
-        ℹ️ Configure o acesso para cada funcionário. O Admin tem acesso total e não pode ser limitado.
-      </div>
-      <div class="fr">
-        <div class="fg"><label class="fl">Nome*</label><input class="fc" id="nu-nome" placeholder="Nome do usuário"/></div>
-        <div class="fg"><label class="fl">Cargo</label><input class="fc" id="nu-cargo" placeholder="Ex: Recepcionista"/></div>
-      </div>
-      <div class="fg"><label class="fl">E-mail*</label><input class="fc" type="email" id="nu-email" placeholder="email@seusalao.com"/></div>
-      <div class="fg"><label class="fl">Senha*</label><input class="fc" type="password" id="nu-senha" placeholder="Mínimo 6 caracteres"/></div>
-      <div class="fg">
-        <label class="fl">Tipo de acesso</label>
-        <div style="display:flex;gap:10px;margin-top:6px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--bd);border-radius:var(--rs);flex:1;transition:all .15s" id="tipo-admin-lbl">
-            <input type="radio" name="nu-tipo" value="admin" id="tipo-admin" onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
-            <div><div style="font-weight:600">Admin</div><div style="font-size:.7rem;color:var(--t2)">Acesso total</div></div>
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--ac);border-radius:var(--rs);flex:1;background:#EDE9FF;transition:all .15s" id="tipo-custom-lbl">
-            <input type="radio" name="nu-tipo" value="custom" id="tipo-custom" checked onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
-            <div><div style="font-weight:600">Personalizado</div><div style="font-size:.7rem;color:var(--t2)">Você escolhe</div></div>
-          </label>
-        </div>
-      </div>
-      <div id="nu-permissoes-wrap" class="fg">
-        <label class="fl">Permissões de acesso</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" id="nu-permissoes">
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="dashboard" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📊 Dashboard
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--ac);border-radius:var(--rs);cursor:pointer;font-size:.82rem;background:#EDE9FF;transition:border-color .15s">
-            <input type="checkbox" value="agenda" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📅 Agenda
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="clientes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👥 Clientes
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="financeiro" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💰 Financeiro
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="estoque" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📦 Estoque
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="comissoes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💸 Comissões
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="profissionais" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👤 Profissionais
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="servicos" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> ✂️ Serviços
-          </label>
-        </div>
-      </div>
-    </div>
-    <div class="mf">
-      <button class="btn btns" onclick="closeM('m-novo-user')">Cancelar</button>
-      <button class="btn btnp" onclick="criarUsuario()">Criar Usuário</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Editar Permissões -->
-<div class="mov" id="m-edit-perms">
-  <div class="mbox md">
-    <div class="mh"><span class="mt">Editar Permissões — <span id="ep-nome"></span></span><button class="mx" onclick="closeM('m-edit-perms')">✕</button></div>
-    <div class="mb">
-      <input type="hidden" id="ep-uid"/>
-      <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Selecione o que este usuário pode acessar:</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="ep-checkboxes">
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="dashboard" style="accent-color:var(--ac)"/> 📊 Dashboard
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="agenda" style="accent-color:var(--ac)"/> 📅 Agenda
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="clientes" style="accent-color:var(--ac)"/> 👥 Clientes
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="financeiro" style="accent-color:var(--ac)"/> 💰 Financeiro
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="estoque" style="accent-color:var(--ac)"/> 📦 Estoque
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="comissoes" style="accent-color:var(--ac)"/> 💸 Comissões
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="profissionais" style="accent-color:var(--ac)"/> 👤 Profissionais
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="servicos" style="accent-color:var(--ac)"/> ✂️ Serviços
-        </label>
-      </div>
-    </div>
-    <div class="mf">
-      <button class="btn btns" onclick="closeM('m-edit-perms')">Cancelar</button>
-      <button class="btn btnp" onclick="salvarEditPerms()">Salvar Permissões</button>
-    </div>
-  </div>
-</div>
-      </div><!-- /content -->
-    </div><!-- /main -->
-  </div><!-- /app-inner -->
-</div><!-- /app -->
-
-<!-- Modal Clientes Inativos -->
-<div class="mov" id="m-inativos">
-  <div class="mbox lg">
-    <div class="mh"><span class="mt">⏳ Clientes Inativos</span><button class="mx" onclick="closeM('m-inativos')">✕</button></div>
-    <div class="mb">
-      <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Clientes sem agendamento há 60 dias ou mais. Use o link de WhatsApp para convidar de volta.</div>
-      <div id="inativos-lst"><div class="lc"><div class="spin"></div></div></div>
-    </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-inativos')">Fechar</button></div>
-  </div>
-</div>
-
 <!-- ── TUTORIAL PRIMEIRO ACESSO ─────────────────── -->
 <div id="tutorial-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,13,.82);z-index:10000;backdrop-filter:blur(3px)"></div>
 <div id="tutorial-box" style="display:none;position:fixed;z-index:10001;background:#fff;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.18);padding:28px 28px 22px;max-width:380px;width:calc(100vw - 32px)">
@@ -3174,5 +2797,389 @@ function dispensarBannerPWA() {
 @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes slideDown{from{transform:translateY(0);opacity:1}to{transform:translateY(20px);opacity:0}}
 </style>
+      </div><!-- /content -->
+    </div><!-- /main -->
+  </div><!-- /app-inner -->
+</div><!-- /app -->
+
+<!-- MODALS -->
+<div class="mov" id="m-ag">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt">Novo Agendamento</span><button class="mx" onclick="closeM('m-ag')">✕</button></div>
+    <div class="mb">
+      <div class="fr">
+        <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli"><option value="">Selecionar...</option></select></div>
+        <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro"><option value="">Selecionar...</option></select></div>
+      </div>
+      <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label><div id="ag-svcs" style="padding:4px 0"></div></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="ag-d"/></div>
+        <div class="fg"><label class="fl">Horário*</label>
+          <select class="fc" id="ag-h">
+            <option>08:00</option><option>08:30</option><option>09:00</option><option>09:30</option>
+            <option>10:00</option><option>10:30</option><option>11:00</option><option>11:30</option>
+            <option>13:00</option><option>13:30</option><option>14:00</option><option>14:30</option>
+            <option>15:00</option><option>15:30</option><option>16:00</option><option>16:30</option>
+            <option>17:00</option><option>17:30</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Origem</label>
+        <select class="fc" id="ag-or"><option value="backoffice">Backoffice</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option></select>
+      </div>
+      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ag-obs" rows="2" placeholder="Preferências, alergias..."></textarea></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-ag')">Cancelar</button><button class="btn btnp" onclick="saveAg()">✅ Confirmar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-concluir">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">✅ Concluir Atendimento</span><button class="mx" onclick="closeM('m-concluir')">✕</button></div>
+    <div class="mb">
+      <div style="background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs);padding:14px;margin-bottom:16px;font-size:.82rem;color:var(--ink2)" id="concluir-info">—</div>
+      <input type="hidden" id="concluir-id"/>
+      <div class="fg">
+        <label class="fl">Forma de pagamento</label>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="fpg-options">
+          <button type="button" class="fpg-btn" data-val="PIX" onclick="selecionarFpg(this)">💠 PIX</button>
+          <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpg(this)">💵 Dinheiro</button>
+          <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpg(this)">💳 Débito</button>
+          <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpg(this)">💳 Crédito</button>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-concluir')">Cancelar</button>
+      <button class="btn btnp" id="btn-concluir-ok" onclick="confirmarConclusao()">Confirmar pagamento ✅</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.fpg-btn{
+  padding:12px;border:1.5px solid var(--bd);border-radius:var(--rs);
+  background:var(--bg3);color:var(--ink2);font-size:.82rem;font-weight:600;
+  cursor:pointer;transition:all .15s;font-family:inherit;
+}
+.fpg-btn:hover{border-color:var(--bd2);color:var(--ink)}
+.fpg-btn.on{border-color:var(--gold);background:rgba(201,169,110,.1);color:var(--gold)}
+</style>
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Novo Cliente</span><button class="mx" onclick="closeM('m-cli')">✕</button></div>
+    <div class="mb">
+      <div class="fr"><div class="fg"><label class="fl">Nome completo*</label><input class="fc" id="cli-n" placeholder="Ana Paula Silva"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="cli-nasc"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone/WhatsApp</label><input class="fc" id="cli-t" placeholder="(11) 99999-0000"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="cli-e" placeholder="email@email.com"/></div></div>
+      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="cli-o" rows="2" placeholder="Alergias, preferências..."></textarea></div>
+      <div class="fg"><label class="fl">Como nos conheceu?</label><select class="fc" id="cli-k"><option>Instagram</option><option>Indicação</option><option>Google</option><option>Passante</option><option>Outro</option></select></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-cli')">Cancelar</button><button class="btn btnp" onclick="saveCli()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-lan">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Novo Lançamento</span><button class="mx" onclick="closeM('m-lan')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Tipo</label><select class="fc" id="lan-t"><option value="entrada">Entrada (Receita)</option><option value="saida">Saída (Despesa)</option></select></div>
+      <div class="fg"><label class="fl">Descrição*</label><input class="fc" id="lan-d" placeholder="Descrição do lançamento"/></div>
+      <div class="fr"><div class="fg"><label class="fl">Valor (R$)*</label><input type="number" class="fc" id="lan-v" step="0.01" placeholder="0,00"/></div><div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="lan-dt"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Pagamento</label><select class="fc" id="lan-p"><option>PIX</option><option>Dinheiro</option><option>Cartão</option><option>Boleto</option></select></div><div class="fg"><label class="fl">Categoria</label><select class="fc" id="lan-c"><option>Serviço</option><option>Produto</option><option>Aluguel</option><option>Comissão</option><option>Material</option><option>Outros</option></select></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-lan')">Cancelar</button><button class="btn btnp" onclick="saveLan()">Lançar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-prod">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Novo Produto</span><button class="mx" onclick="closeM('m-prod')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="p-n" placeholder="Ex.: Tintura L'Oréal 6.0"/></div>
+      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="p-c"><option>Tintura</option><option>Shampoo</option><option>Tratamento</option><option>Acessório</option><option>Outro</option></select></div><div class="fg"><label class="fl">Fornecedor</label><input class="fc" id="p-f" placeholder="Fornecedor"/></div></div>
+      <div class="fr3"><div class="fg"><label class="fl">Qtd. Atual</label><input type="number" class="fc" id="p-q" value="0"/></div><div class="fg"><label class="fl">Qtd. Mínima</label><input type="number" class="fc" id="p-m" value="5"/></div><div class="fg"><label class="fl">Preço (R$)</label><input type="number" class="fc" id="p-p" step="0.01"/></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-prod')">Cancelar</button><button class="btn btnp" onclick="saveProd()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-pro">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Novo Profissional</span><button class="mx" onclick="closeM('m-pro')">✕</button></div>
+    <div class="mb">
+      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="pr-n" placeholder="Nome completo"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="pr-e" placeholder="Ex.: Cabeleireira"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="pr-t" placeholder="(11) 99..."/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="pr-c" value="40"/></div></div>
+      <div class="fg"><label class="fl">Cor na agenda</label>
+        <div style="display:flex;gap:8px;margin-top:5px" id="cor-wrap">
+          <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer;border:3px solid #6C63FF" data-cor="#6C63FF" onclick="pickCor(this)"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#FF6584;cursor:pointer" data-cor="#FF6584" onclick="pickCor(this)"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#43D9AD;cursor:pointer" data-cor="#43D9AD" onclick="pickCor(this)"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#FFB347;cursor:pointer" data-cor="#FFB347" onclick="pickCor(this)"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#3B82F6;cursor:pointer" data-cor="#3B82F6" onclick="pickCor(this)"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#EC4899;cursor:pointer" data-cor="#EC4899" onclick="pickCor(this)"></div>
+        </div>
+        <input type="hidden" id="pr-cor" value="#6C63FF"/>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-pro')">Cancelar</button><button class="btn btnp" onclick="savePro()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-svc">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Novo Serviço</span><button class="mx" onclick="closeM('m-svc')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="sv-n" placeholder="Ex.: Corte Feminino"/></div>
+      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="sv-c"><option>Cabelo</option><option>Unhas</option><option>Estética</option><option>Barba</option><option>Outro</option></select></div><div class="fg"><label class="fl">Duração (min)*</label><input type="number" class="fc" id="sv-d" value="60"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="sv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="sv-com" value="40"/></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-svc')">Cancelar</button><button class="btn btnp" onclick="saveSvc()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-fcom">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Fechar Comissões</span><button class="mx" onclick="closeM('m-fcom')">✕</button></div>
+    <div class="mb">
+      <div style="background:#FEF3C7;border-radius:var(--rs);padding:9px 11px;font-size:.76rem;color:#92400E;margin-bottom:11px">⚠️ Esta ação marca comissões como pagas e não pode ser desfeita.</div>
+      <div id="fcom-t"></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-fcom')">Cancelar</button><button class="btn btnp" onclick="fecharCom()">Confirmar</button></div>
+  </div>
+</div>
+
+<!-- Modal Editar Profissional -->
+<div class="mov" id="m-edit-pro">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Profissional</span><button class="mx" onclick="closeM('m-edit-pro')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="epr-id"/>
+      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="epr-n"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="epr-e"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
+      <div class="fg"><label class="fl">Cor na agenda</label>
+        <div style="display:flex;gap:8px;margin-top:5px" id="epr-cor-wrap">
+          <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer" data-cor="#6C63FF" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#FF6584;cursor:pointer" data-cor="#FF6584" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#43D9AD;cursor:pointer" data-cor="#43D9AD" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#FFB347;cursor:pointer" data-cor="#FFB347" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#3B82F6;cursor:pointer" data-cor="#3B82F6" onclick="pickCorEdit(this,'epr-cor')"></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:#EC4899;cursor:pointer" data-cor="#EC4899" onclick="pickCorEdit(this,'epr-cor')"></div>
+        </div>
+        <input type="hidden" id="epr-cor" value="#6C63FF"/>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-pro')">Cancelar</button><button class="btn btnp" onclick="updatePro()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- Modal Editar Serviço -->
+<div class="mov" id="m-edit-svc">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Serviço</span><button class="mx" onclick="closeM('m-edit-svc')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="esv-id"/>
+      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="esv-n"/></div>
+      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="esv-c"><option>Cabelo</option><option>Unhas</option><option>Estética</option><option>Barba</option><option>Outro</option></select></div><div class="fg"><label class="fl">Duração (min)</label><input type="number" class="fc" id="esv-d"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="esv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="esv-com"/></div></div>
+      <div class="fg"><label class="fl">Ativo</label><select class="fc" id="esv-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-svc')">Cancelar</button><button class="btn btnp" onclick="updateSvc()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- Modal Editar Cliente -->
+<div class="mov" id="m-edit-cli">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Cliente</span><button class="mx" onclick="closeM('m-edit-cli')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ecl-id"/>
+      <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="ecl-n"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="ecl-nasc"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="ecl-t"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="ecl-e"/></div></div>
+      <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ecl-o" rows="2"></textarea></div>
+      <div class="fg"><label class="fl">Status</label><select class="fc" id="ecl-s"><option value="ativo">Ativo</option><option value="vip">VIP</option><option value="inativo">Inativo</option><option value="novo">Novo</option></select></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-edit-cli')">Cancelar</button><button class="btn btnp" onclick="updateCli()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- Modal Importar -->
+<div class="mov" id="m-import">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt" id="import-title">Importar Dados</span><button class="mx" onclick="closeM('m-import')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="import-tipo"/>
+      
+      <!-- Instruções -->
+      <div style="background:var(--bg);border-radius:var(--rs);padding:14px;margin-bottom:16px">
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:8px">📋 Como importar:</div>
+        <div style="font-size:.78rem;color:var(--t2);line-height:1.7">
+          1. Baixe o modelo de planilha abaixo<br>
+          2. Preencha com seus dados<br>
+          3. Salve como Excel (.xlsx) ou CSV<br>
+          4. Faça o upload aqui
+        </div>
+      </div>
+
+      <!-- Download modelo -->
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <button class="btn btns" onclick="downloadModelo()" style="flex:1">📄 Baixar modelo Excel</button>
+      </div>
+
+      <!-- Upload -->
+      <div id="import-drop" style="border:2px dashed var(--bd);border-radius:var(--r);padding:32px;text-align:center;cursor:pointer;transition:all .2s" 
+           onclick="document.getElementById('import-file').click()"
+           ondragover="event.preventDefault();this.style.borderColor='var(--ac)'"
+           ondragleave="this.style.borderColor='var(--bd)'"
+           ondrop="handleDrop(event)">
+        <div style="font-size:2rem;margin-bottom:8px">📁</div>
+        <div style="font-size:.85rem;font-weight:600;color:var(--text)">Clique ou arraste o arquivo aqui</div>
+        <div style="font-size:.75rem;color:var(--t2);margin-top:4px">Suporta .xlsx, .xls e .csv</div>
+      </div>
+      <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(this)"/>
+
+      <!-- Preview -->
+      <div id="import-preview" style="display:none;margin-top:16px">
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:8px" id="import-preview-title"></div>
+        <div style="max-height:200px;overflow-y:auto;border:1px solid var(--bd);border-radius:var(--rs)">
+          <table style="width:100%;border-collapse:collapse;font-size:.75rem">
+            <thead id="import-thead" style="background:var(--bg);position:sticky;top:0"></thead>
+            <tbody id="import-tbody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px;font-size:.78rem;color:var(--t2)" id="import-count"></div>
+      </div>
+
+      <!-- Resultado -->
+      <div id="import-result" style="display:none;margin-top:14px;padding:12px;border-radius:var(--rs);font-size:.82rem;font-weight:600"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-import')">Cancelar</button>
+      <button class="btn btnp" id="import-btn" onclick="executarImport()" style="display:none">⬆️ Importar dados</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Novo Usuário -->
+<div class="mov" id="m-novo-user">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt">Novo Usuário</span><button class="mx" onclick="closeM('m-novo-user')">✕</button></div>
+    <div class="mb">
+      <div style="background:#EDE9FF;border-radius:var(--rs);padding:10px 12px;font-size:.78rem;color:#6C63FF;margin-bottom:14px">
+        ℹ️ Configure o acesso para cada funcionário. O Admin tem acesso total e não pode ser limitado.
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Nome*</label><input class="fc" id="nu-nome" placeholder="Nome do usuário"/></div>
+        <div class="fg"><label class="fl">Cargo</label><input class="fc" id="nu-cargo" placeholder="Ex: Recepcionista"/></div>
+      </div>
+      <div class="fg"><label class="fl">E-mail*</label><input class="fc" type="email" id="nu-email" placeholder="email@seusalao.com"/></div>
+      <div class="fg"><label class="fl">Senha*</label><input class="fc" type="password" id="nu-senha" placeholder="Mínimo 6 caracteres"/></div>
+      <div class="fg">
+        <label class="fl">Tipo de acesso</label>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--bd);border-radius:var(--rs);flex:1;transition:all .15s" id="tipo-admin-lbl">
+            <input type="radio" name="nu-tipo" value="admin" id="tipo-admin" onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
+            <div><div style="font-weight:600">Admin</div><div style="font-size:.7rem;color:var(--t2)">Acesso total</div></div>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--ac);border-radius:var(--rs);flex:1;background:#EDE9FF;transition:all .15s" id="tipo-custom-lbl">
+            <input type="radio" name="nu-tipo" value="custom" id="tipo-custom" checked onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
+            <div><div style="font-weight:600">Personalizado</div><div style="font-size:.7rem;color:var(--t2)">Você escolhe</div></div>
+          </label>
+        </div>
+      </div>
+      <div id="nu-permissoes-wrap" class="fg">
+        <label class="fl">Permissões de acesso</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" id="nu-permissoes">
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="dashboard" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📊 Dashboard
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--ac);border-radius:var(--rs);cursor:pointer;font-size:.82rem;background:#EDE9FF;transition:border-color .15s">
+            <input type="checkbox" value="agenda" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📅 Agenda
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="clientes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👥 Clientes
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="financeiro" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💰 Financeiro
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="estoque" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📦 Estoque
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="comissoes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💸 Comissões
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="profissionais" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👤 Profissionais
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="servicos" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> ✂️ Serviços
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-novo-user')">Cancelar</button>
+      <button class="btn btnp" onclick="criarUsuario()">Criar Usuário</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar Permissões -->
+<div class="mov" id="m-edit-perms">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Permissões — <span id="ep-nome"></span></span><button class="mx" onclick="closeM('m-edit-perms')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ep-uid"/>
+      <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Selecione o que este usuário pode acessar:</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="ep-checkboxes">
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="dashboard" style="accent-color:var(--ac)"/> 📊 Dashboard
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="agenda" style="accent-color:var(--ac)"/> 📅 Agenda
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="clientes" style="accent-color:var(--ac)"/> 👥 Clientes
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="financeiro" style="accent-color:var(--ac)"/> 💰 Financeiro
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="estoque" style="accent-color:var(--ac)"/> 📦 Estoque
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="comissoes" style="accent-color:var(--ac)"/> 💸 Comissões
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="profissionais" style="accent-color:var(--ac)"/> 👤 Profissionais
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="servicos" style="accent-color:var(--ac)"/> ✂️ Serviços
+        </label>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-edit-perms')">Cancelar</button>
+      <button class="btn btnp" onclick="salvarEditPerms()">Salvar Permissões</button>
+    </div>
+  </div>
+</div>
+
+
+
+</body>
+</html
+
+
+<!-- Modal Clientes Inativos -->
+<div class="mov" id="m-inativos">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt">⏳ Clientes Inativos</span><button class="mx" onclick="closeM('m-inativos')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Clientes sem agendamento há 60 dias ou mais. Use o link de WhatsApp para convidar de volta.</div>
+      <div id="inativos-lst"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-inativos')">Fechar</button></div>
+  </div>
+</div>
+
 </body>
 </html>
