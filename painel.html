@@ -654,13 +654,8 @@ select.fc option{background:var(--bg2)}
           </select>
         </div>
       </div>
-      <div class="fr">
-        <div class="fg"><label class="fl">Pagamento</label>
-          <select class="fc" id="ag-pg"><option>PIX</option><option>Dinheiro</option><option>Cartão Débito</option><option>Cartão Crédito</option></select>
-        </div>
-        <div class="fg"><label class="fl">Origem</label>
-          <select class="fc" id="ag-or"><option value="backoffice">Backoffice</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option></select>
-        </div>
+      <div class="fg"><label class="fl">Origem</label>
+        <select class="fc" id="ag-or"><option value="backoffice">Backoffice</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option></select>
       </div>
       <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ag-obs" rows="2" placeholder="Preferências, alergias..."></textarea></div>
     </div>
@@ -668,7 +663,38 @@ select.fc option{background:var(--bg2)}
   </div>
 </div>
 
-<div class="mov" id="m-cli">
+<div class="mov" id="m-concluir">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">✅ Concluir Atendimento</span><button class="mx" onclick="closeM('m-concluir')">✕</button></div>
+    <div class="mb">
+      <div style="background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs);padding:14px;margin-bottom:16px;font-size:.82rem;color:var(--ink2)" id="concluir-info">—</div>
+      <input type="hidden" id="concluir-id"/>
+      <div class="fg">
+        <label class="fl">Forma de pagamento</label>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="fpg-options">
+          <button type="button" class="fpg-btn" data-val="PIX" onclick="selecionarFpg(this)">💠 PIX</button>
+          <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpg(this)">💵 Dinheiro</button>
+          <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpg(this)">💳 Débito</button>
+          <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpg(this)">💳 Crédito</button>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-concluir')">Cancelar</button>
+      <button class="btn btnp" id="btn-concluir-ok" onclick="confirmarConclusao()">Confirmar pagamento ✅</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.fpg-btn{
+  padding:12px;border:1.5px solid var(--bd);border-radius:var(--rs);
+  background:var(--bg3);color:var(--ink2);font-size:.82rem;font-weight:600;
+  cursor:pointer;transition:all .15s;font-family:inherit;
+}
+.fpg-btn:hover{border-color:var(--bd2);color:var(--ink)}
+.fpg-btn.on{border-color:var(--gold);background:rgba(201,169,110,.1);color:var(--gold)}
+</style>
   <div class="mbox md">
     <div class="mh"><span class="mt">Novo Cliente</span><button class="mx" onclick="closeM('m-cli')">✕</button></div>
     <div class="mb">
@@ -1402,15 +1428,62 @@ function renderTl(list) {
 }
 
 function mudaStatus(id, status) {
+  // Se for concluir, abre modal de pagamento primeiro
+  if (status === 'concluido') {
+    abrirModalConcluir(id);
+    return;
+  }
+  // Para outros status (cancelar, iniciar etc), aplica direto
   apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{status:status}})
-    .then(function(r){
-      loadDashTl(); loadAgenda();
-      if (status === 'concluido' && r && r.whatsapp_link) {
-        mostrarToastWhatsapp(r.whatsapp_link);
-      }
-    })
+    .then(function(){ loadDashTl(); loadAgenda(); })
     .catch(function(){});
   toast('Status: ' + (SL[status]||status), 'ok');
+}
+
+function abrirModalConcluir(id) {
+  document.getElementById('concluir-id').value = id;
+  // Busca dados do agendamento para mostrar no modal
+  apiFetch('/api/agendamentos?id=' + id).then(function(r){
+    var ag = r && r[0];
+    var info = '';
+    if (ag) {
+      var svc = ag.agendamento_servicos && ag.agendamento_servicos.map(function(s){ return s.servicos && s.servicos.nome; }).filter(Boolean).join(', ');
+      info = '<strong>' + (ag.clientes && ag.clientes.nome || '') + '</strong>' +
+             (svc ? ' — ' + svc : '') +
+             '<div style="margin-top:4px;font-size:.78rem;font-weight:700;color:var(--gold)">Total: ' + brl(ag.valor_total) + '</div>';
+    }
+    document.getElementById('concluir-info').innerHTML = info || 'Confirmar conclusão do atendimento';
+  }).catch(function(){
+    document.getElementById('concluir-info').innerHTML = 'Confirmar conclusão do atendimento';
+  });
+  // Limpa seleção anterior
+  document.querySelectorAll('.fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+  openM('m-concluir');
+}
+
+function selecionarFpg(btn) {
+  document.querySelectorAll('.fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+}
+
+function confirmarConclusao() {
+  var id = document.getElementById('concluir-id').value;
+  var fpgBtn = document.querySelector('.fpg-btn.on');
+  if (!fpgBtn) { toast('Selecione a forma de pagamento','er'); return; }
+  var fpg = fpgBtn.dataset.val;
+
+  var btn = document.getElementById('btn-concluir-ok');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+
+  apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{status:'concluido', forma_pgto: fpg}})
+    .then(function(r){
+      closeM('m-concluir');
+      toast('Atendimento concluído! ✅', 'ok');
+      loadDashTl(); loadAgenda(); loadKPIs();
+      if (r && r.whatsapp_link) mostrarToastWhatsapp(r.whatsapp_link);
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar pagamento ✅'; });
 }
 
 function mostrarToastWhatsapp(link) {
