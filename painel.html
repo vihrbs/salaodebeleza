@@ -264,20 +264,30 @@ select.fc option{background:var(--bg2)}
 
 /* ── MOBILE ──────────────────────────────── */
 @media(max-width:880px){
-  #sidebar{display:none;position:fixed;left:0;top:0;bottom:0;z-index:200;box-shadow:var(--sh2);transition:transform .25s}
-  #sidebar.mob-open{display:flex}
+  #sidebar{
+    display:none;
+    position:fixed;left:0;top:0;bottom:0;
+    z-index:200;
+    box-shadow:4px 0 24px rgba(0,0,0,.5);
+    transform:translateX(-100%);
+    transition:transform .25s ease;
+    width:260px;
+  }
+  #sidebar.mob-open{
+    display:flex;
+    transform:translateX(0);
+  }
   #sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:199;backdrop-filter:blur(2px)}
   #sidebar-overlay.on{display:block}
   #mob-ham{display:flex;align-items:center;justify-content:center}
-  #content{padding:16px 14px 90px}
+  #content{padding:16px 14px 24px}
   .kpis{grid-template-columns:1fr 1fr;gap:10px}
   .g2,.g31{grid-template-columns:1fr}
   .kv{font-size:1.2rem}
   table{font-size:.72rem}
   th,td{padding:8px 9px}
-  #mob-nav{display:flex!important}
   .fr,.form-row{grid-template-columns:1fr}
-  .mbox{margin:12px}
+  .mbox{margin:12px;max-width:calc(100vw - 24px)}
 }
 @media(max-width:480px){
   .kpis{grid-template-columns:1fr 1fr}
@@ -405,17 +415,6 @@ select.fc option{background:var(--bg2)}
       <div id="trial-banner">
         <span id="trial-msg">⏰ Seu trial expira em breve — assine para continuar usando.</span>
         <button onclick="assinar()" style="background:var(--ac);color:#0F0E0C;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">Assinar R$ 59,90/mês →</button>
-      </div>
-
-      <!-- MOBILE BOTTOM NAV -->
-      <div id="mob-nav" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--bd);z-index:98;padding:6px 0 8px;">
-        <div style="display:flex;justify-content:space-around;align-items:center">
-          <button class="mob-nb on" data-page="dashboard" onclick="nav('dashboard',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--ac);padding:4px 8px;cursor:pointer;min-width:52px"><span style="font-size:1.2rem">🏠</span>Dashboard</button>
-          <button class="mob-nb" data-page="agenda" onclick="nav('agenda',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px"><span style="font-size:1.2rem">📅</span>Agenda</button>
-          <button class="mob-nb" data-page="clientes" onclick="nav('clientes',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px"><span style="font-size:1.2rem">👥</span>Clientes</button>
-          <button class="mob-nb" data-page="financeiro" onclick="nav('financeiro',this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px"><span style="font-size:1.2rem">💰</span>Financeiro</button>
-          <button onclick="abrirSidebarMob()" style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;font-size:.58rem;font-weight:600;color:var(--t2);padding:4px 8px;cursor:pointer;min-width:52px"><span style="font-size:1.2rem">☰</span>Mais</button>
-        </div>
       </div>
 
       <div id="content">
@@ -2625,9 +2624,7 @@ function bloquearSistema() {
   // Esconde o conteúdo do painel
   var content = document.getElementById('content');
   var topnav  = document.querySelector('.tb-nav');
-  var mobnav  = document.getElementById('mob-nav');
   if (topnav)  topnav.style.display = 'none';
-  if (mobnav)  mobnav.style.display = 'none';
 
   // Mostra tela de bloqueio
   var existing = document.getElementById('bloqueio-screen');
@@ -2691,12 +2688,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ── TOPBAR PAGE TITLE ───────────────────────
-// ── TOGGLE MOB-NAV ACTIVE ───────────────────
-function _setMobNavActive(page) {
-  document.querySelectorAll('.mob-nb').forEach(function(b){
-    b.style.color = b.dataset.page === page ? 'var(--ac)' : 'var(--t2)';
-  });
-}
+// ── FIM DO SCRIPT SIDEBAR ───────────────────
 </script>
 
 <script>
