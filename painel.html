@@ -201,9 +201,10 @@ tbody tr:hover{background:var(--bg3)}
 select.fc option{background:var(--bg2)}
 
 /* ── MODAL ───────────────────────────────── */
-.mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:16px}
+.mov{display:none;position:fixed;inset:0;z-index:1000;align-items:center;justify-content:center;padding:20px}
+.mov::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);z-index:-1}
 .mov.on{display:flex}
-.mbox{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh2);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;animation:mup .22s ease}
+.mbox{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh2);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;animation:mup .22s ease;position:relative}
 .mbox.md{max-width:500px}.mbox.lg{max-width:660px}
 @keyframes mup{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .mh{padding:18px 20px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between}
