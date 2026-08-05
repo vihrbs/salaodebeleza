@@ -1216,12 +1216,25 @@ function doLogout() {
 
 // ── NAV ─────────────────────────────────────────────────
 function nav(page, el) {
+  // Troca a página visível
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('on'); });
   var pg = document.getElementById('page-'+page);
   if (pg) pg.classList.add('on');
-  document.querySelectorAll('.sb-item,.nb,.mob-nb').forEach(function(b){ b.classList.remove('on'); });
+
+  // Atualiza sidebar, topnav e mobile nav
+  document.querySelectorAll('.sb-item,.nb,.mob-nb').forEach(function(b){ b.classList.remove('on'); b.style.color = ''; });
   if (el) el.classList.add('on');
-  document.querySelectorAll('[data-page="'+page+'"]').forEach(function(b){ b.classList.add('on'); });
+  document.querySelectorAll('[data-page="'+page+'"]').forEach(function(b){
+    b.classList.add('on');
+    b.style.color = 'var(--ac)';
+  });
+
+  // Título da topbar
+  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',clientes:'Clientes',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',config:'Configurações'};
+  var tbTitle = document.getElementById('tb-page-title');
+  if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
+
+  // Ações especiais por página
   if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
 }
 
@@ -2349,20 +2362,6 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// Override nav para atualizar menu mobile também
-var _origNav = nav;
-nav = function(page, el) {
-  _origNav(page, el);
-  // Atualiza botões do menu mobile
-  document.querySelectorAll('.mob-nb').forEach(function(b){ b.style.color = 'var(--t2)'; });
-  var pages = ['dashboard','agenda','clientes','financeiro'];
-  var idx = pages.indexOf(page);
-  if (idx >= 0) {
-    var btns = document.querySelectorAll('.mob-nb');
-    if (btns[idx]) btns[idx].style.color = 'var(--ac)';
-  }
-};
-
 // ── IMPORTAÇÃO ──────────────────────────────────────
 var IMPORT_DATA = [];
 var IMPORT_TIPO = '';
@@ -2680,7 +2679,6 @@ function aplicarPermissoes() {
 }
 
 // Override nav to check permissions
-var _navOrig = typeof _origNav !== 'undefined' ? _origNav : nav;
 function navComPermissao(page, el) {
   var permitidos = PERMISSOES[USER_PERFIL] || PERMISSOES.admin;
   if (permitidos.indexOf(page) < 0) {
@@ -2996,18 +2994,6 @@ document.addEventListener('click', function(e) {
 });
 
 // ── TOPBAR PAGE TITLE ───────────────────────
-var PAGE_TITLES = {
-  dashboard:'Dashboard', agenda:'Agenda', clientes:'Clientes',
-  financeiro:'Financeiro', estoque:'Estoque', comissoes:'Comissões',
-  profissionais:'Profissionais', servicos:'Serviços', config:'Configurações'
-};
-var _origNav = nav;
-function nav(page, el) {
-  _origNav(page, el);
-  var el2 = document.getElementById('tb-page-title');
-  if (el2) el2.textContent = PAGE_TITLES[page] || page;
-}
-
 // ── TOGGLE MOB-NAV ACTIVE ───────────────────
 function _setMobNavActive(page) {
   document.querySelectorAll('.mob-nb').forEach(function(b){
