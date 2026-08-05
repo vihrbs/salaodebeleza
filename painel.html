@@ -65,7 +65,7 @@ input,select,textarea{font-family:inherit}
 .trial{background:rgba(201,169,110,.1);color:var(--ac);border:1px solid rgba(201,169,110,.2);padding:10px;border-radius:var(--rs);font-size:.78rem;text-align:center;font-weight:600;margin-bottom:14px}
 
 /* ── APP SHELL ─────────────────────────────── */
-#app{display:none;height:100vh;overflow:hidden}
+#app{display:none;height:100vh}
 .app-inner{display:flex;height:100%}
 
 /* ── SIDEBAR ──────────────────────────────── */
@@ -201,9 +201,9 @@ tbody tr:hover{background:var(--bg3)}
 select.fc option{background:var(--bg2)}
 
 /* ── MODAL ───────────────────────────────── */
-.mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:500;align-items:center;justify-content:center}
+.mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:16px}
 .mov.on{display:flex}
-.mbox{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh2);width:100%;max-height:90vh;overflow-y:auto;animation:mup .22s ease}
+.mbox{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh2);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;animation:mup .22s ease}
 .mbox.md{max-width:500px}.mbox.lg{max-width:660px}
 @keyframes mup{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .mh{padding:18px 20px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between}
