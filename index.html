@@ -3,618 +3,857 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Beleza Pro — Sistema de Gestão para Salões de Beleza</title>
-<meta name="description" content="Sistema completo de gestão para salões de beleza. Agenda, clientes, financeiro, estoque e comissões em um só lugar. 14 dias grátis."/>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<title>Beleza Pro — Sistema de Gestão para Salões</title>
+<meta name="description" content="Sistema completo de gestão para salões de beleza. Agenda online, financeiro, comissões e muito mais. 14 dias grátis."/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#FAFAF8;--dark:#0F0F0D;--accent:#7C5CFC;--accent2:#FF6B6B;--accent3:#00C896;
-  --text:#1A1A18;--text2:#6B6B68;--border:#E8E8E4;--wh:#fff;
-  --sh:0 2px 16px rgba(0,0,0,.06);--r:12px;--rl:20px;
+  --ink:#F5F0E8;--ink2:#9A9285;--ink3:#6B6457;
+  --bg:#0A0908;--bg2:#111009;--bg3:#181512;
+  --gold:#C9A96E;--gold2:#E8C4A0;--gold3:#A07840;
+  --green:#4ADE80;--red:#F87171;--blue:#60A5FA;
+  --bd:rgba(201,169,110,.15);--bd2:rgba(201,169,110,.08);
+  --r:14px;--rl:24px;
 }
 html{scroll-behavior:smooth;font-size:16px}
-body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;line-height:1.6}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--ink);overflow-x:hidden;line-height:1.6}
+a{text-decoration:none;color:inherit}
 img{max-width:100%}
+::selection{background:rgba(201,169,110,.3);color:var(--ink)}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:50px}
 
 /* ── NAV ── */
-nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:14px 40px;display:flex;align-items:center;justify-content:space-between;background:rgba(250,250,248,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);transition:box-shadow .2s}
-nav.scrolled{box-shadow:0 2px 20px rgba(0,0,0,.06)}
-.nav-logo{font-family:'Fraunces',serif;font-size:1.25rem;font-weight:900;color:var(--dark);text-decoration:none}
-.nav-logo em{color:var(--accent);font-style:italic}
-.nav-links{display:flex;align-items:center;gap:28px}
-.nav-links a{text-decoration:none;color:var(--text2);font-size:.85rem;font-weight:500;transition:color .15s}
-.nav-links a:hover{color:var(--text)}
-.nav-cta{background:var(--dark)!important;color:#fff!important;padding:9px 22px;border-radius:50px;font-size:.84rem;font-weight:600;text-decoration:none;transition:all .2s}
-.nav-cta:hover{background:var(--accent)!important;transform:translateY(-1px)}
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  padding:16px 40px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(10,9,8,0);
+  transition:all .4s;
+}
+nav.scrolled{
+  background:rgba(10,9,8,.92);
+  backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--bd2);
+  padding:12px 40px;
+}
+.nav-logo{font-family:'Fraunces',serif;font-size:1.3rem;font-weight:900;color:var(--ink)}
+.nav-logo em{color:var(--gold);font-style:italic}
+.nav-links{display:flex;align-items:center;gap:32px}
+.nav-links a{font-size:.82rem;font-weight:500;color:var(--ink2);transition:color .2s}
+.nav-links a:hover{color:var(--ink)}
+.nav-cta{
+  background:var(--gold);color:#0A0908;
+  padding:9px 22px;border-radius:50px;
+  font-size:.82rem;font-weight:700;
+  transition:all .2s;
+}
+.nav-cta:hover{background:var(--gold2);transform:translateY(-1px)}
+.nav-ham{display:none;background:none;border:none;color:var(--ink);font-size:1.3rem;cursor:pointer;padding:4px}
+.mob-menu{display:none;position:fixed;inset:0;background:rgba(10,9,8,.97);z-index:199;flex-direction:column;align-items:center;justify-content:center;gap:32px}
+.mob-menu.on{display:flex}
+.mob-menu a{font-family:'Fraunces',serif;font-size:2rem;font-weight:700;color:var(--ink);transition:color .2s}
+.mob-menu a:hover{color:var(--gold)}
+.mob-close{position:absolute;top:20px;right:20px;background:none;border:none;color:var(--ink2);font-size:1.5rem;cursor:pointer}
 
-/* ── HERO ── */
-#hero{min-height:100vh;display:flex;align-items:center;padding:110px 40px 80px;position:relative;overflow:hidden}
-.hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 65% 45%,rgba(124,92,252,.07) 0%,transparent 70%),radial-gradient(ellipse 40% 40% at 20% 70%,rgba(0,200,150,.05) 0%,transparent 60%)}
-.hero-inner{max-width:1140px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;width:100%}
-.hero-tag{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:50px;padding:6px 16px;font-size:.73rem;font-weight:600;color:var(--text2);margin-bottom:22px;box-shadow:var(--sh)}
-.hero-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--accent3);animation:blink 2s infinite}
-@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
-h1{font-family:'Fraunces',serif;font-size:clamp(2.4rem,4.5vw,3.6rem);font-weight:900;line-height:1.08;color:var(--dark);margin-bottom:18px}
-h1 em{color:var(--accent);font-style:italic}
-.hero-sub{font-size:1rem;color:var(--text2);line-height:1.75;max-width:440px;margin-bottom:32px}
-.hero-btns{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:36px}
-.btn-p{background:var(--accent);color:#fff;padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:700;text-decoration:none;border:none;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px}
-.btn-p:hover{background:#6344E0;transform:translateY(-2px);box-shadow:0 8px 24px rgba(124,92,252,.3)}
-.btn-s{background:transparent;color:var(--text);padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:600;text-decoration:none;border:1.5px solid var(--border);transition:all .2s;display:inline-flex;align-items:center;gap:8px}
-.btn-s:hover{border-color:var(--accent);color:var(--accent)}
-.hero-social{display:flex;align-items:center;gap:14px;font-size:.78rem;color:var(--text2)}
-.avatars{display:flex}
-.av{width:30px;height:30px;border-radius:50%;border:2px solid #fff;margin-left:-7px;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:#fff}
-.av:first-child{margin-left:0}
+/* ── PARALLAX HERO ── */
+#hero{
+  position:relative;height:100vh;min-height:600px;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+}
 
-/* MOCKUP */
-.hero-visual{position:relative;z-index:1}
-.mockup{background:#fff;border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.12),0 4px 16px rgba(0,0,0,.06);border:1px solid var(--border);overflow:hidden;animation:fadeUp .8s .2s ease both}
-@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
-.mock-bar{background:#F5F5F3;padding:10px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border)}
-.mock-dots{display:flex;gap:5px}
-.mock-dot{width:9px;height:9px;border-radius:50%}
-.mock-url{flex:1;background:#fff;border:1px solid var(--border);border-radius:5px;padding:3px 10px;font-size:.68rem;color:var(--text2);margin:0 10px}
-.mock-body{padding:16px}
-.mock-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
-.mk{background:#F8F8F6;border-radius:9px;padding:10px;text-align:center}
-.mk-v{font-size:1rem;font-weight:800;color:var(--dark)}
-.mk-l{font-size:.6rem;color:var(--text2);margin-top:1px}
-.mock-section{font-size:.62rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:7px}
-.mock-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#F8F8F6;border-radius:7px;margin-bottom:5px}
-.mock-row:last-child{margin-bottom:0}
-.mr-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.mr-name{font-size:.7rem;font-weight:600;flex:1}
-.mr-badge{font-size:.58rem;padding:2px 7px;border-radius:50px;font-weight:600}
-.mr-val{font-size:.7rem;font-weight:700}
-.fc{position:absolute;background:#fff;border-radius:11px;box-shadow:0 6px 24px rgba(0,0,0,.1);padding:11px 14px;border:1px solid var(--border)}
-.fc-lbl{font-size:.62rem;color:var(--text2);margin-bottom:3px}
-.fc-val{font-size:.95rem;font-weight:800;color:var(--dark)}
-.fc-sub{font-size:.6rem;font-weight:600;margin-top:2px}
-.fc1{top:-18px;right:-16px;animation:float1 4s ease-in-out infinite}
-.fc2{bottom:16px;left:-24px;animation:float2 4s 1s ease-in-out infinite}
-@keyframes float1{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
-@keyframes float2{0%,100%{transform:translateY(0) rotate(1deg)}50%{transform:translateY(-6px) rotate(-1deg)}}
+/* Canvas parallax background */
+#parallax-canvas{
+  position:absolute;inset:0;width:100%;height:100%;
+}
 
-/* ── LOGOS ── */
-#logos{padding:36px 40px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center}
-#logos p{font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);margin-bottom:18px}
-.logos-row{display:flex;align-items:center;justify-content:center;gap:36px;flex-wrap:wrap;opacity:.45}
-.logo-it{font-family:'Fraunces',serif;font-size:.95rem;font-weight:700;color:var(--text)}
+/* Gradient overlays */
+.hero-overlay{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 50%, rgba(201,169,110,.06) 0%, transparent 60%),
+    linear-gradient(to bottom, rgba(10,9,8,0) 0%, rgba(10,9,8,.3) 60%, rgba(10,9,8,1) 100%);
+  z-index:1;
+}
 
-/* ── SECTIONS ── */
-section{padding:90px 40px}
-.sec-tag{font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
-h2{font-family:'Fraunces',serif;font-size:clamp(1.7rem,3.5vw,2.6rem);font-weight:900;color:var(--dark);line-height:1.15;margin-bottom:14px}
-.sec-sub{font-size:.95rem;color:var(--text2);max-width:520px;margin:0 auto 52px;line-height:1.7}
-.text-center{text-align:center}
+.hero-content{
+  position:relative;z-index:2;
+  text-align:center;padding:0 24px;max-width:820px;
+}
+.hero-tag{
+  display:inline-flex;align-items:center;gap:8px;
+  border:1px solid var(--bd);border-radius:50px;
+  padding:7px 18px;font-size:.72rem;font-weight:600;color:var(--ink2);
+  margin-bottom:28px;background:rgba(201,169,110,.05);
+  backdrop-filter:blur(8px);
+}
+.hero-tag .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.4)}70%{box-shadow:0 0 0 8px rgba(74,222,128,0)}}
 
-/* PROBLEMA */
-#problema{background:var(--bg)}
-.pains{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:1000px;margin:0 auto}
-.pain{background:#fff;border:1px solid var(--border);border-radius:var(--rl);padding:22px;position:relative}
-.pain-x{position:absolute;top:14px;right:14px;width:22px;height:22px;border-radius:50%;background:#FEE2E2;display:flex;align-items:center;justify-content:center;font-size:.62rem;color:#DC2626;font-weight:700}
-.pain-em{font-size:1.6rem;margin-bottom:10px}
-.pain-title{font-size:.88rem;font-weight:700;color:var(--dark);margin-bottom:5px}
-.pain-desc{font-size:.78rem;color:var(--text2);line-height:1.55}
+h1{
+  font-family:'Fraunces',serif;
+  font-size:clamp(2.8rem,6vw,5rem);
+  font-weight:900;line-height:1.05;
+  color:var(--ink);margin-bottom:20px;
+  letter-spacing:-.02em;
+}
+h1 em{color:var(--gold);font-style:italic}
+h1 .fade-word{
+  display:inline-block;
+  animation:fadeWord 6s infinite;
+  color:var(--gold);
+}
+@keyframes fadeWord{
+  0%,25%{opacity:1;transform:translateY(0)}
+  30%,35%{opacity:0;transform:translateY(-20px)}
+  40%{opacity:0;transform:translateY(20px)}
+  45%,75%{opacity:1;transform:translateY(0)}
+  80%,85%{opacity:0;transform:translateY(-20px)}
+  90%{opacity:0;transform:translateY(20px)}
+  95%,100%{opacity:1;transform:translateY(0)}
+}
+.hero-sub{
+  font-size:clamp(.95rem,2vw,1.1rem);
+  color:var(--ink2);line-height:1.8;
+  max-width:560px;margin:0 auto 36px;font-weight:400;
+}
+.hero-btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
+.btn-p{
+  background:var(--gold);color:#0A0908;
+  padding:14px 32px;border-radius:50px;
+  font-size:.9rem;font-weight:700;
+  transition:all .2s;display:inline-flex;align-items:center;gap:8px;
+}
+.btn-p:hover{background:var(--gold2);transform:translateY(-2px);box-shadow:0 12px 32px rgba(201,169,110,.25)}
+.btn-s{
+  background:transparent;color:var(--ink);
+  padding:14px 32px;border-radius:50px;
+  font-size:.9rem;font-weight:600;
+  border:1px solid var(--bd);
+  transition:all .2s;display:inline-flex;align-items:center;gap:8px;
+  backdrop-filter:blur(8px);
+}
+.btn-s:hover{border-color:rgba(201,169,110,.4);color:var(--gold)}
 
-/* FEATURES */
-#features{background:#fff}
-.feat-inner{max-width:1100px;margin:0 auto}
-.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:72px}
-.feat-grid:last-child{margin-bottom:0}
-.feat-grid.rev{direction:rtl}
-.feat-grid.rev>*{direction:ltr}
-.feat-list{display:flex;flex-direction:column;gap:22px}
-.feat-item{display:flex;gap:14px}
-.feat-ic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
-.feat-title{font-size:.88rem;font-weight:700;color:var(--dark);margin-bottom:4px}
-.feat-desc{font-size:.78rem;color:var(--text2);line-height:1.6}
-.feat-screen{background:#F8F8F6;border-radius:var(--r);padding:20px;border:1px solid var(--border)}
-.fs-title{font-size:.65rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:12px}
-.fs-row{display:flex;align-items:center;gap:9px;padding:9px 11px;background:#fff;border-radius:7px;margin-bottom:7px;border:1px solid var(--border)}
-.fs-row:last-child{margin-bottom:0}
+.hero-stats{display:flex;gap:40px;justify-content:center;flex-wrap:wrap}
+.stat{text-align:center}
+.stat-n{font-family:'Fraunces',serif;font-size:1.8rem;font-weight:900;color:var(--ink)}
+.stat-n em{color:var(--gold);font-style:normal}
+.stat-l{font-size:.72rem;color:var(--ink3);margin-top:2px}
 
-/* COMO FUNCIONA */
-#como{background:var(--bg)}
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;max-width:880px;margin:0 auto;position:relative}
-.steps::before{content:'';position:absolute;top:35px;left:calc(16.6%+18px);right:calc(16.6%+18px);height:1px;background:repeating-linear-gradient(90deg,var(--border) 0,var(--border) 7px,transparent 7px,transparent 14px)}
-.step-item{text-align:center;position:relative}
-.step-n{width:70px;height:70px;border-radius:50%;background:#fff;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-family:'Fraunces',serif;font-size:1.4rem;font-weight:900;color:var(--accent);position:relative;z-index:1;transition:all .2s}
-.step-item:hover .step-n{background:var(--accent);border-color:var(--accent);color:#fff}
-.step-t{font-size:.88rem;font-weight:700;color:var(--dark);margin-bottom:6px}
-.step-d{font-size:.78rem;color:var(--text2);line-height:1.6}
+/* ── SCROLL INDICATOR ── */
+.scroll-ind{
+  position:absolute;bottom:32px;left:50%;transform:translateX(-50%);
+  z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;
+  color:var(--ink3);font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;
+}
+.scroll-line{width:1px;height:48px;background:linear-gradient(to bottom,transparent,var(--gold));animation:scrollLine 2s ease-in-out infinite}
+@keyframes scrollLine{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
 
-/* DEPOIMENTOS */
-#depoimentos{background:#fff}
-.deps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:1100px;margin:0 auto}
-.dep{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);padding:22px;position:relative}
-.dep::before{content:'"';font-family:'Fraunces',serif;font-size:3.5rem;color:var(--border);position:absolute;top:6px;left:18px;line-height:1}
-.dep-txt{font-size:.82rem;color:var(--text2);line-height:1.7;padding-top:24px;margin-bottom:18px}
-.dep-auth{display:flex;align-items:center;gap:10px}
-.dep-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.82rem;flex-shrink:0}
-.dep-name{font-size:.8rem;font-weight:700;color:var(--dark)}
-.dep-role{font-size:.68rem;color:var(--text2)}
-.dep-stars{color:#F59E0B;font-size:.7rem;margin-top:1px}
+/* ── PARALLAX SECTIONS ── */
+.parallax-section{position:relative;overflow:hidden}
+.parallax-bg{
+  position:absolute;inset:-20%;
+  will-change:transform;
+  transition:transform .1s linear;
+}
 
-/* PRECOS */
-#precos{background:var(--bg)}
-.planos{max-width:480px;margin:0 auto}
-.plano{background:#fff;border:1px solid var(--border);border-radius:var(--rl);padding:28px;position:relative;transition:transform .2s,box-shadow .2s}
-.plano:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.08)}
-.plano.popular{border:2px solid var(--accent)}
-.pop-badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:.68rem;font-weight:700;padding:3px 14px;border-radius:50px;white-space:nowrap}
-.plano-nome{font-size:.75rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:6px}
-.plano-preco{font-family:'Fraunces',serif;font-size:2rem;font-weight:900;color:var(--dark);margin-bottom:3px}
-.plano-preco span{font-size:.85rem;font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;color:var(--text2)}
-.plano-desc{font-size:.75rem;color:var(--text2);margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--border)}
-.plano-feats{display:flex;flex-direction:column;gap:9px;margin-bottom:24px}
-.pf{display:flex;align-items:center;gap:7px;font-size:.78rem}
-.pf-ic{width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.6rem;flex-shrink:0}
-.btn-plano{display:block;text-align:center;padding:11px;border-radius:50px;font-size:.82rem;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:all .2s}
-.btn-plano-p{background:var(--accent);color:#fff}
-.btn-plano-p:hover{background:#6344E0}
-.btn-plano-s{background:transparent;color:var(--text);border:1.5px solid var(--border)}
-.btn-plano-s:hover{border-color:var(--accent);color:var(--accent)}
-.trial-note{text-align:center;margin-top:32px;font-size:.8rem;color:var(--text2)}
+/* ── FEATURES ── */
+#features{
+  padding:120px 40px;
+  background:var(--bg2);
+  position:relative;
+}
+#features::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+}
+.section-label{
+  font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:12px;text-align:center;
+}
+h2{
+  font-family:'Fraunces',serif;
+  font-size:clamp(1.8rem,3.5vw,2.8rem);
+  font-weight:900;line-height:1.1;
+  color:var(--ink);text-align:center;margin-bottom:14px;
+}
+.section-sub{
+  font-size:.95rem;color:var(--ink2);text-align:center;
+  max-width:520px;margin:0 auto 64px;line-height:1.7;
+}
+.features-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:2px;max-width:1100px;margin:0 auto;
+  border:1px solid var(--bd2);border-radius:var(--rl);overflow:hidden;
+}
+.feat-card{
+  background:var(--bg3);
+  padding:36px 32px;
+  transition:background .2s;
+  position:relative;overflow:hidden;
+}
+.feat-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(201,169,110,.3),transparent);
+  opacity:0;transition:opacity .3s;
+}
+.feat-card:hover{background:rgba(201,169,110,.03)}
+.feat-card:hover::before{opacity:1}
+.feat-ic{
+  width:44px;height:44px;border-radius:12px;
+  background:rgba(201,169,110,.08);border:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.2rem;margin-bottom:20px;
+}
+.feat-title{font-size:.92rem;font-weight:700;color:var(--ink);margin-bottom:8px}
+.feat-desc{font-size:.8rem;color:var(--ink2);line-height:1.7}
+.feat-tag{
+  display:inline-block;margin-top:14px;
+  font-size:.66rem;font-weight:600;padding:3px 10px;border-radius:50px;
+  background:rgba(74,222,128,.08);color:var(--green);border:1px solid rgba(74,222,128,.15);
+}
 
-/* FAQ */
-#faq{background:#fff}
-.faq-inner{max-width:680px;margin:0 auto}
-.faq-list{margin-top:44px;display:flex;flex-direction:column;gap:4px}
-.faq-item{border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-.faq-q{padding:16px 18px;font-size:.88rem;font-weight:600;color:var(--dark);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .15s;user-select:none}
-.faq-q:hover,.faq-q.open{background:#F8F8F6}
-.faq-arr{transition:transform .25s;font-size:.75rem;color:var(--text2);flex-shrink:0}
-.faq-q.open .faq-arr{transform:rotate(180deg)}
-.faq-a{padding:0 18px;max-height:0;overflow:hidden;transition:all .3s ease;font-size:.8rem;color:var(--text2);line-height:1.7}
-.faq-a.open{padding:0 18px 15px;max-height:300px}
+/* ── SHOWCASE / PARALLAX STRIP ── */
+#showcase{
+  padding:120px 40px;
+  position:relative;overflow:hidden;
+}
+.showcase-bg{
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse 100% 80% at 80% 50%,rgba(201,169,110,.04) 0%,transparent 60%);
+  pointer-events:none;
+}
+.showcase-inner{
+  max-width:1100px;margin:0 auto;
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:80px;align-items:center;
+}
+.showcase-text{position:relative;z-index:1}
+.showcase-text h2{text-align:left}
+.showcase-text .section-sub{text-align:left;margin-left:0;margin-bottom:32px}
+.check-list{display:flex;flex-direction:column;gap:14px}
+.check-item{display:flex;align-items:flex-start;gap:12px;font-size:.85rem;color:var(--ink2)}
+.check-dot{
+  width:20px;height:20px;border-radius:50%;
+  background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.6rem;color:var(--green);flex-shrink:0;margin-top:1px;
+}
+.showcase-visual{
+  position:relative;
+}
+.phone-mockup{
+  width:280px;margin:0 auto;position:relative;
+  background:var(--bg3);border:1px solid var(--bd);border-radius:36px;
+  padding:12px;box-shadow:0 40px 80px rgba(0,0,0,.5),0 0 0 1px rgba(201,169,110,.1);
+}
+.phone-notch{
+  width:100px;height:26px;background:var(--bg);border-radius:0 0 18px 18px;
+  margin:0 auto 8px;
+}
+.phone-screen{
+  background:var(--bg2);border-radius:26px;padding:20px;
+  min-height:400px;border:1px solid var(--bd2);
+}
+.phone-glow{
+  position:absolute;top:-40px;left:50%;transform:translateX(-50%);
+  width:200px;height:200px;border-radius:50%;
+  background:radial-gradient(circle,rgba(201,169,110,.15) 0%,transparent 70%);
+  pointer-events:none;
+}
 
-/* MODAL CADASTRO */
-.modal-ov{display:none;position:fixed;inset:0;background:rgba(15,15,13,.6);backdrop-filter:blur(6px);z-index:999;align-items:center;justify-content:center;padding:20px}
-.modal-ov.open{display:flex}
-.modal{background:#fff;border-radius:var(--rl);box-shadow:0 32px 80px rgba(0,0,0,.2);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:slideUp .3s ease}
-@keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
-.modal-hdr{padding:28px 28px 0}
-.modal-logo{font-family:'Fraunces',serif;font-size:1.1rem;font-weight:900;color:var(--dark);margin-bottom:6px}
-.modal-logo em{color:var(--accent);font-style:italic}
-.modal-title{font-size:1.4rem;font-weight:800;color:var(--dark);margin-bottom:4px}
-.modal-sub{font-size:.82rem;color:var(--text2);margin-bottom:20px}
-.trial-pill{display:inline-flex;align-items:center;gap:6px;background:#DCFCE7;color:#16A34A;font-size:.72rem;font-weight:700;padding:5px 12px;border-radius:50px;margin-bottom:20px}
-.modal-body{padding:0 28px 28px}
-.modal-err{background:#FEE2E2;color:#DC2626;padding:10px 14px;border-radius:var(--r);font-size:.78rem;margin-bottom:14px;display:none}
-.modal-suc{background:#DCFCE7;color:#16A34A;padding:14px;border-radius:var(--r);font-size:.85rem;margin-bottom:14px;display:none;text-align:center;line-height:1.6}
-.fl{display:block;font-size:.72rem;font-weight:600;color:var(--text2);margin-bottom:5px;margin-top:13px}
-.fi{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--r);font-family:inherit;font-size:.85rem;color:var(--text);outline:none;transition:border-color .2s}
-.fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,252,.08)}
-.fi::placeholder{color:var(--text2);opacity:.6}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.btn-submit{width:100%;margin-top:18px;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:50px;font-family:inherit;font-size:.92rem;font-weight:700;cursor:pointer;transition:all .2s}
-.btn-submit:hover{background:#6344E0}
-.btn-submit:disabled{opacity:.6;cursor:not-allowed}
-.modal-footer-note{text-align:center;font-size:.72rem;color:var(--text2);margin-top:14px}
-.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;font-size:1.2rem;color:var(--text2);cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1}
-.modal-close:hover{background:#F5F5F3}
-.plano-sel{display:none}
+/* Mini UI inside phone */
+.mini-kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.mini-kpi{background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;padding:10px}
+.mini-kpi-v{font-size:.9rem;font-weight:800;color:var(--ink)}
+.mini-kpi-l{font-size:.55rem;color:var(--ink3);margin-top:2px}
+.mini-card{background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;padding:12px;margin-bottom:8px}
+.mini-card-t{font-size:.62rem;font-weight:700;color:var(--ink2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+.mini-ag{display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--bd2)}
+.mini-ag:last-child{border-bottom:none}
+.mini-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.mini-ag-info{flex:1}
+.mini-ag-name{font-size:.6rem;font-weight:600;color:var(--ink)}
+.mini-ag-svc{font-size:.54rem;color:var(--ink3)}
+.mini-ag-time{font-size:.6rem;font-weight:700;color:var(--ink2)}
+.mini-badge{font-size:.5rem;padding:2px 6px;border-radius:50px;background:rgba(74,222,128,.1);color:var(--green)}
+.mini-bar-wrap{margin-top:4px}
+.mini-bar-row{display:flex;justify-content:space-between;font-size:.55rem;color:var(--ink3);margin-bottom:3px}
+.mini-bar-bg{height:3px;background:var(--bd2);border-radius:50px;overflow:hidden}
+.mini-bar-fill{height:100%;border-radius:50px;background:linear-gradient(90deg,var(--gold),var(--gold2))}
 
-/* CTA FINAL */
-#cta-final{background:var(--dark);text-align:center;position:relative;overflow:hidden}
-#cta-final::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 50% 50%,rgba(124,92,252,.18) 0%,transparent 70%)}
-#cta-final h2{color:#fff;position:relative;z-index:1}
-#cta-final .sec-sub{color:rgba(255,255,255,.55);position:relative;z-index:1}
-.cta-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:36px;position:relative;z-index:1}
-.btn-wh{background:#fff;color:var(--dark);padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:700;text-decoration:none;border:none;cursor:pointer;transition:all .2s}
-.btn-wh:hover{background:var(--accent);color:#fff;transform:translateY(-2px)}
-.btn-gh{background:transparent;color:#fff;padding:13px 28px;border-radius:50px;font-size:.9rem;font-weight:600;text-decoration:none;border:1.5px solid rgba(255,255,255,.25);transition:all .2s}
-.btn-gh:hover{border-color:#fff;background:rgba(255,255,255,.07)}
+/* ── PRICING ── */
+#pricing{
+  padding:120px 40px;
+  background:var(--bg2);position:relative;
+}
+#pricing::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+}
+.pricing-card{
+  max-width:440px;margin:0 auto;
+  background:var(--bg3);border:1px solid var(--bd);
+  border-radius:var(--rl);padding:48px 40px;
+  position:relative;overflow:hidden;
+  box-shadow:0 40px 80px rgba(0,0,0,.3),0 0 0 1px rgba(201,169,110,.08);
+}
+.pricing-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--gold3),var(--gold),var(--gold2));
+}
+.pricing-glow{
+  position:absolute;top:-60px;right:-60px;width:200px;height:200px;
+  background:radial-gradient(circle,rgba(201,169,110,.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+.pricing-trial{
+  display:inline-block;font-size:.7rem;font-weight:700;
+  padding:5px 14px;border-radius:50px;
+  background:rgba(74,222,128,.1);color:var(--green);
+  border:1px solid rgba(74,222,128,.2);margin-bottom:24px;
+}
+.pricing-price{
+  font-family:'Fraunces',serif;font-size:3.2rem;font-weight:900;
+  color:var(--ink);line-height:1;margin-bottom:4px;
+}
+.pricing-price sup{font-size:1.2rem;vertical-align:super;margin-right:4px;color:var(--ink2)}
+.pricing-price small{font-size:.9rem;color:var(--ink3);font-family:'Plus Jakarta Sans',sans-serif;font-weight:400}
+.pricing-desc{font-size:.82rem;color:var(--ink2);margin-bottom:32px;margin-top:8px}
+.pricing-feat{display:flex;flex-direction:column;gap:13px;margin-bottom:36px}
+.pf{display:flex;align-items:center;gap:12px;font-size:.83rem;color:var(--ink2)}
+.pf-ic{color:var(--green);font-size:.8rem;flex-shrink:0}
+.pricing-btn{
+  width:100%;padding:15px;background:var(--gold);color:#0A0908;
+  border:none;border-radius:50px;font-size:.92rem;font-weight:800;
+  cursor:pointer;transition:all .2s;font-family:'Plus Jakarta Sans',sans-serif;
+}
+.pricing-btn:hover{background:var(--gold2);transform:translateY(-1px);box-shadow:0 8px 24px rgba(201,169,110,.25)}
+.pricing-note{text-align:center;font-size:.72rem;color:var(--ink3);margin-top:16px}
 
-/* FOOTER */
-footer{background:var(--dark);border-top:1px solid rgba(255,255,255,.07);padding:32px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.foot-logo{font-family:'Fraunces',serif;font-size:1rem;font-weight:900;color:#fff}
-.foot-logo em{color:var(--accent);font-style:italic}
-.foot-txt{font-size:.72rem;color:rgba(255,255,255,.35)}
-.foot-links{display:flex;gap:20px}
-.foot-links a{font-size:.72rem;color:rgba(255,255,255,.35);text-decoration:none;transition:color .15s}
-.foot-links a:hover{color:rgba(255,255,255,.7)}
+/* ── TESTIMONIALS ── */
+#testimonials{padding:120px 40px}
+.tests-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:1100px;margin:0 auto}
+.test-card{
+  background:var(--bg3);border:1px solid var(--bd2);border-radius:var(--r);
+  padding:28px;transition:border-color .2s;
+}
+.test-card:hover{border-color:var(--bd)}
+.test-stars{color:var(--gold);font-size:.9rem;margin-bottom:16px}
+.test-text{font-size:.83rem;color:var(--ink2);line-height:1.75;margin-bottom:20px;font-style:italic}
+.test-author{display:flex;align-items:center;gap:10px}
+.test-av{
+  width:36px;height:36px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.78rem;font-weight:700;color:#0A0908;flex-shrink:0;
+}
+.test-name{font-size:.8rem;font-weight:700;color:var(--ink)}
+.test-role{font-size:.68rem;color:var(--ink3)}
 
-/* RESPONSIVE */
-@media(max-width:820px){
-  nav{padding:12px 18px}.nav-links{display:none}
-  .nav-entrar-mobile{display:flex!important}
-  #hero{padding:88px 18px 60px}.hero-inner{grid-template-columns:1fr}.hero-visual{display:none}
-  section{padding:64px 18px}
-  .feat-grid,.deps,.planos{grid-template-columns:1fr}
-  .steps{grid-template-columns:1fr}.steps::before{display:none}
-  .feat-grid.rev{direction:ltr}
-  footer{padding:24px 18px}
-  .form-row{grid-template-columns:1fr}
+/* ── CTA FINAL ── */
+#cta{
+  padding:120px 40px;
+  position:relative;overflow:hidden;
+  text-align:center;
+}
+.cta-glow{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:600px;height:300px;
+  background:radial-gradient(ellipse,rgba(201,169,110,.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+#cta h2{font-size:clamp(2rem,4vw,3.2rem);margin-bottom:18px}
+#cta .section-sub{margin-bottom:40px}
+
+/* ── FOOTER ── */
+footer{
+  padding:40px;border-top:1px solid var(--bd2);
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:16px;
+}
+.footer-logo{font-family:'Fraunces',serif;font-size:1.1rem;font-weight:900;color:var(--ink)}
+.footer-logo em{color:var(--gold);font-style:italic}
+.footer-copy{font-size:.75rem;color:var(--ink3)}
+.footer-links{display:flex;gap:20px}
+.footer-links a{font-size:.76rem;color:var(--ink3);transition:color .2s}
+.footer-links a:hover{color:var(--ink)}
+
+/* ── FLOATING PARTICLES (CSS only) ── */
+.particle{
+  position:absolute;border-radius:50%;
+  animation:float var(--dur,8s) ease-in-out infinite;
+  animation-delay:var(--delay,0s);
+  pointer-events:none;opacity:.4;
+}
+@keyframes float{
+  0%,100%{transform:translateY(0) translateX(0)}
+  33%{transform:translateY(var(--y1,-30px)) translateX(var(--x1,20px))}
+  66%{transform:translateY(var(--y2,20px)) translateX(var(--x2,-15px))}
+}
+
+/* ── REVEAL ANIMATIONS ── */
+.reveal{opacity:0;transform:translateY(30px);transition:opacity .7s ease,transform .7s ease}
+.reveal.on{opacity:1;transform:translateY(0)}
+.reveal-left{opacity:0;transform:translateX(-40px);transition:opacity .7s ease,transform .7s ease}
+.reveal-left.on{opacity:1;transform:translateX(0)}
+.reveal-right{opacity:0;transform:translateX(40px);transition:opacity .7s ease,transform .7s ease}
+.reveal-right.on{opacity:1;transform:translateX(0)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  nav{padding:14px 20px}
+  nav.scrolled{padding:12px 20px}
+  .nav-links{display:none}
+  .nav-ham{display:block}
+  #hero{height:100svh}
+  .hero-stats{gap:24px}
+  h1{font-size:clamp(2.2rem,8vw,3.5rem)}
+  #features,#showcase,#pricing,#testimonials,#cta{padding:80px 20px}
+  .features-grid{grid-template-columns:1fr;border-radius:var(--r)}
+  .showcase-inner{grid-template-columns:1fr;gap:48px}
+  .showcase-text h2,.showcase-text .section-sub{text-align:center;margin-left:auto}
+  .check-list{align-items:center}
+  .phone-mockup{width:240px}
+  .tests-grid{grid-template-columns:1fr}
+  footer{flex-direction:column;align-items:center;text-align:center}
+  .footer-links{justify-content:center}
+}
+@media(max-width:480px){
+  .hero-btns{flex-direction:column;align-items:center}
+  .btn-p,.btn-s{width:100%;justify-content:center}
+  .hero-stats{gap:16px}
+  .stat-n{font-size:1.4rem}
+  .pricing-card{padding:32px 24px}
 }
 </style>
-  <!-- Google Analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-JGXF0WHVYX"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-JGXF0WHVYX');
-  </script>
 </head>
 <body>
 
 <!-- NAV -->
-<nav id="navbar">
-  <a class="nav-logo" href="#">Bele<em>za</em> Pro</a>
-  <a href="https://belezaprooficial.com.br/painel.html" target="_blank" class="nav-entrar-mobile" style="display:none;font-size:.8rem;font-weight:600;color:var(--text2);text-decoration:none;margin-left:auto;margin-right:12px;align-items:center;gap:4px">Entrar →</a>
+<nav id="nav">
+  <a href="#" class="nav-logo">Bele<em>za</em> Pro</a>
   <div class="nav-links">
     <a href="#features">Funcionalidades</a>
-    <a href="#como">Como funciona</a>
-    <a href="#depoimentos">Depoimentos</a>
-    <a href="#precos">Preços</a>
-    <a href="https://belezaprooficial.com.br/painel.html" target="_blank" style="font-size:.84rem;font-weight:600;color:var(--text2);text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text2)'">Entrar →</a>
-    <a href="#" class="nav-cta" onclick="openModal(event,'Pro')">Começar grátis</a>
+    <a href="#showcase">Como funciona</a>
+    <a href="#pricing">Preços</a>
+    <a href="#testimonials">Depoimentos</a>
+    <a href="painel.html" class="nav-cta">Entrar no sistema →</a>
   </div>
+  <button class="nav-ham" onclick="toggleMob()">☰</button>
 </nav>
 
-<!-- HERO -->
-<section id="hero">
-  <div class="hero-bg"></div>
-  <div class="hero-inner">
-    <div>
-      <div class="hero-tag"><span class="dot"></span> 100% online — funciona no celular</div>
-      <h1>Seu salão organizado.<br>Sua vida mais <em>fácil.</em></h1>
-      <p class="hero-sub">Agenda, clientes, financeiro, estoque e comissões — tudo em um só lugar. Sem planilha, sem caderno, sem confusão.</p>
-      <div class="hero-btns">
-        <button class="btn-p" onclick="openModal(event,'Pro')">✨ Começar grátis por 14 dias</button>
-        <a href="#features" class="btn-s">Ver funcionalidades →</a>
-      </div>
-      <div class="hero-social">
-        <div class="avatars">
-          <div class="av" style="background:linear-gradient(135deg,#7C5CFC,#9B8AFF)">M</div>
-          <div class="av" style="background:linear-gradient(135deg,#FF6B6B,#FF9E9E)">K</div>
-          <div class="av" style="background:linear-gradient(135deg,#00C896,#00A878)">J</div>
-          <div class="av" style="background:linear-gradient(135deg,#FFB347,#FF8C00)">P</div>
-        </div>
-        <span>+47 salões já usam o Beleza Pro</span>
-      </div>
-    </div>
-    <div class="hero-visual">
-      <div class="fc fc1">
-        <div class="fc-lbl">Faturamento hoje</div>
-        <div class="fc-val">R$ 2.840</div>
-        <div class="fc-sub" style="color:var(--accent3)">↑ 12% vs ontem</div>
-      </div>
-      <div class="mockup">
-        <div class="mock-bar">
-          <div class="mock-dots">
-            <div class="mock-dot" style="background:#FF5F57"></div>
-            <div class="mock-dot" style="background:#FFBD2E"></div>
-            <div class="mock-dot" style="background:#28C840"></div>
-          </div>
-          <div class="mock-url">belezapro.app</div>
-        </div>
-        <div class="mock-body">
-          <div class="mock-kpis">
-            <div class="mk"><div class="mk-v">18</div><div class="mk-l">Agendamentos</div></div>
-            <div class="mk"><div class="mk-v" style="color:var(--accent)">R$2.8k</div><div class="mk-l">Faturamento</div></div>
-            <div class="mk"><div class="mk-v">127</div><div class="mk-l">Clientes</div></div>
-          </div>
-          <div class="mock-section">Agenda de hoje</div>
-          <div class="mock-row"><div class="mr-dot" style="background:#7C5CFC"></div><div class="mr-name">Ana Paula — Corte</div><div class="mr-badge" style="background:#DCFCE7;color:#16A34A">Confirmado</div><div class="mr-val">R$70</div></div>
-          <div class="mock-row"><div class="mr-dot" style="background:#FF6B6B"></div><div class="mr-name">Beatriz — Coloração</div><div class="mr-badge" style="background:#DBEAFE;color:#1D4ED8">Atendendo</div><div class="mr-val">R$150</div></div>
-          <div class="mock-row"><div class="mr-dot" style="background:#00C896"></div><div class="mr-name">Carla — Manicure</div><div class="mr-badge" style="background:#F3F4F6;color:#6B7280">Aguardando</div><div class="mr-val">R$45</div></div>
-        </div>
-      </div>
-      <div class="fc fc2">
-        <div class="fc-lbl">Comissão — Juliana</div>
-        <div class="fc-val">R$ 1.863</div>
-        <div class="fc-sub" style="color:var(--accent3)">✅ Pago este mês</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- LOGOS -->
-<div id="logos">
-  <p>Usado por salões em todo o Brasil</p>
-  <div class="logos-row">
-    <div class="logo-it">Studio Luna</div>
-    <div class="logo-it">Barbearia RBS</div>
-    <div class="logo-it">Salão Charm</div>
-    <div class="logo-it">Espaço Beleza</div>
-    <div class="logo-it">Nails &amp; More</div>
-  </div>
+<!-- MOBILE MENU -->
+<div class="mob-menu" id="mob-menu">
+  <button class="mob-close" onclick="toggleMob()">✕</button>
+  <a href="#features" onclick="toggleMob()">Funcionalidades</a>
+  <a href="#showcase" onclick="toggleMob()">Como funciona</a>
+  <a href="#pricing" onclick="toggleMob()">Preços</a>
+  <a href="#testimonials" onclick="toggleMob()">Depoimentos</a>
+  <a href="painel.html" class="btn-p" style="font-size:.9rem">Entrar no sistema →</a>
 </div>
 
-<!-- PROBLEMA -->
-<section id="problema">
-  <div class="text-center">
-    <div class="sec-tag">O problema</div>
-    <h2>Gerenciar salão não precisa<br>ser tão difícil assim</h2>
-    <p class="sec-sub">A maioria dos donos de salão perde horas por semana em coisas que o sistema resolve em segundos.</p>
+<!-- HERO com Parallax Canvas -->
+<section id="hero">
+  <canvas id="parallax-canvas"></canvas>
+  <div class="hero-overlay"></div>
+
+  <div class="hero-content">
+    <div class="hero-tag reveal">
+      <span class="dot"></span>
+      Sistema #1 para salões de beleza
+    </div>
+    <h1 class="reveal">
+      Gerencie seu salão<br>com <em>inteligência</em>
+    </h1>
+    <p class="hero-sub reveal">
+      Agenda online, controle financeiro, comissões e muito mais — tudo em um único sistema feito para donos de salão que querem crescer.
+    </p>
+    <div class="hero-btns reveal">
+      <a href="painel.html" class="btn-p">Começar grátis por 14 dias →</a>
+      <a href="#features" class="btn-s">Ver funcionalidades</a>
+    </div>
+    <div class="hero-stats reveal">
+      <div class="stat"><div class="stat-n">14<em>d</em></div><div class="stat-l">Grátis para testar</div></div>
+      <div class="stat"><div class="stat-n">R$<em>59</em></div><div class="stat-l">Por mês após trial</div></div>
+      <div class="stat"><div class="stat-n"><em>∞</em></div><div class="stat-l">Agendamentos inclusos</div></div>
+      <div class="stat"><div class="stat-n">24<em>h</em></div><div class="stat-l">Suporte via WhatsApp</div></div>
+    </div>
   </div>
-  <div class="pains">
-    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">📱</div><div class="pain-title">Agenda bagunçada no WhatsApp</div><div class="pain-desc">Clientes confirmando, cancelando e remarcando. Fica impossível controlar quem vem e quem não vem.</div></div>
-    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">📊</div><div class="pain-title">Financeiro no caderno</div><div class="pain-desc">Sem saber quanto entrou, quanto saiu e se o mês foi realmente bom ou ruim de verdade.</div></div>
-    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">💇</div><div class="pain-title">Comissão calculada na mão</div><div class="pain-desc">Todo mês uma dor de cabeça para calcular o que cada profissional vai receber sem errar.</div></div>
-    <div class="pain"><div class="pain-x">✗</div><div class="pain-em">📦</div><div class="pain-title">Estoque sem controle</div><div class="pain-desc">Produtos acabando sem avisar, compras desnecessárias e dinheiro sendo jogado fora.</div></div>
+
+  <div class="scroll-ind">
+    <div class="scroll-line"></div>
+    scroll
   </div>
 </section>
 
 <!-- FEATURES -->
-<section id="features">
-  <div class="feat-inner">
-    <div class="text-center">
-      <div class="sec-tag">Funcionalidades</div>
-      <h2>Tudo que seu salão precisa</h2>
-      <p class="sec-sub">Seis módulos integrados que trabalham juntos para você ter controle total do negócio.</p>
+<section id="features" class="parallax-section">
+  <div class="section-label reveal">O que está incluso</div>
+  <h2 class="reveal">Tudo que seu salão precisa,<br>em um só lugar</h2>
+  <p class="section-sub reveal">Sem planilhas, sem caderno, sem confusão. O Beleza Pro centraliza toda a gestão do seu negócio.</p>
+
+  <div class="features-grid reveal">
+    <div class="feat-card">
+      <div class="feat-ic">📅</div>
+      <div class="feat-title">Agenda Inteligente</div>
+      <div class="feat-desc">Visualize todos os agendamentos dos próximos 3 dias. Bloqueio automático de conflito de horários.</div>
+      <span class="feat-tag">Tempo real</span>
     </div>
-    <div class="feat-grid">
-      <div class="feat-list">
-        <div class="feat-item"><div class="feat-ic" style="background:#EDE9FF;color:#7C5CFC">📅</div><div><div class="feat-title">Agenda inteligente</div><div class="feat-desc">Visualize todos os horários, profissionais e serviços do dia. Crie agendamentos em segundos com confirmação automática.</div></div></div>
-        <div class="feat-item"><div class="feat-ic" style="background:#D6FAF0;color:#00A878">👥</div><div><div class="feat-title">CRM de clientes</div><div class="feat-desc">Histórico completo: visitas, serviços realizados e total gasto. Fidelize quem já frequenta seu salão.</div></div></div>
-        <div class="feat-item"><div class="feat-ic" style="background:#FEF3C7;color:#B45309">💰</div><div><div class="feat-title">Financeiro completo</div><div class="feat-desc">Entradas, saídas, lucro líquido e gráficos mensais. Saiba exatamente onde seu dinheiro está indo.</div></div></div>
-      </div>
-      <div class="feat-screen">
-        <div class="fs-title">Agenda de hoje</div>
-        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#7C5CFC;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">08:30 — Ana Paula · Corte</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#DCFCE7;color:#16A34A;font-weight:700">✓ Confirmado</div></div>
-        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#FF6B6B;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">09:00 — Beatriz · Coloração</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#DBEAFE;color:#1D4ED8;font-weight:700">Atendendo</div></div>
-        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#00C896;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">10:30 — Carla · Manicure</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#F3F4F6;color:#6B7280;font-weight:700">Aguardando</div></div>
-        <div class="fs-row"><div style="width:9px;height:9px;border-radius:50%;background:#FFB347;flex-shrink:0"></div><div style="flex:1;font-size:.73rem;font-weight:600">14:00 — Diana · Escova</div><div style="font-size:.6rem;padding:2px 7px;border-radius:50px;background:#F3F4F6;color:#6B7280;font-weight:700">Aguardando</div></div>
+    <div class="feat-card">
+      <div class="feat-ic">🔗</div>
+      <div class="feat-title">Agendamento Online</div>
+      <div class="feat-desc">Link exclusivo do seu salão. O cliente escolhe serviço, profissional e horário sem precisar ligar.</div>
+      <span class="feat-tag">Sem app necessário</span>
+    </div>
+    <div class="feat-card">
+      <div class="feat-ic">💰</div>
+      <div class="feat-title">Financeiro Completo</div>
+      <div class="feat-desc">Controle de entradas e saídas, lançamentos pendentes e relatório de faturamento por período.</div>
+      <span class="feat-tag">Simplificado</span>
+    </div>
+    <div class="feat-card">
+      <div class="feat-ic">💸</div>
+      <div class="feat-title">Comissões Automáticas</div>
+      <div class="feat-desc">Calcula e fecha a comissão de cada profissional por mês, com histórico e controle de pagamento.</div>
+      <span class="feat-tag">Zero erro</span>
+    </div>
+    <div class="feat-card">
+      <div class="feat-ic">👥</div>
+      <div class="feat-title">Gestão de Clientes</div>
+      <div class="feat-desc">Histórico completo de cada cliente, total gasto e lista de clientes inativos para campanhas de retorno.</div>
+      <span class="feat-tag">CRM integrado</span>
+    </div>
+    <div class="feat-card">
+      <div class="feat-ic">📱</div>
+      <div class="feat-title">App Mobile (PWA)</div>
+      <div class="feat-desc">Instale no celular como app nativo. Funciona no Android e iPhone sem precisar de App Store.</div>
+      <span class="feat-tag">iOS & Android</span>
+    </div>
+  </div>
+</section>
+
+<!-- SHOWCASE -->
+<section id="showcase">
+  <div class="showcase-bg"></div>
+  <div class="showcase-inner">
+    <div class="showcase-text">
+      <div class="section-label reveal-left">Na prática</div>
+      <h2 class="reveal-left">Feito para funcionar<br>no celular</h2>
+      <p class="section-sub reveal-left">Interface pensada para quem está no meio de um atendimento. Rápido, claro e sem complicação.</p>
+      <div class="check-list reveal-left">
+        <div class="check-item"><div class="check-dot">✓</div>Agenda em tempo real com todos os profissionais</div>
+        <div class="check-item"><div class="check-dot">✓</div>Marcar atendimento como concluído em 1 toque</div>
+        <div class="check-item"><div class="check-dot">✓</div>Envio automático de WhatsApp de avaliação</div>
+        <div class="check-item"><div class="check-dot">✓</div>Link de agendamento para clientes agendarem sozinhos</div>
+        <div class="check-item"><div class="check-dot">✓</div>Dashboard com resumo do dia ao abrir o app</div>
       </div>
     </div>
-    <div class="feat-grid rev">
-      <div class="feat-screen">
-        <div class="fs-title">Comissões — Maio 2026</div>
-        <div class="fs-row"><div style="width:30px;height:30px;border-radius:50%;background:#7C5CFC;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.68rem;font-weight:700;flex-shrink:0">J</div><div style="flex:1;padding-left:8px"><div style="font-size:.72rem;font-weight:600">Juliana · 45%</div><div style="font-size:.64rem;color:#9B9B98">42 serviços · R$ 4.140</div></div><div style="font-size:.82rem;font-weight:800;color:#7C5CFC">R$1.863</div></div>
-        <div class="fs-row"><div style="width:30px;height:30px;border-radius:50%;background:#FF6B6B;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.68rem;font-weight:700;flex-shrink:0">K</div><div style="flex:1;padding-left:8px"><div style="font-size:.72rem;font-weight:600">Katia · 40%</div><div style="font-size:.64rem;color:#9B9B98">28 serviços · R$ 2.800</div></div><div style="font-size:.82rem;font-weight:800;color:#7C5CFC">R$1.120</div></div>
-        <div style="margin-top:10px;padding:9px 11px;background:#DCFCE7;border-radius:7px;font-size:.7rem;font-weight:700;color:#16A34A">✅ Total a pagar este mês: R$ 2.983</div>
-      </div>
-      <div class="feat-list">
-        <div class="feat-item"><div class="feat-ic" style="background:#FFE4EB;color:#FF6B6B">💸</div><div><div class="feat-title">Comissões automáticas</div><div class="feat-desc">Configure a porcentagem de cada profissional e o sistema calcula tudo sozinho. Feche o mês com um clique.</div></div></div>
-        <div class="feat-item"><div class="feat-ic" style="background:#FFF3E0;color:#FF8C00">📦</div><div><div class="feat-title">Controle de estoque</div><div class="feat-desc">Registre entradas e saídas. Receba alertas quando um produto estiver acabando antes de faltar.</div></div></div>
-        <div class="feat-item"><div class="feat-ic" style="background:#E0F2FE;color:#0284C7">🔒</div><div><div class="feat-title">Dados seguros e isolados</div><div class="feat-desc">Cada salão tem seus dados completamente separados. Nenhum salão vê os dados de outro.</div></div></div>
+    <div class="showcase-visual reveal-right">
+      <div class="phone-glow"></div>
+      <div class="phone-mockup">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div style="font-size:.55rem;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Dashboard</div>
+          <div class="mini-kpis">
+            <div class="mini-kpi"><div class="mini-kpi-v">8</div><div class="mini-kpi-l">Agend. hoje</div></div>
+            <div class="mini-kpi"><div class="mini-kpi-v">R$640</div><div class="mini-kpi-l">Faturamento</div></div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-card-t">Próximos 3 dias</div>
+            <div class="mini-ag">
+              <div class="mini-dot" style="background:#C9A96E"></div>
+              <div class="mini-ag-info"><div class="mini-ag-name">Maria Silva</div><div class="mini-ag-svc">Corte + Escova</div></div>
+              <div><div class="mini-ag-time">09:00</div><span class="mini-badge">Hoje</span></div>
+            </div>
+            <div class="mini-ag">
+              <div class="mini-dot" style="background:#60A5FA"></div>
+              <div class="mini-ag-info"><div class="mini-ag-name">Ana Costa</div><div class="mini-ag-svc">Coloração</div></div>
+              <div><div class="mini-ag-time">10:30</div><span class="mini-badge">Hoje</span></div>
+            </div>
+            <div class="mini-ag">
+              <div class="mini-dot" style="background:#4ADE80"></div>
+              <div class="mini-ag-info"><div class="mini-ag-name">Julia Ramos</div><div class="mini-ag-svc">Manicure</div></div>
+              <div><div class="mini-ag-time">14:00</div><div style="font-size:.52rem;color:var(--ink3)">Amanhã</div></div>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-card-t">Faturamento — 7 dias</div>
+            <div class="mini-bar-wrap">
+              <div class="mini-bar-row"><span>Seg</span><span style="color:var(--gold)">R$380</span></div>
+              <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:60%"></div></div>
+            </div>
+            <div class="mini-bar-wrap" style="margin-top:6px">
+              <div class="mini-bar-row"><span>Ter</span><span style="color:var(--gold)">R$520</span></div>
+              <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:82%"></div></div>
+            </div>
+            <div class="mini-bar-wrap" style="margin-top:6px">
+              <div class="mini-bar-row"><span>Qua</span><span style="color:var(--gold)">R$640</span></div>
+              <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:100%"></div></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- COMO FUNCIONA -->
-<section id="como" class="text-center">
-  <div class="sec-tag">Simples assim</div>
-  <h2>Em 3 passos você começa</h2>
-  <p class="sec-sub">Sem instalar nada, sem precisar de técnico. Se você usa WhatsApp, você usa o Beleza Pro.</p>
-  <div class="steps">
-    <div class="step-item"><div class="step-n">1</div><div class="step-t">Crie sua conta</div><div class="step-d">Preencha o nome do salão, e-mail e senha. Em menos de 1 minuto você já está dentro.</div></div>
-    <div class="step-item"><div class="step-n">2</div><div class="step-t">Configure seu salão</div><div class="step-d">Adicione seus profissionais, serviços e preços. Leva menos de 10 minutos.</div></div>
-    <div class="step-item"><div class="step-n">3</div><div class="step-t">Comece a usar</div><div class="step-d">Crie agendamentos, cadastre clientes e veja seu salão ganhar forma no sistema.</div></div>
+<!-- PRICING -->
+<section id="pricing">
+  <div class="section-label reveal">Preço único</div>
+  <h2 class="reveal">Simples e transparente</h2>
+  <p class="section-sub reveal">Um plano. Sem taxa de setup, sem limite de agendamentos, sem surpresas na fatura.</p>
+
+  <div class="pricing-card reveal">
+    <div class="pricing-glow"></div>
+    <span class="pricing-trial">✦ 14 dias grátis — sem cartão</span>
+    <div class="pricing-price"><sup>R$</sup>59<small>,90/mês</small></div>
+    <div class="pricing-desc">Tudo incluso para gerenciar seu salão com profissionalismo.</div>
+    <div class="pricing-feat">
+      <div class="pf"><span class="pf-ic">✓</span>Agendamentos ilimitados</div>
+      <div class="pf"><span class="pf-ic">✓</span>Link de agendamento online para clientes</div>
+      <div class="pf"><span class="pf-ic">✓</span>Controle financeiro completo</div>
+      <div class="pf"><span class="pf-ic">✓</span>Gestão de comissões por profissional</div>
+      <div class="pf"><span class="pf-ic">✓</span>Controle de estoque</div>
+      <div class="pf"><span class="pf-ic">✓</span>App mobile (PWA) para Android e iPhone</div>
+      <div class="pf"><span class="pf-ic">✓</span>Múltiplos usuários com permissões</div>
+      <div class="pf"><span class="pf-ic">✓</span>Suporte via WhatsApp</div>
+    </div>
+    <button class="pricing-btn" onclick="window.location.href='painel.html'">Começar grátis agora →</button>
+    <div class="pricing-note">Cancele quando quiser. Sem multa, sem burocracia.</div>
   </div>
 </section>
 
-<!-- DEPOIMENTOS -->
-<section id="depoimentos">
-  <div class="text-center">
-    <div class="sec-tag">Depoimentos</div>
-    <h2>Quem já usa, não larga</h2>
-    <p class="sec-sub">Veja o que donos de salão falam sobre o Beleza Pro.</p>
-  </div>
-  <div class="deps">
-    <div class="dep"><p class="dep-txt">Antes perdia 2 horas por semana calculando comissão na calculadora. Agora clico num botão e está pronto. Mudou minha vida.</p><div class="dep-auth"><div class="dep-av" style="background:linear-gradient(135deg,#7C5CFC,#FF6B6B)">M</div><div><div class="dep-name">Maria Clara</div><div class="dep-role">Salão em São Paulo, SP</div><div class="dep-stars">★★★★★</div></div></div></div>
-    <div class="dep"><p class="dep-txt">Meu estoque nunca mais acabou no meio da semana. O sistema avisa antes e consigo repor com calma, sem correr.</p><div class="dep-auth"><div class="dep-av" style="background:linear-gradient(135deg,#00C896,#0284C7)">K</div><div><div class="dep-name">Karla Mendes</div><div class="dep-role">Barbearia em Curitiba, PR</div><div class="dep-stars">★★★★★</div></div></div></div>
-    <div class="dep"><p class="dep-txt">O financeiro me mostrou que eu gastava R$800 por mês em material que nem usava. Economizei mais do que pago no sistema.</p><div class="dep-auth"><div class="dep-av" style="background:linear-gradient(135deg,#FFB347,#FF8C00)">J</div><div><div class="dep-name">Juliana Alves</div><div class="dep-role">Studio de Beleza em BH, MG</div><div class="dep-stars">★★★★★</div></div></div></div>
-  </div>
-</section>
+<!-- TESTIMONIALS -->
+<section id="testimonials">
+  <div class="section-label reveal">Depoimentos</div>
+  <h2 class="reveal">Donos de salão que já usam</h2>
+  <p class="section-sub reveal">Resultados reais de quem trocou planilha e caderno pelo Beleza Pro.</p>
 
-<!-- PREÇOS -->
-<section id="precos" class="text-center">
-  <div class="sec-tag">Preços</div>
-  <h2>Simples e sem surpresas</h2>
-  <p class="sec-sub">Comece grátis por 14 dias em qualquer plano. Sem cartão de crédito.</p>
-  <div style="max-width:480px;margin:0 auto">
-    <div class="plano popular" style="text-align:center">
-      <div class="pop-badge">✨ Tudo incluído — sem limites</div>
-      <div class="plano-nome" style="margin-top:8px">Plano Único</div>
-      <div class="plano-preco" style="font-size:3rem">R$ 59,90<span>/mês</span></div>
-      <div class="plano-desc">Acesso completo a todos os módulos. Sem planos confusos, sem surpresas.</div>
-      <div class="plano-feats" style="text-align:left;max-width:320px;margin:0 auto 24px">
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Agenda ilimitada</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Clientes ilimitados</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Financeiro completo</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Estoque e comissões</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Profissionais ilimitados</div>
-        <div class="pf"><div class="pf-ic" style="background:#DCFCE7;color:#16A34A">✓</div>Suporte via WhatsApp</div>
+  <div class="tests-grid">
+    <div class="test-card reveal">
+      <div class="test-stars">★★★★★</div>
+      <div class="test-text">"Antes eu ficava perdida com agenda no papel e dinheiro misturado. Agora vejo tudo na hora, até de casa. Minha cliente agenda sozinha pelo link e já aparece no sistema."</div>
+      <div class="test-author">
+        <div class="test-av" style="background:linear-gradient(135deg,#C9A96E,#E8C4A0)">R</div>
+        <div><div class="test-name">Roberta M.</div><div class="test-role">Studio de beleza — SP</div></div>
       </div>
-      <button class="btn-plano btn-plano-p" style="max-width:320px;margin:0 auto;display:block" onclick="openModal(event,'Pro')">Começar grátis por 14 dias →</button>
     </div>
-  </div>
-  <p class="trial-note">🎉 <strong>14 dias grátis</strong> · Sem cartão de crédito · Cancele quando quiser · R$ 59,90/mês depois</p>
-</section>
-
-<!-- FAQ -->
-<section id="faq">
-  <div class="faq-inner">
-    <div class="text-center">
-      <div class="sec-tag">Dúvidas</div>
-      <h2>Perguntas frequentes</h2>
+    <div class="test-card reveal" style="transition-delay:.1s">
+      <div class="test-stars">★★★★★</div>
+      <div class="test-text">"O controle de comissões valia sozinho o preço. Eu perdia horas toda semana calculando. Agora fecho tudo em 2 minutos no final do mês."</div>
+      <div class="test-author">
+        <div class="test-av" style="background:linear-gradient(135deg,#60A5FA,#818CF8)">K</div>
+        <div><div class="test-name">Kátia S.</div><div class="test-role">Salão com 4 profissionais — RJ</div></div>
+      </div>
     </div>
-    <div class="faq-list">
-      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Preciso instalar algum programa? <span class="faq-arr">▼</span></div><div class="faq-a">Não. O Beleza Pro funciona direto no navegador do celular ou computador — Chrome, Safari, qualquer um. Sem instalação.</div></div>
-      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Meus dados ficam salvos se eu fechar o navegador? <span class="faq-arr">▼</span></div><div class="faq-a">Sim. Todos os dados são salvos em nuvem com segurança. Acesse de qualquer dispositivo, a qualquer hora.</div></div>
-      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Posso cancelar quando quiser? <span class="faq-arr">▼</span></div><div class="faq-a">Sim, sem burocracia. Cancele pelo painel a qualquer momento, sem multa e sem precisar ligar para ninguém.</div></div>
-      <div class="faq-item"><div class="faq-q" onclick="faq(this)">E se eu tiver mais de um salão? <span class="faq-arr">▼</span></div><div class="faq-a">No plano Business você cria múltiplas unidades com dados completamente separados. Cada salão tem sua própria conta.</div></div>
-      <div class="faq-item"><div class="faq-q" onclick="faq(this)">Tenho suporte se tiver dúvidas? <span class="faq-arr">▼</span></div><div class="faq-a">Sim! Suporte via WhatsApp em horário comercial. No plano Business o atendimento é prioritário com resposta em até 1 hora.</div></div>
-      <div class="faq-item"><div class="faq-q" onclick="faq(this)">O sistema funciona no celular? <span class="faq-arr">▼</span></div><div class="faq-a">Sim, funciona perfeitamente no celular. Você pode gerenciar seu salão de qualquer lugar, direto pelo smartphone.</div></div>
+    <div class="test-card reveal" style="transition-delay:.2s">
+      <div class="test-stars">★★★★★</div>
+      <div class="test-text">"O melhor de tudo é o link de agendamento. Mando no meu WhatsApp e Instagram e os clientes já agendam sozinhos. Não preciso mais parar o atendimento para responder mensagem."</div>
+      <div class="test-author">
+        <div class="test-av" style="background:linear-gradient(135deg,#4ADE80,#059669)">P</div>
+        <div><div class="test-name">Patricia L.</div><div class="test-role">Esmalteria — MG</div></div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- CTA FINAL -->
-<section id="cta-final">
-  <div class="sec-tag" style="color:rgba(255,255,255,.4)">Pronto para começar?</div>
-  <h2>Seu salão merece<br>uma gestão profissional</h2>
-  <p class="sec-sub">Junte-se a dezenas de salões que já economizam horas por semana.</p>
-  <div class="cta-btns">
-    <button class="btn-wh" onclick="openModal(event,'Pro')">✨ Começar grátis por 14 dias</button>
-    <a href="#features" class="btn-gh">Ver funcionalidades</a>
+<!-- CTA -->
+<section id="cta">
+  <div class="cta-glow"></div>
+  <div class="section-label reveal">Comece hoje</div>
+  <h2 class="reveal">Seu salão merece um sistema<br><em>à altura</em></h2>
+  <p class="section-sub reveal">14 dias grátis. Sem cartão de crédito. Cancele quando quiser.</p>
+  <div class="reveal">
+    <a href="painel.html" class="btn-p" style="font-size:.95rem;padding:16px 40px">Criar conta grátis →</a>
   </div>
 </section>
 
 <!-- FOOTER -->
 <footer>
-  <div class="foot-logo">Bele<em>za</em> Pro</div>
-  <div class="foot-links">
-    <a href="#">Termos de uso</a>
-    <a href="#">Privacidade</a>
-    <a href="#">Contato</a>
+  <div class="footer-logo">Bele<em>za</em> Pro</div>
+  <div class="footer-copy">© 2026 Beleza Pro. Todos os direitos reservados.</div>
+  <div class="footer-links">
+    <a href="painel.html">Acessar sistema</a>
+    <a href="https://wa.me/message/5I6Q5K6Y5R3OO1" target="_blank">Suporte</a>
   </div>
-  <div class="foot-txt">© 2026 Beleza Pro · Feito no Brasil 🇧🇷</div>
 </footer>
 
-<!-- MODAL CADASTRO -->
-<div class="modal-ov" id="modal-cad" onclick="closeModalOutside(event)">
-  <div class="modal" style="position:relative">
-    <button class="modal-close" onclick="closeModal()">✕</button>
-    <div class="modal-hdr">
-      <div class="modal-logo">Bele<em>za</em> Pro</div>
-      <div class="modal-title">Crie sua conta grátis</div>
-      <div class="modal-sub">14 dias grátis · Sem cartão · Cancele quando quiser</div>
-      <div class="trial-pill">🎉 Plano <span id="modal-plano-nome">Pro</span> selecionado · 14 dias grátis</div>
-    </div>
-    <div class="modal-body">
-      <div class="modal-err" id="modal-err"></div>
-      <div class="modal-suc" id="modal-suc"></div>
-      <label class="fl">Nome do Salão*</label>
-      <input class="fi" id="m-salao" placeholder="Ex.: Studio Luna Hair" autocomplete="organization"/>
-      <div class="form-row">
-        <div><label class="fl">Seu nome*</label><input class="fi" id="m-nome" placeholder="Seu nome completo" autocomplete="name"/></div>
-        <div><label class="fl">Telefone</label><input class="fi" id="m-tel" placeholder="(11) 99999-0000" autocomplete="tel"/></div>
-      </div>
-      <label class="fl">E-mail*</label>
-      <input class="fi" type="email" id="m-email" placeholder="contato@seusalao.com.br" autocomplete="email"/>
-      <label class="fl">Senha* <span style="font-weight:400;color:var(--text2)">(mínimo 6 caracteres)</span></label>
-      <input class="fi" type="password" id="m-senha" placeholder="••••••••" autocomplete="new-password"/>
-      <button class="btn-submit" id="btn-submit" onclick="submitCadastro()">Criar conta e começar →</button>
-      <p class="modal-footer-note">Ao criar sua conta você concorda com nossos <a href="#" style="color:var(--accent)">Termos de uso</a>.</p>
-      <div style="text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <span style="font-size:.78rem;color:var(--text2)">Já tem conta? </span>
-        <a href="https://belezaprooficial.com.br/painel.html" target="_blank" style="font-size:.78rem;font-weight:700;color:var(--accent);text-decoration:none">Entrar no painel →</a>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-// ── CONFIG ──────────────────────────
-var API_URL = 'https://salaodebeleza-production-8eaa.up.railway.app';
-var PLANO_SEL = 'Pro';
-
-// ── NAV scroll ──────────────────────
-window.addEventListener('scroll', function(){
-  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 30);
-});
-
-// ── SMOOTH SCROLL ───────────────────
-document.querySelectorAll('a[href^="#"]').forEach(function(a){
-  a.addEventListener('click', function(e){
-    var t = document.querySelector(this.getAttribute('href'));
-    if(t){ e.preventDefault(); t.scrollIntoView({behavior:'smooth'}); }
-  });
-});
-
-// ── FAQ ─────────────────────────────
-function faq(el){
-  var isOpen = el.classList.contains('open');
-  document.querySelectorAll('.faq-q').forEach(function(q){ q.classList.remove('open'); });
-  document.querySelectorAll('.faq-a').forEach(function(a){ a.classList.remove('open'); });
-  if(!isOpen){ el.classList.add('open'); el.nextElementSibling.classList.add('open'); }
-}
-
-// ── MODAL ───────────────────────────
-function openModal(e, plano){
-  if(e) e.preventDefault();
-  PLANO_SEL = plano || 'Pro';
-  document.getElementById('modal-plano-nome').textContent = PLANO_SEL;
-  document.getElementById('modal-err').style.display = 'none';
-  document.getElementById('modal-suc').style.display = 'none';
-  document.getElementById('modal-cad').classList.add('open');
-  document.body.style.overflow = 'hidden';
-  setTimeout(function(){ document.getElementById('m-salao').focus(); }, 100);
-}
-function closeModal(){
-  document.getElementById('modal-cad').classList.remove('open');
-  document.body.style.overflow = '';
-}
-function closeModalOutside(e){
-  if(e.target === document.getElementById('modal-cad')) closeModal();
-}
-document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
-
-// ── SUBMIT CADASTRO ─────────────────
-function submitCadastro(){
-  var salao = document.getElementById('m-salao').value.trim();
-  var nome  = document.getElementById('m-nome').value.trim();
-  var tel   = document.getElementById('m-tel').value.trim();
-  var email = document.getElementById('m-email').value.trim();
-  var senha = document.getElementById('m-senha').value;
-  var err   = document.getElementById('modal-err');
-  var suc   = document.getElementById('modal-suc');
-  var btn   = document.getElementById('btn-submit');
-
-  err.style.display = 'none';
-  suc.style.display = 'none';
-
-  if(!salao){ showErr('Preencha o nome do salão'); return; }
-  if(!nome){  showErr('Preencha seu nome'); return; }
-  if(!email || !email.includes('@')){ showErr('E-mail inválido'); return; }
-  if(!senha || senha.length < 6){ showErr('Senha deve ter pelo menos 6 caracteres'); return; }
-
-  btn.disabled = true;
-  btn.textContent = 'Criando sua conta...';
-
-  fetch(API_URL + '/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome_salao: salao, nome: nome, email: email, senha: senha, telefone: tel, plano: PLANO_SEL })
-  })
-  .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
-  .then(function(res){
-    if(!res.ok) throw new Error(res.data.error || 'Erro ao criar conta');
-    // Sucesso!
-    suc.innerHTML = '🎉 <strong>Conta criada com sucesso!</strong><br><br>Seu trial de 14 dias está ativo.<br>Clique abaixo para acessar o painel.';
-    suc.style.display = 'block';
-    btn.textContent = '🚀 Acessar o painel →';
-    btn.disabled = false;
-    btn.onclick = function(){
-      window.open('https://belezaprooficial.com.br/painel.html', '_blank');
-      closeModal();
-    };
-  })
-  .catch(function(e){
-    showErr(e.message || 'Erro ao criar conta. Tente novamente.');
-    btn.disabled = false;
-    btn.textContent = 'Criar conta e começar →';
-    btn.onclick = submitCadastro;
-  });
-}
-
-function showErr(msg){
-  var err = document.getElementById('modal-err');
-  err.textContent = '⚠️ ' + msg;
-  err.style.display = 'block';
-}
-</script>
-
-<!-- Botão WhatsApp flutuante -->
+<!-- WHATSAPP FLUTUANTE -->
 <a href="https://wa.me/message/5I6Q5K6Y5R3OO1" target="_blank" rel="noopener"
-   style="position:fixed;bottom:24px;right:24px;z-index:9998;width:56px;height:56px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(37,211,102,.45);transition:transform .2s,box-shadow .2s;text-decoration:none"
-   onmouseover="this.style.transform='scale(1.12)';this.style.boxShadow='0 6px 24px rgba(37,211,102,.6)'"
-   onmouseout="this.style.transform='scale(1)';this.style.boxShadow='0 4px 16px rgba(37,211,102,.45)'"
-   title="Falar com suporte no WhatsApp">
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg">
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.107 1.51 5.845L.057 23.428a.75.75 0 0 0 .92.92l5.638-1.459A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.726 9.726 0 0 1-4.964-1.358l-.356-.211-3.685.953.977-3.596-.232-.37A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
-  </svg>
+   style="position:fixed;bottom:24px;right:24px;z-index:9998;width:54px;height:54px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(37,211,102,.4);transition:transform .2s;text-decoration:none"
+   onmouseover="this.style.transform='scale(1.12)'"
+   onmouseout="this.style.transform='scale(1)'"
+   title="Suporte WhatsApp">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.107 1.51 5.845L.057 23.428a.75.75 0 0 0 .92.92l5.638-1.459A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.726 9.726 0 0 1-4.964-1.358l-.356-.211-3.685.953.977-3.596-.232-.37A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/></svg>
 </a>
 
+<script>
+// ── NAV SCROLL ──────────────────────────────────────
+window.addEventListener('scroll', function() {
+  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 40);
+}, { passive: true });
+
+// ── MOBILE MENU ─────────────────────────────────────
+function toggleMob() {
+  document.getElementById('mob-menu').classList.toggle('on');
+  document.body.style.overflow = document.getElementById('mob-menu').classList.contains('on') ? 'hidden' : '';
+}
+
+// ── PARALLAX CANVAS ─────────────────────────────────
+(function() {
+  var canvas = document.getElementById('parallax-canvas');
+  var ctx = canvas.getContext('2d');
+  var particles = [];
+  var lines = [];
+  var scrollY = 0;
+  var raf;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    init();
+  }
+
+  function init() {
+    particles = [];
+    lines = [];
+
+    var W = canvas.width, H = canvas.height;
+
+    // Partículas estrelas
+    for (var i = 0; i < 120; i++) {
+      particles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 1.5 + 0.3,
+        alpha: Math.random() * 0.6 + 0.1,
+        speed: Math.random() * 0.3 + 0.1, // velocidade de parallax
+        twinkle: Math.random() * Math.PI * 2,
+        twinkleSpeed: Math.random() * 0.02 + 0.005,
+      });
+    }
+
+    // Linhas da grade futurista
+    var gridCols = 8, gridRows = 5;
+    var cellW = W / gridCols, cellH = H / gridRows;
+    for (var c = 0; c <= gridCols; c++) {
+      lines.push({ type: 'v', x: c * cellW, alpha: c % 2 === 0 ? 0.06 : 0.03 });
+    }
+    for (var r = 0; r <= gridRows; r++) {
+      lines.push({ type: 'h', y: r * cellH, alpha: r % 2 === 0 ? 0.06 : 0.03 });
+    }
+  }
+
+  window.addEventListener('scroll', function() {
+    scrollY = window.scrollY;
+  }, { passive: true });
+
+  var t = 0;
+  function draw() {
+    var W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Fundo gradiente
+    var grad = ctx.createRadialGradient(W * 0.5, H * 0.4, 0, W * 0.5, H * 0.4, W * 0.8);
+    grad.addColorStop(0, 'rgba(201,169,110,0.04)');
+    grad.addColorStop(0.5, 'rgba(10,9,8,0)');
+    grad.addColorStop(1, 'rgba(10,9,8,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Grade futurista com parallax lento
+    var gridOffset = scrollY * 0.08;
+    lines.forEach(function(l) {
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(201,169,110,' + l.alpha + ')';
+      ctx.lineWidth = 1;
+      if (l.type === 'v') {
+        ctx.moveTo(l.x, 0);
+        ctx.lineTo(l.x, H);
+      } else {
+        var yy = (l.y + gridOffset) % (H + 60) - 30;
+        ctx.moveTo(0, yy);
+        ctx.lineTo(W, yy);
+      }
+      ctx.stroke();
+    });
+
+    // Partículas estrelas com parallax por camada
+    t++;
+    particles.forEach(function(p) {
+      // Parallax: cada partícula tem velocidade diferente
+      var py = p.y - scrollY * p.speed;
+      // Wrapping vertical
+      while (py < -10) py += H + 20;
+      while (py > H + 10) py -= H + 20;
+
+      p.twinkle += p.twinkleSpeed;
+      var alpha = p.alpha * (0.7 + 0.3 * Math.sin(p.twinkle));
+
+      ctx.beginPath();
+      ctx.arc(p.x, py, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(201,169,110,' + alpha + ')';
+      ctx.fill();
+    });
+
+    // Horizonte brilhante
+    var horizY = H * 0.6 - scrollY * 0.15;
+    if (horizY > 0 && horizY < H) {
+      var horizGrad = ctx.createLinearGradient(0, horizY - 60, 0, horizY + 60);
+      horizGrad.addColorStop(0, 'rgba(201,169,110,0)');
+      horizGrad.addColorStop(0.5, 'rgba(201,169,110,0.06)');
+      horizGrad.addColorStop(1, 'rgba(201,169,110,0)');
+      ctx.fillStyle = horizGrad;
+      ctx.fillRect(0, horizY - 60, W, 120);
+    }
+
+    raf = requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize, { passive: true });
+  resize();
+  draw();
+})();
+
+// ── REVEAL ON SCROLL ────────────────────────────────
+(function() {
+  var els = document.querySelectorAll('.reveal,.reveal-left,.reveal-right');
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('on');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12 });
+  els.forEach(function(el) { io.observe(el); });
+
+  // Hero items aparecem logo de início
+  setTimeout(function() {
+    document.querySelectorAll('#hero .reveal').forEach(function(el, i) {
+      setTimeout(function() { el.classList.add('on'); }, i * 120);
+    });
+  }, 200);
+})();
+
+// ── COUNTER ANIMATION ────────────────────────────────
+var countered = false;
+window.addEventListener('scroll', function() {
+  if (countered) return;
+  var stats = document.querySelector('.hero-stats');
+  if (!stats) return;
+  var rect = stats.getBoundingClientRect();
+  if (rect.top < window.innerHeight) {
+    countered = true;
+    // Animação simples de entrada nos stats já feita pelo reveal
+  }
+}, { passive: true });
+</script>
 </body>
 </html>
