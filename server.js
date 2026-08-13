@@ -89,6 +89,49 @@ function profissionalFiltroDoUsuario(user) {
   return user.profissional_id || null;
 }
 
+// ── MAQUININHA DE CARTÃO ─────────────────────────────
+// Formas de pagamento que sofrem desconto de taxa de maquininha.
+// Precisa bater exatamente com os valores enviados pelo frontend (botões fpg-btn).
+const FORMAS_PAGAMENTO_CARTAO = new Set(['Cartão Débito', 'Cartão Crédito']);
+
+// Quando um agendamento é concluído com pagamento no cartão, calcula a taxa da
+// maquininha sobre o valor total, divide ao meio (metade fica com o salão,
+// metade é descontada do profissional) e abate a parte do profissional
+// proporcionalmente da comissão de cada serviço do agendamento.
+// Retorna { taxa_total, taxa_profissional } para fins de log/depuração.
+async function aplicarTaxaMaquininha(agendamentoId, salaoId, valorTotal, formaPgto) {
+  if (!FORMAS_PAGAMENTO_CARTAO.has(formaPgto)) return { taxa_total: 0, taxa_profissional: 0 };
+  if (!valorTotal || valorTotal <= 0) return { taxa_total: 0, taxa_profissional: 0 };
+
+  const { data: salao } = await supabase.from('saloes')
+    .select('configuracoes').eq('id', salaoId).single();
+  const pct = Number(salao?.configuracoes?.taxa_maquininha_pct || 0);
+  if (!pct || pct <= 0) return { taxa_total: 0, taxa_profissional: 0 };
+
+  const taxaTotal = Math.round(valorTotal * pct / 100 * 100) / 100;
+  const taxaProfissional = Math.round((taxaTotal / 2) * 100) / 100; // metade da taxa
+
+  const { data: servicos } = await supabase.from('agendamento_servicos')
+    .select('id, preco, comissao_valor').eq('agendamento_id', agendamentoId);
+
+  if (servicos && servicos.length) {
+    for (const s of servicos) {
+      const proporcao = Number(s.preco || 0) / valorTotal;
+      const deducao = Math.round(taxaProfissional * proporcao * 100) / 100;
+      const novaComissao = Math.max(0, Number(s.comissao_valor || 0) - deducao);
+      await supabase.from('agendamento_servicos')
+        .update({ comissao_valor: novaComissao }).eq('id', s.id);
+    }
+  }
+
+  try {
+    await supabase.from('agendamentos')
+      .update({ taxa_maquininha_valor: taxaTotal }).eq('id', agendamentoId);
+  } catch(e) { /* coluna pode não existir ainda se a migration não rodou */ }
+
+  return { taxa_total: taxaTotal, taxa_profissional: taxaProfissional };
+}
+
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
 app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.1.0' }));
@@ -491,11 +534,20 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
   if (error || !data) return res.status(404).json({ error: 'Não encontrado' });
 
   let whatsapp_link = null;
+  let infoTaxaMaquininha = { taxa_total: 0, taxa_profissional: 0 };
 
   if (status === 'concluido') {
     // Atualiza lancamento como pago
     await supabase.from('lancamentos')
       .update({ pago: true, forma_pgto }).eq('agendamento_id', req.params.id);
+
+    // Aplica o desconto da taxa da maquininha na comissão do profissional
+    // (só se o pagamento foi no cartão e o salão configurou uma taxa)
+    try {
+      infoTaxaMaquininha = await aplicarTaxaMaquininha(
+        req.params.id, req.salao_id, Number(data.valor_total || 0), forma_pgto
+      );
+    } catch(e) { console.error('Erro ao aplicar taxa maquininha:', e.message); }
 
     // Atualiza estatísticas do cliente automaticamente
     if (data.cliente_id) {
@@ -544,7 +596,7 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     } catch(e) { console.error('Erro ao gerar link WhatsApp:', e.message); }
   }
 
-  res.json({ ...data, whatsapp_link });
+  res.json({ ...data, whatsapp_link, taxa_maquininha: infoTaxaMaquininha });
 });
 
 // ═══════════════════════════════════════════════════
@@ -965,7 +1017,18 @@ app.get('/api/saloes/meu', auth, async (req, res) => {
 app.put('/api/saloes/meu', auth, async (req, res) => {
   const { nome, telefone, whatsapp, email, endereco, cidade, estado, configuracoes } = req.body;
   const updates = { nome, telefone, whatsapp, email, endereco, cidade, estado };
-  if (configuracoes) updates.configuracoes = configuracoes;
+  if (configuracoes) {
+    // Faz merge com as configurações existentes em vez de substituir tudo —
+    // evita que salvar o horário de funcionamento apague a taxa da maquininha
+    // (ou vice-versa), já que ambos vivem dentro da mesma coluna JSONB.
+    try {
+      const { data: atual } = await supabase.from('saloes')
+        .select('configuracoes').eq('id', req.salao_id).single();
+      updates.configuracoes = { ...(atual?.configuracoes || {}), ...configuracoes };
+    } catch(e) {
+      updates.configuracoes = configuracoes;
+    }
+  }
   const { data, error } = await supabase.from('saloes')
     .update(updates)
     .eq('id', req.salao_id).select().single();
