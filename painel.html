@@ -616,7 +616,7 @@ select.fc option{background:var(--bg2)}
         <div class="card" id="card-usuarios" style="grid-column:1/-1">
           <div class="crow">
             <span class="ch">👥 Usuários do Salão</span>
-            <button class="btn btnp btnsm" onclick="openM('m-novo-user')">+ Novo Usuário</button>
+            <button class="btn btnp btnsm" onclick="abrirNovoUsuario()">+ Novo Usuário</button>
           </div>
           <div id="usuarios-list"><div class="lc"><div class="spin"></div></div></div>
         </div>
@@ -657,29 +657,6 @@ select.fc option{background:var(--bg2)}
 </div>
 
 <div id="tutorial-highlight" style="display:none;position:fixed;z-index:9999;border-radius:12px;box-shadow:0 0 0 9999px rgba(15,15,13,.75);pointer-events:none;transition:all .35s"></div>
-
-
-
-<!-- ── TUTORIAL PRIMEIRO ACESSO ─────────────────── -->
-<div id="tutorial-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,13,.82);z-index:10000;backdrop-filter:blur(3px)"></div>
-<div id="tutorial-box" style="display:none;position:fixed;z-index:10001;background:#fff;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.18);padding:28px 28px 22px;max-width:380px;width:calc(100vw - 32px)">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
-    <div style="font-size:2rem" id="tut-icon">🏠</div>
-    <button onclick="fecharTutorial()" style="background:none;border:none;font-size:1.2rem;color:#9CA3AF;cursor:pointer;padding:0;line-height:1">✕</button>
-  </div>
-  <div style="font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7C5CFC;margin-bottom:6px" id="tut-step-label">Passo 1 de 6</div>
-  <div style="font-size:1.1rem;font-weight:800;color:#1C1A17;margin-bottom:8px;line-height:1.3" id="tut-title">Bem-vindo ao Beleza Pro! 👋</div>
-  <div style="font-size:.84rem;color:#6B7280;line-height:1.6;margin-bottom:20px" id="tut-desc">Vamos te mostrar em menos de 1 minuto como usar o sistema. Você pode pular a qualquer momento.</div>
-  <div style="display:flex;gap:6px;margin-bottom:18px" id="tut-dots"></div>
-  <div style="display:flex;gap:10px">
-    <button onclick="fecharTutorial()" style="flex:1;padding:11px;border:1.5px solid #E5E7EB;border-radius:50px;background:none;font-size:.82rem;font-weight:600;color:#6B7280;cursor:pointer">Pular tutorial</button>
-    <button onclick="proximoPasso()" id="tut-btn-next" style="flex:2;padding:11px;border:none;border-radius:50px;background:#7C5CFC;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer">Próximo →</button>
-  </div>
-</div>
-
-<div id="tutorial-highlight" style="display:none;position:fixed;z-index:9999;border-radius:12px;box-shadow:0 0 0 9999px rgba(15,15,13,.75);pointer-events:none;transition:all .35s"></div>
-
-
 
 <div id="toasts"></div>
 
@@ -846,7 +823,7 @@ function enterApp(nome, salon, mode, perfil, permissoes) {
   setTimeout(checkTrial, 2000);
   iniciarAtualizacaoAutomatica();
   setTimeout(iniciarTutorial, 1200);
-  
+
   // Verifica retorno do Mercado Pago
   var urlParams = new URLSearchParams(window.location.search);
   var pago = urlParams.get('pago');
@@ -1168,7 +1145,7 @@ function renderDashChart() {
 
   apiFetch('/api/financeiro/lancamentos?limit=200').then(function(r) {
     var lancamentos = r ? (r.data || r) : [];
-    
+
     // Soma entradas por dia
     var vals = dates.map(function(dt) {
       return lancamentos
@@ -1178,13 +1155,13 @@ function renderDashChart() {
 
     var max = Math.max.apply(null, vals) || 1;
     var total = vals.reduce(function(s,v){ return s+v; }, 0);
-    
+
     document.getElementById('fat7').textContent = brl(total);
     document.getElementById('dash-bc').innerHTML = labels.map(function(d,i){
       var height = vals[i] > 0 ? Math.round(vals[i]/max*100)+8 : 4;
       var isToday = i === 6;
-      var valLabel = vals[i] >= 1000 
-        ? (vals[i]/1000).toFixed(1)+'k' 
+      var valLabel = vals[i] >= 1000
+        ? (vals[i]/1000).toFixed(1)+'k'
         : vals[i] > 0 ? brl(vals[i]).replace('R$ ','') : '0';
       return '<div class="bw">' +
         '<div class="bval">' + valLabel + '</div>' +
@@ -1392,7 +1369,7 @@ function renderCli(list) {
   var stL = {vip:'VIP',ativo:'Ativo',novo:'Novo',inativo:'Inativo'};
   var stC = {vip:'bp',ativo:'bs',novo:'bi',inativo:'bg2'};
   document.getElementById('cli-tb').innerHTML = list.map(function(c){
-    return '<tr onclick="toast(\'' + c.nome.replace(/'/g,"\\'") + '\',\'inf\')">' +
+    return '<tr onclick="openClientModal(this)" data-cli="' + JSON.stringify(c).replace(/"/g,"&quot;") + '">' +
       '<td><div style="display:flex;align-items:center;gap:9px">' +
       '<div style="width:30px;height:30px;border-radius:50%;background:' + (c.cor||COLS[0]) + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.78rem;flex-shrink:0">' + c.nome[0] + '</div>' +
       '<div><div style="font-weight:600">' + c.nome + '</div><div style="font-size:.68rem;color:var(--t3)">' + (c.email||'') + '</div></div></div></td>' +
@@ -1434,13 +1411,13 @@ function renderFinChart(lancamentos) {
   var m = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   var now = new Date();
   var ano = now.getFullYear();
-  
+
   // Soma receitas por mês com dados reais
   var v = m.map(function(mn, i) {
     var mes = String(i+1).padStart(2,'0');
     return (lancamentos || [])
       .filter(function(l) {
-        return l.tipo === 'entrada' && l.data && 
+        return l.tipo === 'entrada' && l.data &&
                l.data.startsWith(ano+'-'+mes);
       })
       .reduce(function(s,l){ return s + Number(l.valor||0); }, 0);
@@ -1448,7 +1425,7 @@ function renderFinChart(lancamentos) {
 
   var max = Math.max.apply(null, v.filter(function(x){ return x>0; })) || 1;
   var mesAtual = now.getMonth();
-  
+
   document.getElementById('fin-bc').innerHTML = m.map(function(mn,i){
     var futuro = i > mesAtual;
     return '<div class="bw">' +
@@ -1868,7 +1845,7 @@ function openClientModal(tr) {
   var raw = tr.getAttribute('data-cli');
   if (!raw) return;
   var c;
-  try { c = JSON.parse(raw); } catch(e) { return; }
+  try { c = JSON.parse(raw.replace(/&quot;/g,'"')); } catch(e) { toast('Erro ao abrir perfil do cliente','er'); return; }
   document.getElementById('cli-perfil-nome').textContent = c.nome || '—';
   document.getElementById('cp-tel').textContent   = c.telefone || '—';
   document.getElementById('cp-email').textContent  = c.email    || '—';
@@ -2250,25 +2227,29 @@ function loadUsuarios() {
   // Só admin vê
   if (USER_PERFIL !== 'admin') {
     el.innerHTML = '<div class="empty" style="font-size:.8rem;color:var(--t2)">Acesso restrito ao administrador.</div>';
-    document.getElementById('card-usuarios').querySelector('button').style.display = 'none';
+    var addBtn = document.querySelector('#card-usuarios button');
+    if (addBtn) addBtn.style.display = 'none';
     return;
   }
   apiFetch('/api/usuarios').then(function(r) {
     var list = r || [];
     if (!list.length) { el.innerHTML = '<div class="empty">Nenhum usuário cadastrado além de você.</div>'; return; }
-    el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>' +
+    el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vínculo</th><th>Ações</th></tr></thead><tbody>' +
       list.map(function(u) {
         var isAdmin = u.perfil === 'admin';
         var perfBadge = isAdmin
           ? '<span class="badge bp">Admin</span>'
           : '<span class="badge bw">Personalizado</span>';
+        var vinculo = (u.profissionais && u.profissionais.nome)
+          ? '<span class="badge bi">👤 ' + u.profissionais.nome + '</span>'
+          : '<span style="font-size:.7rem;color:var(--t3)">— (acesso geral)</span>';
 
         var acoes = isAdmin ? '<span style="font-size:.7rem;color:var(--t3)">—</span>' :
           '<div style="display:flex;gap:4px">' +
           '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="abrirEditPerms(this.dataset.uid,this.dataset.unome)" title="Editar permissões">✏️</button>' +
           '<button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Excluir">🗑</button>' +
           '</div>';
-        return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td style="font-size:.78rem;color:var(--t3)">—</td><td>' + acoes + '</td></tr>';
+        return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + acoes + '</td></tr>';
       }).join('') + '</tbody></table>';
   }).catch(function() {
     el.innerHTML = '<div class="empty">Erro ao carregar usuários.</div>';
@@ -2278,6 +2259,7 @@ function loadUsuarios() {
 function toggleTipoAcesso() {
   var isAdmin = document.getElementById('tipo-admin').checked;
   document.getElementById('nu-permissoes-wrap').style.display = isAdmin ? 'none' : 'block';
+  document.getElementById('nu-profissional-wrap').style.display = isAdmin ? 'none' : 'block';
   document.getElementById('tipo-admin-lbl').style.background = isAdmin ? '#EDE9FF' : '';
   document.getElementById('tipo-admin-lbl').style.borderColor = isAdmin ? 'var(--ac)' : 'var(--bd)';
   document.getElementById('tipo-custom-lbl').style.background = !isAdmin ? '#EDE9FF' : '';
@@ -2290,6 +2272,17 @@ function updatePermLabel(cb) {
   lbl.style.background = cb.checked ? '#EDE9FF' : '';
 }
 
+// Abre o modal de novo usuário já preenchendo a lista de profissionais pra vincular
+function abrirNovoUsuario() {
+  var sel = document.getElementById('nu-profissional');
+  if (sel) {
+    var options = '<option value="">Nenhum — acesso administrativo às páginas liberadas</option>';
+    options += (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    sel.innerHTML = options;
+  }
+  openM('m-novo-user');
+}
+
 function criarUsuario() {
   var nome  = document.getElementById('nu-nome').value.trim();
   var cargo = document.getElementById('nu-cargo').value.trim();
@@ -2298,26 +2291,33 @@ function criarUsuario() {
   var isAdmin = document.getElementById('tipo-admin').checked;
   if (!nome || !email || !senha) { toast('Preencha todos os campos','er'); return; }
   if (senha.length < 6) { toast('Senha deve ter pelo menos 6 caracteres','er'); return; }
-  
+
   var perfil = isAdmin ? 'admin' : 'custom';
   var permissoes = ['dashboard']; // sempre tem dashboard
+  var profissionalId = '';
   if (!isAdmin) {
     document.querySelectorAll('#nu-permissoes input[type=checkbox]:checked').forEach(function(cb) {
       if (permissoes.indexOf(cb.value) < 0) permissoes.push(cb.value);
     });
+    var profSel = document.getElementById('nu-profissional');
+    profissionalId = profSel ? profSel.value : '';
   } else {
     permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
   }
-  
+
   var btn = document.querySelector('#m-novo-user .btnp');
   btn.disabled = true; btn.textContent = 'Criando...';
-  apiFetch('/api/usuarios', {method:'POST', body:{nome:nome, cargo:cargo, email:email, senha:senha, perfil:perfil, permissoes:permissoes}})
+  apiFetch('/api/usuarios', {method:'POST', body:{
+    nome:nome, cargo:cargo, email:email, senha:senha, perfil:perfil, permissoes:permissoes,
+    profissional_id: profissionalId || null
+  }})
   .then(function(r) {
     closeM('m-novo-user');
     document.getElementById('nu-nome').value = '';
     document.getElementById('nu-cargo').value = '';
     document.getElementById('nu-email').value = '';
     document.getElementById('nu-senha').value = '';
+    if (document.getElementById('nu-profissional')) document.getElementById('nu-profissional').value = '';
     loadUsuarios();
     // Mostra modal de sucesso
     setTimeout(function(){
@@ -2395,7 +2395,16 @@ function navComPermissao(page, el) {
 function abrirEditPerms(uid, nome) {
   document.getElementById('ep-uid').value = uid;
   document.getElementById('ep-nome').textContent = nome;
-  // Busca permissões atuais
+
+  // Preenche select de profissional
+  var selProf = document.getElementById('ep-profissional');
+  if (selProf) {
+    var options = '<option value="">Nenhum — acesso administrativo às páginas liberadas</option>';
+    options += (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    selProf.innerHTML = options;
+  }
+
+  // Busca permissões e vínculo atuais
   apiFetch('/api/usuarios').then(function(list) {
     var u = (list||[]).find(function(x){ return x.id === uid; });
     var perms = u && u.permissoes ? u.permissoes : [];
@@ -2409,6 +2418,7 @@ function abrirEditPerms(uid, nome) {
         lbl.style.background  = this.checked ? '#EDE9FF'  : '';
       };
     });
+    if (selProf) selProf.value = (u && u.profissional_id) ? u.profissional_id : '';
   }).catch(function() {
     // Se não conseguir buscar, abre com todos desmarcados
     document.querySelectorAll('#ep-checkboxes input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
@@ -2421,9 +2431,11 @@ function salvarEditPerms() {
   var perms = [];
   document.querySelectorAll('#ep-checkboxes input[type=checkbox]:checked').forEach(function(cb){ perms.push(cb.value); });
   if (!perms.length) { toast('Selecione pelo menos uma permissão','er'); return; }
+  var selProf = document.getElementById('ep-profissional');
+  var profissionalId = selProf ? selProf.value : '';
   var btn = document.querySelector('#m-edit-perms .btnp');
   btn.disabled=true; btn.textContent='Salvando...';
-  apiFetch('/api/usuarios/'+uid+'/permissoes', {method:'PUT', body:{permissoes:perms}})
+  apiFetch('/api/usuarios/'+uid+'/permissoes', {method:'PUT', body:{permissoes:perms, profissional_id: profissionalId || null}})
   .then(function() {
     toast('Permissões atualizadas! ✅','ok');
     closeM('m-edit-perms');
@@ -2603,7 +2615,7 @@ function assinar() {
 function checkTrial() {
   // Admin nunca é bloqueado (dono do sistema)
   if (USER_PERFIL === 'admin' && DEMO) return;
-  
+
   apiFetch('/api/pagamento/status')
   .then(function(r){
     if (!r) return;
@@ -2723,11 +2735,11 @@ window.addEventListener('beforeinstallprompt', function(e) {
 
 function mostrarBannerPWA() {
   if (document.getElementById('pwa-banner')) return;
-  
+
   // Detecta iOS (Safari não tem beforeinstallprompt)
   var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
   var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  
+
   // Não mostra se já está instalado como app
   if (isStandalone) return;
   // Não mostra em desktop
@@ -3009,7 +3021,7 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt" id="import-title">Importar Dados</span><button class="mx" onclick="closeM('m-import')">✕</button></div>
     <div class="mb">
       <input type="hidden" id="import-tipo"/>
-      
+
       <!-- Instruções -->
       <div style="background:var(--bg);border-radius:var(--rs);padding:14px;margin-bottom:16px">
         <div style="font-size:.8rem;font-weight:700;margin-bottom:8px">📋 Como importar:</div>
@@ -3027,7 +3039,7 @@ function dispensarBannerPWA() {
       </div>
 
       <!-- Upload -->
-      <div id="import-drop" style="border:2px dashed var(--bd);border-radius:var(--r);padding:32px;text-align:center;cursor:pointer;transition:all .2s" 
+      <div id="import-drop" style="border:2px dashed var(--bd);border-radius:var(--r);padding:32px;text-align:center;cursor:pointer;transition:all .2s"
            onclick="document.getElementById('import-file').click()"
            ondragover="event.preventDefault();this.style.borderColor='var(--ac)'"
            ondragleave="this.style.borderColor='var(--bd)'"
@@ -3087,6 +3099,13 @@ function dispensarBannerPWA() {
           </label>
         </div>
       </div>
+      <div id="nu-profissional-wrap" class="fg">
+        <label class="fl">Vincular a qual profissional? (opcional)</label>
+        <select class="fc" id="nu-profissional">
+          <option value="">Nenhum — acesso administrativo às páginas liberadas</option>
+        </select>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Se vincular, este usuário só verá a própria agenda e a própria comissão — mesmo tendo acesso liberado a essas páginas.</div>
+      </div>
       <div id="nu-permissoes-wrap" class="fg">
         <label class="fl">Permissões de acesso</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" id="nu-permissoes">
@@ -3130,6 +3149,13 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">Editar Permissões — <span id="ep-nome"></span></span><button class="mx" onclick="closeM('m-edit-perms')">✕</button></div>
     <div class="mb">
       <input type="hidden" id="ep-uid"/>
+      <div class="fg">
+        <label class="fl">Vincular a qual profissional? (opcional)</label>
+        <select class="fc" id="ep-profissional">
+          <option value="">Nenhum — acesso administrativo às páginas liberadas</option>
+        </select>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Se vincular, este usuário só verá a própria agenda e a própria comissão.</div>
+      </div>
       <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Selecione o que este usuário pode acessar:</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="ep-checkboxes">
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
@@ -3167,10 +3193,6 @@ function dispensarBannerPWA() {
 
 
 
-</body>
-</html
-
-
 <!-- Modal Clientes Inativos -->
 <div class="mov" id="m-inativos">
   <div class="mbox lg">
@@ -3180,6 +3202,47 @@ function dispensarBannerPWA() {
       <div id="inativos-lst"><div class="lc"><div class="spin"></div></div></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-inativos')">Fechar</button></div>
+  </div>
+</div>
+
+<!-- Modal Movimentar Estoque (repor/usar produto) -->
+<div class="mov" id="m-mov">
+  <div class="mbox md">
+    <div class="mh"><span class="mt" id="mov-title">Movimentar Estoque</span><button class="mx" onclick="closeM('m-mov')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="mov-prod-id"/>
+      <input type="hidden" id="mov-tipo"/>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:16px" id="mov-prod-nome">—</div>
+      <div class="fg"><label class="fl">Quantidade</label><input type="number" class="fc" id="mov-qtd" min="0" step="1" value="1"/></div>
+      <div class="fg"><label class="fl">Motivo</label><select class="fc" id="mov-motivo"></select></div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-mov')">Cancelar</button>
+      <button class="btn btnp" id="mov-btn" onclick="salvarMov()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Perfil do Cliente -->
+<div class="mov" id="m-cli-perfil">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt" id="cli-perfil-nome">Cliente</span><button class="mx" onclick="closeM('m-cli-perfil')">✕</button></div>
+    <div class="mb">
+      <div class="g2" style="margin-bottom:16px">
+        <div><label class="fl">Telefone</label><div style="font-size:.85rem;font-weight:600;margin-top:2px" id="cp-tel">—</div></div>
+        <div><label class="fl">E-mail</label><div style="font-size:.85rem;font-weight:600;margin-top:2px" id="cp-email">—</div></div>
+        <div><label class="fl">Nascimento</label><div style="font-size:.85rem;font-weight:600;margin-top:2px" id="cp-nasc">—</div></div>
+        <div><label class="fl">Como conheceu</label><div style="font-size:.85rem;font-weight:600;margin-top:2px" id="cp-orig">—</div></div>
+      </div>
+      <div class="fg"><label class="fl">Observações</label><div style="font-size:.82rem;color:var(--t2);margin-top:2px" id="cp-obs">—</div></div>
+      <div class="kpis" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
+        <div class="kc c1"><div class="ki c1">📅</div><div><div class="kv" id="cp-visitas">0</div><div class="kl">Visitas</div></div></div>
+        <div class="kc c2"><div class="ki c2">💰</div><div><div class="kv" id="cp-gasto">R$ 0,00</div><div class="kl">Total gasto</div></div></div>
+      </div>
+      <div class="ct">Histórico de agendamentos</div>
+      <div id="cp-historico"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-cli-perfil')">Fechar</button></div>
   </div>
 </div>
 
