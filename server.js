@@ -132,6 +132,32 @@ async function aplicarTaxaMaquininha(agendamentoId, salaoId, valorTotal, formaPg
   return { taxa_total: taxaTotal, taxa_profissional: taxaProfissional };
 }
 
+// ── PARCELAMENTO DE PRODUTO PRO PROFISSIONAL ─────────
+// Divide um valor total em N parcelas mensais. A última parcela absorve
+// qualquer diferença de arredondamento, garantindo que a soma bate exatamente
+// com o valor total (evita perder ou sobrar centavos).
+function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
+  const valorParcela = Math.floor((valorTotal / numParcelas) * 100) / 100;
+  const parcelas = [];
+  let somaParcial = 0;
+  const [ano, mes, dia] = dataCompraISO.split('-').map(Number);
+
+  for (let i = 1; i <= numParcelas; i++) {
+    const mesVencimento = mes - 1 + (i - 1); // 0-indexed pro Date.UTC
+    const venc = new Date(Date.UTC(ano, mesVencimento, dia));
+    let valor = valorParcela;
+    if (i === numParcelas) valor = Math.round((valorTotal - somaParcial) * 100) / 100;
+    somaParcial = Math.round((somaParcial + valor) * 100) / 100;
+    parcelas.push({
+      numero_parcela: i,
+      valor,
+      vencimento: venc.toISOString().split('T')[0],
+      status: 'pendente'
+    });
+  }
+  return parcelas;
+}
+
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
 app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.1.0' }));
@@ -319,6 +345,95 @@ app.delete('/api/profissionais/:id', auth, async (req, res) => {
   await supabase.from('profissionais').update({ ativo: false })
     .eq('id', req.params.id).eq('salao_id', req.salao_id);
   res.json({ message: 'Desativado' });
+});
+
+// ── Compras parceladas (venda de produto pro profissional) ─────
+// Registra uma venda de produto (ou item avulso) pro profissional, dividida
+// em N parcelas mensais. Só o admin pode registrar/gerenciar essas vendas;
+// o próprio profissional pode consultar as suas.
+app.post('/api/profissionais/:id/compras', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') {
+    return res.status(403).json({ error: 'Apenas o administrador pode registrar vendas parceladas' });
+  }
+  const { produto_id, descricao, valor_total, num_parcelas, data_compra } = req.body;
+  const valorTotal = Number(valor_total);
+  const numParcelas = parseInt(num_parcelas) || 1;
+
+  if (!valorTotal || valorTotal <= 0) return res.status(422).json({ error: 'Valor total inválido' });
+  if (numParcelas < 1 || numParcelas > 24) return res.status(422).json({ error: 'Número de parcelas deve ser entre 1 e 24' });
+  if (!descricao && !produto_id) return res.status(422).json({ error: 'Informe um produto ou uma descrição' });
+
+  try {
+    const { data: prof } = await supabase.from('profissionais')
+      .select('id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
+
+    let descricaoFinal = descricao || null;
+    if (produto_id) {
+      const { data: produto } = await supabase.from('produtos')
+        .select('id, nome, qtd_atual').eq('id', produto_id).eq('salao_id', req.salao_id).single();
+      if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
+      if (Number(produto.qtd_atual) < 1) return res.status(422).json({ error: 'Produto sem estoque disponível' });
+      descricaoFinal = descricaoFinal || produto.nome;
+      // Debita 1 unidade do estoque — o produto está saindo pro profissional
+      await supabase.from('produtos')
+        .update({ qtd_atual: Number(produto.qtd_atual) - 1 }).eq('id', produto_id);
+    }
+
+    const dataCompraFinal = data_compra || new Date().toISOString().split('T')[0];
+
+    const { data: compra, error: compraErr } = await supabase.from('compras_profissional')
+      .insert({
+        salao_id: req.salao_id, profissional_id: req.params.id, produto_id: produto_id || null,
+        descricao: descricaoFinal, valor_total: valorTotal, num_parcelas: numParcelas,
+        data_compra: dataCompraFinal
+      }).select().single();
+    if (compraErr) throw compraErr;
+
+    const parcelas = gerarParcelas(valorTotal, numParcelas, dataCompraFinal)
+      .map(p => ({ ...p, compra_id: compra.id }));
+    const { data: parcelasInseridas, error: parcErr } = await supabase
+      .from('parcelas_compra_profissional').insert(parcelas).select();
+    if (parcErr) throw parcErr;
+
+    res.status(201).json({ ...compra, parcelas: parcelasInseridas || parcelas });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Lista as compras parceladas de um profissional (com as parcelas de cada uma)
+app.get('/api/profissionais/:id/compras', auth, async (req, res) => {
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  if (filtroObrigatorio && filtroObrigatorio !== req.params.id) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  try {
+    const { data, error } = await supabase.from('compras_profissional')
+      .select('*, parcelas_compra_profissional(*)')
+      .eq('salao_id', req.salao_id).eq('profissional_id', req.params.id)
+      .order('data_compra', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Marca uma parcela específica como paga
+app.patch('/api/parcelas/:id/pagar', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') {
+    return res.status(403).json({ error: 'Apenas o administrador pode confirmar pagamento de parcelas' });
+  }
+  try {
+    const { data: parcela } = await supabase.from('parcelas_compra_profissional')
+      .select('id, status, compra_id, compras_profissional!inner(salao_id)')
+      .eq('id', req.params.id).eq('compras_profissional.salao_id', req.salao_id).maybeSingle();
+    if (!parcela) return res.status(404).json({ error: 'Parcela não encontrada' });
+    if (parcela.status === 'pago') return res.status(409).json({ error: 'Esta parcela já está paga' });
+
+    const { data, error } = await supabase.from('parcelas_compra_profissional')
+      .update({ status: 'pago', pago_em: new Date() })
+      .eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════
