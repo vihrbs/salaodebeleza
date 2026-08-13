@@ -595,6 +595,15 @@ select.fc option{background:var(--bg2)}
           <button class="btn btnp" onclick="saveHorarioFuncionamento()">Salvar Horário</button>
         </div>
 
+        <div class="card">
+          <div class="ct">Maquininha de Cartão</div>
+          <div style="font-size:.75rem;color:var(--t3);margin-bottom:14px">Taxa cobrada pela operadora do cartão. Ao concluir um atendimento pago no crédito/débito, o sistema desconta automaticamente <strong>metade dessa taxa</strong> da comissão do profissional.</div>
+          <label class="fl">Taxa da maquininha (%)</label>
+          <input type="number" class="fc fg" id="cfg-taxa-maquininha" min="0" max="100" step="0.01" placeholder="Ex.: 3.5" oninput="atualizarPreviewTaxaMaquininha()"/>
+          <div style="font-size:.68rem;color:var(--t3);margin-bottom:14px" id="cfg-taxa-preview">Deixe em 0 (ou vazio) para não aplicar nenhum desconto.</div>
+          <button class="btn btnp" onclick="saveTaxaMaquininha()">Salvar Taxa</button>
+        </div>
+
         <style>
           .dia-toggle {
             font-size:.74rem; font-weight:700; padding:8px 14px; border-radius:50px; cursor:pointer;
@@ -1086,7 +1095,10 @@ function confirmarConclusao() {
     .then(function(r){
       closeM('m-concluir');
       toast('Atendimento concluído! ✅', 'ok');
-      loadDashTl(); loadAgenda(); loadKPIs();
+      if (r && r.taxa_maquininha && r.taxa_maquininha.taxa_profissional > 0) {
+        toast('Taxa da maquininha: ' + brl(r.taxa_maquininha.taxa_total) + ' (profissional absorveu ' + brl(r.taxa_maquininha.taxa_profissional) + ')', 'inf');
+      }
+      loadDashTl(); loadAgenda(); loadKPIs(); loadCom();
       if (r && r.whatsapp_link) mostrarToastWhatsapp(r.whatsapp_link);
     })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -1817,7 +1829,34 @@ function carregarHorarioFuncionamento() {
       var dia = parseInt(btn.dataset.dia);
       btn.dataset.fechado = diasFechado.includes(dia) ? 'true' : 'false';
     });
+    if (cfg.taxa_maquininha_pct !== undefined && cfg.taxa_maquininha_pct !== null) {
+      document.getElementById('cfg-taxa-maquininha').value = cfg.taxa_maquininha_pct;
+      atualizarPreviewTaxaMaquininha();
+    }
   }).catch(function(){});
+}
+
+function atualizarPreviewTaxaMaquininha() {
+  var pct = parseFloat(document.getElementById('cfg-taxa-maquininha').value) || 0;
+  var el = document.getElementById('cfg-taxa-preview');
+  if (pct <= 0) { el.textContent = 'Deixe em 0 (ou vazio) para não aplicar nenhum desconto.'; return; }
+  var exemplo = 100;
+  var taxaTotal = exemplo * pct / 100;
+  var taxaProfissional = taxaTotal / 2;
+  el.textContent = 'Exemplo: num serviço de R$ 100,00 no cartão, a taxa é R$ ' + taxaTotal.toFixed(2).replace('.',',') +
+    ' — o profissional absorve metade: R$ ' + taxaProfissional.toFixed(2).replace('.',',') + '.';
+}
+
+function saveTaxaMaquininha() {
+  var input = document.getElementById('cfg-taxa-maquininha');
+  var pct = parseFloat(input.value);
+  if (isNaN(pct) || pct < 0 || pct > 100) { toast('Informe uma taxa entre 0 e 100','er'); return; }
+  var btn = document.querySelector('[onclick="saveTaxaMaquininha()"]');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/saloes/meu', { method: 'PUT', body: { configuracoes: { taxa_maquininha_pct: pct } } })
+  .then(function(){ toast('Taxa da maquininha salva! ✅','ok'); atualizarPreviewTaxaMaquininha(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Taxa'; });
 }
 function saveApi() {
   var url = (document.getElementById('cfg-api').value||'').trim().replace(/\/+$/,'');
