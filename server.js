@@ -71,7 +71,7 @@ async function auth(req, res, next) {
   try {
     const payload = jwt.verify(header.split(' ')[1], JWT_SECRET);
     const { data: usuario } = await supabase
-      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo')
+      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id')
       .eq('id', payload.sub).single();
     if (!usuario || !usuario.ativo) return res.status(401).json({ error: 'Usuário inválido' });
     req.user     = usuario;
@@ -82,9 +82,16 @@ async function auth(req, res, next) {
   }
 }
 
+// Retorna o profissional_id que deve filtrar os dados deste usuário.
+// Admin sem vínculo = null (vê tudo). Usuário custom vinculado = só o próprio.
+function profissionalFiltroDoUsuario(user) {
+  if (user.perfil === 'admin') return null;
+  return user.profissional_id || null;
+}
+
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.0.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.1.0' }));
 
 // ═══════════════════════════════════════════════════
 // AUTH
@@ -127,12 +134,12 @@ app.post('/api/auth/register', async (req, res) => {
     if (userErr) throw userErr;
 
     const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
-    
+
     // Notificação de novo cadastro
-    notificarNovoCadastro(salao.nome, nome, email, telefone).catch(e => 
+    notificarNovoCadastro(salao.nome, nome, email, telefone).catch(e =>
       console.log('Notificação falhou (não crítico):', e.message)
     );
-    
+
     res.status(201).json({ token, usuario: { ...usuario, saloes: salao }, salao });
   } catch(e) {
     console.error('Register error:', e);
@@ -145,7 +152,7 @@ async function notificarNovoCadastro(nomeSalao, nomeUser, email, telefone) {
   const RESEND_KEY  = process.env.RESEND_API_KEY || '';
   const EMAIL_ADMIN = process.env.ADMIN_EMAIL || '';
   const WPP_NUMERO  = process.env.ADMIN_WHATSAPP || '';
-  
+
   const msg = `🎉 Novo cadastro no Beleza Pro!
 
 Salão: ${nomeSalao}
@@ -172,7 +179,7 @@ Acesse o Railway para ver os dados completos.`;
       console.log('Email de notificação enviado para', EMAIL_ADMIN);
     } catch(e) { console.error('Erro ao enviar email:', e.message); }
   }
-  
+
   // Notificação por Telegram
   const TELEGRAM_TOKEN   = process.env.TELEGRAM_BOT_TOKEN || '';
   const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID   || '';
@@ -195,7 +202,7 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { data: usuario } = await supabase
       .from('usuarios')
-      .select('id, nome, email, senha_hash, perfil, ativo, salao_id, saloes(id, nome, slug, trial_ate)')
+      .select('id, nome, email, senha_hash, perfil, ativo, salao_id, profissional_id, saloes(id, nome, slug, trial_ate)')
       .eq('email', email).single();
     if (!usuario) return res.status(401).json({ error: 'Email ou senha incorretos' });
     if (!usuario.ativo) return res.status(403).json({ error: 'Conta desativada' });
@@ -232,7 +239,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', auth, async (req, res) => {
   const { data } = await supabase
     .from('usuarios')
-    .select('id, nome, email, perfil, ultimo_login, saloes(id, nome, slug, trial_ate)')
+    .select('id, nome, email, perfil, profissional_id, ultimo_login, saloes(id, nome, slug, trial_ate)')
     .eq('id', req.user.id).single();
   res.json(data);
 });
@@ -359,7 +366,7 @@ app.put('/api/clientes/:id', auth, async (req, res) => {
 // AGENDAMENTOS
 // ═══════════════════════════════════════════════════
 app.get('/api/agendamentos', auth, async (req, res) => {
-  const { data, data_inicio, data_fim, profissional_id, status } = req.query;
+  const { data, data_inicio, data_fim, status } = req.query;
   let q = supabase.from('agendamentos')
     .select(`id, data_hora, duracao_min, status, valor_total, forma_pgto, observacoes, origem,
              clientes(id, nome, telefone),
@@ -374,7 +381,16 @@ app.get('/api/agendamentos', auth, async (req, res) => {
     if (data_inicio) q = q.gte('data_hora', data_inicio + 'T03:00:00+00:00');
     if (data_fim)    q = q.lte('data_hora', adicionarDia(data_fim) + 'T02:59:59+00:00');
   }
-  if (profissional_id) q = q.eq('profissional_id', profissional_id);
+
+  // Funcionário vinculado a um profissional só enxerga a própria agenda,
+  // mesmo que tente passar outro profissional_id na query string.
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  if (filtroObrigatorio) {
+    q = q.eq('profissional_id', filtroObrigatorio);
+  } else if (req.query.profissional_id) {
+    q = q.eq('profissional_id', req.query.profissional_id);
+  }
+
   if (status)          q = q.eq('status', status);
   if (req.query.cliente_id) q = q.eq('cliente_id', req.query.cliente_id);
 
@@ -388,6 +404,13 @@ app.post('/api/agendamentos', auth, async (req, res) => {
   if (!cliente_id || !profissional_id || !data_hora || !servicos || !servicos.length) {
     return res.status(422).json({ error: 'Dados incompletos' });
   }
+
+  // Funcionário vinculado só pode criar agendamento para o próprio profissional
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  if (filtroObrigatorio && filtroObrigatorio !== profissional_id) {
+    return res.status(403).json({ error: 'Você só pode criar agendamentos para sua própria agenda' });
+  }
+
   try {
     const { data: srvcs } = await supabase
       .from('servicos').select('id, preco, duracao_min, comissao_pct')
@@ -456,9 +479,15 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
   const { status, forma_pgto } = req.body;
   const updates = { status };
   if (forma_pgto) updates.forma_pgto = forma_pgto;
-  const { data, error } = await supabase
-    .from('agendamentos').update(updates)
-    .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
+
+  let query = supabase.from('agendamentos').update(updates)
+    .eq('id', req.params.id).eq('salao_id', req.salao_id);
+
+  // Funcionário vinculado só pode alterar status de agendamentos da própria agenda
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  if (filtroObrigatorio) query = query.eq('profissional_id', filtroObrigatorio);
+
+  const { data, error } = await query.select().single();
   if (error || !data) return res.status(404).json({ error: 'Não encontrado' });
 
   let whatsapp_link = null;
@@ -467,7 +496,7 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     // Atualiza lancamento como pago
     await supabase.from('lancamentos')
       .update({ pago: true, forma_pgto }).eq('agendamento_id', req.params.id);
-    
+
     // Atualiza estatísticas do cliente automaticamente
     if (data.cliente_id) {
       try {
@@ -478,15 +507,15 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
           .eq('cliente_id', data.cliente_id)
           .eq('salao_id', req.salao_id)
           .eq('status', 'concluido');
-        
+
         const total_visitas = ags ? ags.length : 0;
         const total_gasto   = ags ? ags.reduce((s, a) => s + Number(a.valor_total || 0), 0) : 0;
-        
+
         // Define status baseado em visitas
         let novo_status = 'ativo';
         if (total_visitas >= 10) novo_status = 'vip';
         else if (total_visitas === 1) novo_status = 'novo';
-        
+
         await supabase.from('clientes').update({
           historico_count: total_visitas,
           total_gasto: total_gasto,
@@ -524,11 +553,17 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
 app.get('/api/dashboard/kpis', auth, async (req, res) => {
   const hoje = dataAtualBrasil();
   const inicioMes = hoje.slice(0, 7) + '-01';
+
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+
+  let qAgHoje = supabase.from('agendamentos').select('id', { count: 'exact' })
+    .eq('salao_id', req.salao_id)
+    .gte('data_hora', hoje + 'T03:00:00+00:00').lte('data_hora', adicionarDia(hoje) + 'T02:59:59+00:00')
+    .not('status', 'in', '("cancelado","nao_compareceu")');
+  if (filtroObrigatorio) qAgHoje = qAgHoje.eq('profissional_id', filtroObrigatorio);
+
   const [{ count: agHoje }, { data: lancHoje }, { count: clientes }, { data: novos }] = await Promise.all([
-    supabase.from('agendamentos').select('id', { count: 'exact' })
-      .eq('salao_id', req.salao_id)
-      .gte('data_hora', hoje + 'T03:00:00+00:00').lte('data_hora', adicionarDia(hoje) + 'T02:59:59+00:00')
-      .not('status', 'in', '("cancelado","nao_compareceu")'),
+    qAgHoje,
     supabase.from('lancamentos').select('tipo, valor')
       .eq('salao_id', req.salao_id).eq('data', hoje).eq('pago', true),
     supabase.from('clientes').select('id', { count: 'exact' })
@@ -544,23 +579,33 @@ app.get('/api/dashboard/kpis', auth, async (req, res) => {
 
 app.get('/api/dashboard/agenda-hoje', auth, async (req, res) => {
   const hoje = dataAtualBrasil();
-  const { data } = await supabase.from('agendamentos')
+  let q = supabase.from('agendamentos')
     .select(`id, data_hora, status, valor_total,
              clientes(nome, telefone), profissionais(nome, cor_agenda),
              agendamento_servicos(servicos(nome))`)
     .eq('salao_id', req.salao_id)
     .gte('data_hora', hoje + 'T03:00:00+00:00').lte('data_hora', adicionarDia(hoje) + 'T02:59:59+00:00')
     .not('status', 'eq', 'cancelado').order('data_hora');
+
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  if (filtroObrigatorio) q = q.eq('profissional_id', filtroObrigatorio);
+
+  const { data } = await q;
   res.json(data || []);
 });
 
 app.get('/api/dashboard/top-servicos', auth, async (req, res) => {
   const inicioMes = dataAtualBrasil().slice(0, 7) + '-01';
-  const { data } = await supabase.from('agendamento_servicos')
-    .select('servicos(nome), preco, agendamentos!inner(data_hora, salao_id, status)')
+  let q = supabase.from('agendamento_servicos')
+    .select('servicos(nome), preco, agendamentos!inner(data_hora, salao_id, status, profissional_id)')
     .eq('agendamentos.salao_id', req.salao_id)
     .eq('agendamentos.status', 'concluido')
     .gte('agendamentos.data_hora', inicioMes + 'T03:00:00+00:00');
+
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  if (filtroObrigatorio) q = q.eq('agendamentos.profissional_id', filtroObrigatorio);
+
+  const { data } = await q;
   const map = {};
   (data || []).forEach(row => {
     const nome = row.servicos?.nome || 'Desconhecido';
@@ -677,9 +722,15 @@ app.post('/api/estoque/:id/movimentar', auth, async (req, res) => {
 // COMISSÕES
 // ═══════════════════════════════════════════════════
 app.get('/api/comissoes', auth, async (req, res) => {
-  const { data: profissionais } = await supabase.from('profissionais')
+  let { data: profissionais } = await supabase.from('profissionais')
     .select('id, nome, comissao_pct, cor_agenda').eq('salao_id', req.salao_id).eq('ativo', true);
   if (!profissionais) return res.json([]);
+
+  // Funcionário vinculado a um profissional só enxerga a própria comissão
+  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  if (filtroObrigatorio) {
+    profissionais = profissionais.filter(p => p.id === filtroObrigatorio);
+  }
 
   // Aceita ?mes=2026-06 para navegar entre meses; padrão é o mês atual
   let ano, mesNum;
@@ -721,6 +772,12 @@ app.get('/api/comissoes', auth, async (req, res) => {
 
 app.post('/api/comissoes/fechar', auth, async (req, res) => {
   const { profissional_id, periodo_inicio, periodo_fim } = req.body;
+
+  // Funcionário vinculado não pode fechar comissão de outro profissional (nem a própria)
+  if (req.user.perfil !== 'admin') {
+    return res.status(403).json({ error: 'Apenas o administrador pode fechar comissões' });
+  }
+
   const now = new Date();
   const ini = periodo_inicio || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
   const fim = periodo_fim    || new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
@@ -780,6 +837,9 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 
 // Reabre um fechamento de comissão pago por engano (volta a calcular normalmente)
 app.delete('/api/comissoes/fechamento/:id', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') {
+    return res.status(403).json({ error: 'Apenas o administrador pode reabrir fechamentos' });
+  }
   try {
     const { error } = await supabase.from('fechamentos_comissao')
       .delete().eq('id', req.params.id).eq('salao_id', req.salao_id);
@@ -793,30 +853,48 @@ app.delete('/api/comissoes/fechamento/:id', auth, async (req, res) => {
 // ═══════════════════════════════════════════════════
 // SALÃO
 // ═══════════════════════════════════════════════════
-// Criar usuário recepcionista
+// Criar usuário recepcionista / profissional
 app.post('/api/usuarios', auth, async (req, res) => {
   // Só admin pode criar usuários
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
-  const { nome, cargo, email, senha, perfil, permissoes } = req.body;
+  const { nome, cargo, email, senha, perfil, permissoes, profissional_id } = req.body;
   if (!nome || !email || !senha) return res.status(422).json({ error: 'Nome, email e senha obrigatórios' });
+  if (String(senha).length < 6) return res.status(422).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+
   const perfil_final = perfil === 'admin' ? 'admin' : 'custom';
-  const permissoes_final = perfil_final === 'admin' 
+  const permissoes_final = perfil_final === 'admin'
     ? ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config']
     : (permissoes || ['dashboard','agenda','clientes','estoque','comissoes']);
+
   try {
     const { data: existe } = await supabase.from('usuarios').select('id').eq('email', email).single();
     if (existe) return res.status(409).json({ error: 'Email já cadastrado' });
+
+    // Se veio profissional_id, valida que pertence a este salão
+    let profissional_id_final = null;
+    if (perfil_final === 'custom' && profissional_id) {
+      const { data: prof } = await supabase.from('profissionais')
+        .select('id').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
+      if (!prof) return res.status(422).json({ error: 'Profissional inválido para este salão' });
+      profissional_id_final = prof.id;
+    }
+
     const senha_hash = await bcrypt.hash(senha, 12);
     const { data, error } = await supabase.from('usuarios')
-      .insert({ salao_id: req.salao_id, nome, email, senha_hash, perfil: perfil_final })
-      .select('id, nome, email, perfil').single();
+      .insert({
+        salao_id: req.salao_id, nome, email, senha_hash, perfil: perfil_final,
+        profissional_id: profissional_id_final
+      })
+      .select('id, nome, email, perfil, profissional_id').single();
     if (error) throw error;
+
     // Salva permissões customizadas
     try {
       await supabase.from('usuario_permissoes').upsert({
         usuario_id: data.id, salao_id: req.salao_id, permissoes: permissoes_final
       }, { onConflict: 'usuario_id' });
     } catch(permErr) { console.log('Permissoes nao salvas:', permErr.message); }
+
     res.status(201).json({ ...data, permissoes: permissoes_final });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -825,22 +903,41 @@ app.post('/api/usuarios', auth, async (req, res) => {
 app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   const { data } = await supabase.from('usuarios')
-    .select('id, nome, email, perfil, ativo, ultimo_login')
+    .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, profissionais(nome)')
     .eq('salao_id', req.salao_id).order('nome');
   res.json(data || []);
 });
 
-// Editar permissões do usuário
+// Editar permissões (e vínculo com profissional) do usuário
 app.put('/api/usuarios/:id/permissoes', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
-  const { permissoes } = req.body;
+  const { permissoes, profissional_id } = req.body;
   if (!permissoes || !permissoes.length) return res.status(422).json({ error: 'Permissoes obrigatorias' });
+
   try {
+    // Valida que o usuário-alvo pertence a este salão
+    const { data: alvo } = await supabase.from('usuarios')
+      .select('id, perfil').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    let profissional_id_final = null;
+    if (alvo.perfil !== 'admin' && profissional_id) {
+      const { data: prof } = await supabase.from('profissionais')
+        .select('id').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
+      if (!prof) return res.status(422).json({ error: 'Profissional inválido para este salão' });
+      profissional_id_final = prof.id;
+    }
+
     const { error } = await supabase.from('usuario_permissoes').upsert({
       usuario_id: req.params.id, salao_id: req.salao_id, permissoes
     }, { onConflict: 'usuario_id' });
     if (error) throw error;
-    res.json({ message: 'Permissoes atualizadas', permissoes });
+
+    await supabase.from('usuarios')
+      .update({ profissional_id: profissional_id_final })
+      .eq('id', req.params.id).eq('salao_id', req.salao_id);
+
+    res.json({ message: 'Permissoes atualizadas', permissoes, profissional_id: profissional_id_final });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -944,7 +1041,7 @@ app.post('/api/pagamento/webhook', async (req, res) => {
         await supabase.from('saloes')
           .update({ ativo: true, trial_ate: prox })
           .eq('id', salao_id);
-        
+
         // Registra lancamento financeiro (para controle interno)
         await supabase.from('lancamentos').insert({
           salao_id: salao_id,
@@ -964,7 +1061,7 @@ app.post('/api/pagamento/webhook', async (req, res) => {
 
 app.get('/api/pagamento/status', auth, async (req, res) => {
   const { data: salao } = await supabase.from('saloes').select('trial_ate, ativo').eq('id', req.salao_id).single();
-  
+
   // Calcula dias considerando fim do dia da data de vencimento
   let dias = 0;
   if (salao?.trial_ate) {
@@ -974,11 +1071,11 @@ app.get('/api/pagamento/status', auth, async (req, res) => {
     const hoje = new Date();
     dias = Math.ceil((trial - hoje) / 86400000);
   }
-  
-  res.json({ 
-    ativo: salao?.ativo, 
-    em_trial: dias > 0, 
-    dias_restantes: Math.max(0, dias), 
+
+  res.json({
+    ativo: salao?.ativo,
+    em_trial: dias > 0,
+    dias_restantes: Math.max(0, dias),
     trial_expirado: dias <= 0,
     trial_ate: salao?.trial_ate
   });
