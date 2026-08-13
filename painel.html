@@ -1633,8 +1633,112 @@ function renderPros(list) {
       '<div><div style="font-size:.8rem;font-weight:800;color:var(--ac3)">' + brl(p.faturado||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div></div>' +
       '<div style="display:flex;gap:7px;margin-top:11px">' +
       '<button class="btn btns btnsm" style="flex:1" onclick="openM(\'m-ag\')">📅 Agendar</button>' +
-      '<button class="btn btns btnsm" style="flex:1" onclick="toast(\'WhatsApp...\',\'ok\')">💬 WhatsApp</button></div></div>';
+      '<button class="btn btns btnsm" style="flex:1" onclick="toast(\'WhatsApp...\',\'ok\')">💬 WhatsApp</button></div>' +
+      '<div style="display:flex;gap:7px;margin-top:7px">' +
+      '<button class="btn btns btnsm" style="flex:1" onclick="abrirVendaParcelada(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🛒 Vender parcelado</button>' +
+      '<button class="btn btns btnsm" style="flex:1" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">📋 Parcelas</button></div></div>';
   }).join('');
+}
+
+// ── VENDA PARCELADA PRO PROFISSIONAL ─────────────────
+function abrirVendaParcelada(profId, profNome) {
+  document.getElementById('vp-prof-id').value = profId;
+  document.getElementById('vp-prof-nome').textContent = profNome;
+  var sel = document.getElementById('vp-produto');
+  sel.innerHTML = '<option value="">Item avulso (sem produto do estoque)</option>' +
+    (window._estoqueCache || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+  document.getElementById('vp-descricao').value = '';
+  document.getElementById('vp-descricao-wrap').style.display = 'block';
+  document.getElementById('vp-valor').value = '';
+  document.getElementById('vp-parcelas').value = '1';
+  document.getElementById('vp-data').value = today();
+  openM('m-venda-parcelada');
+  apiFetch('/api/estoque').then(function(r){
+    window._estoqueCache = r || [];
+    sel.innerHTML = '<option value="">Item avulso (sem produto do estoque)</option>' +
+      window._estoqueCache.map(function(p){ return '<option value="' + p.id + '">' + p.nome + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+  }).catch(function(){});
+}
+
+function vpProdutoSelecionado() {
+  var sel = document.getElementById('vp-produto');
+  var descWrap = document.getElementById('vp-descricao-wrap');
+  descWrap.style.display = sel.value ? 'none' : 'block';
+}
+
+function salvarVendaParcelada() {
+  var profId = document.getElementById('vp-prof-id').value;
+  var produtoId = document.getElementById('vp-produto').value;
+  var descricao = document.getElementById('vp-descricao').value.trim();
+  var valor = parseFloat(document.getElementById('vp-valor').value);
+  var parcelas = parseInt(document.getElementById('vp-parcelas').value);
+  var data = document.getElementById('vp-data').value;
+
+  if (!valor || valor <= 0) { toast('Informe um valor total válido','er'); return; }
+  if (!produtoId && !descricao) { toast('Selecione um produto ou descreva o item','er'); return; }
+  if (!parcelas || parcelas < 1 || parcelas > 24) { toast('Número de parcelas deve ser entre 1 e 24','er'); return; }
+
+  var btn = document.querySelector('#m-venda-parcelada .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/profissionais/' + profId + '/compras', {
+    method: 'POST',
+    body: { produto_id: produtoId || null, descricao: descricao || null, valor_total: valor, num_parcelas: parcelas, data_compra: data }
+  })
+  .then(function(r){
+    toast('Venda parcelada registrada! ' + parcelas + 'x de ' + brl(valor / parcelas), 'ok');
+    closeM('m-venda-parcelada');
+    loadEst();
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Registrar Venda'; });
+}
+
+// ── LISTAR / PAGAR PARCELAS DO PROFISSIONAL ──────────
+function abrirParcelasProfissional(profId, profNome) {
+  document.getElementById('pp-prof-nome').textContent = 'Parcelas — ' + profNome;
+  document.getElementById('pp-lista').innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  openM('m-parcelas-prof');
+  carregarParcelasProfissional(profId);
+}
+
+function carregarParcelasProfissional(profId) {
+  apiFetch('/api/profissionais/' + profId + '/compras').then(function(compras){
+    renderParcelasProfissional(compras || [], profId);
+  }).catch(function(e){
+    document.getElementById('pp-lista').innerHTML = '<div class="empty">Erro ao carregar parcelas.</div>';
+  });
+}
+
+function renderParcelasProfissional(compras, profId) {
+  var el = document.getElementById('pp-lista');
+  if (!compras.length) { el.innerHTML = '<div class="empty">Nenhuma venda parcelada registrada para este profissional.</div>'; return; }
+
+  el.innerHTML = compras.map(function(c){
+    var parcelas = (c.parcelas_compra_profissional || []).slice().sort(function(a,b){ return a.numero_parcela - b.numero_parcela; });
+    var linhasParcelas = parcelas.map(function(p){
+      var pago = p.status === 'pago';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--bd);font-size:.78rem">' +
+        '<div style="min-width:60px;color:var(--t2)">' + p.numero_parcela + '/' + c.num_parcelas + '</div>' +
+        '<div style="flex:1">' + fdt(p.vencimento+'T12:00') + '</div>' +
+        '<strong style="min-width:70px;text-align:right">' + brl(p.valor) + '</strong>' +
+        (pago
+          ? '<span class="badge bs">✅ Pago</span>'
+          : '<button class="btn btnp btnsm" onclick="pagarParcela(\'' + p.id + '\',\'' + profId + '\')">Marcar pago</button>') +
+        '</div>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:10px;padding:14px">' +
+      '<div class="crow" style="margin-bottom:4px"><span class="ch">' + c.descricao + '</span><strong>' + brl(c.valor_total) + '</strong></div>' +
+      '<div style="font-size:.7rem;color:var(--t3);margin-bottom:6px">Comprado em ' + fdt(c.data_compra+'T12:00') + ' · ' + c.num_parcelas + 'x</div>' +
+      linhasParcelas +
+      '</div>';
+  }).join('');
+}
+
+function pagarParcela(parcelaId, profId) {
+  if (!confirm('Confirmar o pagamento desta parcela? Esta ação não pode ser desfeita.')) return;
+  apiFetch('/api/parcelas/' + parcelaId + '/pagar', { method: 'PATCH' })
+  .then(function(){ toast('Parcela paga! ✅','ok'); carregarParcelasProfissional(profId); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // ── SERVIÇOS ────────────────────────────────────────────
@@ -3259,6 +3363,39 @@ function dispensarBannerPWA() {
       <button class="btn btns" onclick="closeM('m-mov')">Cancelar</button>
       <button class="btn btnp" id="mov-btn" onclick="salvarMov()">Confirmar</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal Venda Parcelada (produto pro profissional) -->
+<div class="mov" id="m-venda-parcelada">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">🛒 Vender Produto Parcelado</span><button class="mx" onclick="closeM('m-venda-parcelada')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="vp-prof-id"/>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:14px" id="vp-prof-nome">—</div>
+      <div class="fg"><label class="fl">Produto do estoque (opcional)</label>
+        <select class="fc" id="vp-produto" onchange="vpProdutoSelecionado()"><option value="">Item avulso (sem produto do estoque)</option></select>
+      </div>
+      <div class="fg" id="vp-descricao-wrap"><label class="fl">Descrição do item</label><input class="fc" id="vp-descricao" placeholder="Ex.: Kit de tesouras profissional"/></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Valor total (R$)*</label><input type="number" class="fc" id="vp-valor" step="0.01" placeholder="0,00"/></div>
+        <div class="fg"><label class="fl">Parcelas*</label><input type="number" class="fc" id="vp-parcelas" min="1" max="24" value="1"/></div>
+      </div>
+      <div class="fg"><label class="fl">Data da compra</label><input type="date" class="fc" id="vp-data"/></div>
+      <div style="font-size:.7rem;color:var(--t3)">Se escolher um produto do estoque, 1 unidade é debitada automaticamente. As parcelas vencem mensalmente a partir da data da compra.</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-venda-parcelada')">Cancelar</button><button class="btn btnp" onclick="salvarVendaParcelada()">Registrar Venda</button></div>
+  </div>
+</div>
+
+<!-- Modal Parcelas do Profissional -->
+<div class="mov" id="m-parcelas-prof">
+  <div class="mbox lg">
+    <div class="mh"><span class="mt" id="pp-prof-nome">Parcelas</span><button class="mx" onclick="closeM('m-parcelas-prof')">✕</button></div>
+    <div class="mb">
+      <div id="pp-lista"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-parcelas-prof')">Fechar</button></div>
   </div>
 </div>
 
