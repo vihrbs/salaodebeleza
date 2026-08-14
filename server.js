@@ -190,7 +190,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.2.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.3.0-notificacoes-profissional' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -497,6 +497,77 @@ async function enviarEmailRedefinicaoSenha(email, nome, token) {
     console.error('Erro ao enviar link de redefinição:', e.message);
     return { enviado: false, motivo: e.message };
   }
+}
+
+// ── NOTIFICAÇÕES PRO PROFISSIONAL (agendamento novo / comissão fechada) ──
+// Genérico: monta e envia um e-mail simples via Resend. Sempre "best-effort"
+// — nunca deve impedir a operação principal (criar agendamento, fechar
+// comissão) de completar, mesmo se o envio falhar.
+async function enviarEmailSimples(email, assunto, corpo) {
+  if (!email) return { enviado: false, motivo: 'Sem e-mail cadastrado' };
+  const RESEND_KEY = process.env.RESEND_API_KEY || '';
+  if (!RESEND_KEY) return { enviado: false, motivo: 'RESEND_API_KEY não configurado' };
+  const remetente = process.env.RESEND_FROM_EMAIL || 'Beleza Pro <onboarding@resend.dev>';
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_KEY },
+      body: JSON.stringify({ from: remetente, to: [email], subject: assunto, text: corpo })
+    });
+    if (!r.ok) {
+      const detalhe = await r.text().catch(() => '');
+      console.error('Resend recusou notificação (status ' + r.status + '): ' + detalhe);
+      return { enviado: false, motivo: 'Resend retornou status ' + r.status };
+    }
+    return { enviado: true };
+  } catch(e) {
+    console.error('Erro ao enviar notificação:', e.message);
+    return { enviado: false, motivo: e.message };
+  }
+}
+
+function formatarDataHoraBrasil(dataHoraISO) {
+  const dt = new Date(dataHoraISO);
+  const data = dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const hora = dt.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  return { data, hora };
+}
+
+// Avisa o profissional que ganhou um agendamento novo
+async function notificarProfissionalNovoAgendamento(email, nomeProfissional, nomeCliente, dataHoraISO, servicosNomes, valorTotal) {
+  const { data, hora } = formatarDataHoraBrasil(dataHoraISO);
+  const listaServicos = (servicosNomes && servicosNomes.length) ? servicosNomes.join(', ') : 'Serviço';
+  const valorFmt = 'R$ ' + Number(valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const corpo = 'Olá ' + nomeProfissional + '!\n\n' +
+    'Você tem um novo agendamento:\n\n' +
+    'Cliente: ' + nomeCliente + '\n' +
+    'Data: ' + data + ' às ' + hora + '\n' +
+    'Serviço(s): ' + listaServicos + '\n' +
+    'Valor: ' + valorFmt + '\n\n' +
+    '— Beleza Pro';
+  return enviarEmailSimples(email, '📅 Novo agendamento — ' + nomeCliente, corpo);
+}
+
+// Avisa o profissional de uma série de agendamentos recorrentes de uma vez (evita spam de e-mails)
+async function notificarProfissionalRecorrencia(email, nomeProfissional, nomeCliente, agendamentosCriados, servicosNomes) {
+  const listaServicos = (servicosNomes && servicosNomes.length) ? servicosNomes.join(', ') : 'Serviço';
+  const listaDatas = agendamentosCriados.map(a => {
+    const { data, hora } = formatarDataHoraBrasil(a.data_hora);
+    return '- ' + data + ' às ' + hora;
+  }).join('\n');
+  const corpo = 'Olá ' + nomeProfissional + '!\n\n' +
+    'Você tem ' + agendamentosCriados.length + ' novos agendamentos com ' + nomeCliente + ' (' + listaServicos + '):\n\n' +
+    listaDatas + '\n\n— Beleza Pro';
+  return enviarEmailSimples(email, '📅 ' + agendamentosCriados.length + ' novos agendamentos — ' + nomeCliente, corpo);
+}
+
+// Avisa o profissional que a comissão dele foi fechada/paga
+async function notificarProfissionalComissaoFechada(email, nomeProfissional, valorComissao, periodoInicio, periodoFim) {
+  const valorFmt = 'R$ ' + Number(valorComissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const corpo = 'Olá ' + nomeProfissional + '!\n\n' +
+    'Sua comissão do período de ' + periodoInicio + ' a ' + periodoFim + ' foi fechada.\n\n' +
+    'Valor: ' + valorFmt + '\n\n— Beleza Pro';
+  return enviarEmailSimples(email, '💸 Comissão fechada — ' + valorFmt, corpo);
 }
 
 // Pede o link de redefinição. Por segurança, SEMPRE responde com sucesso —
@@ -1059,11 +1130,15 @@ app.post('/api/agendamentos', auth, async (req, res) => {
 
   try {
     const { data: srvcs } = await supabase
-      .from('servicos').select('id, preco, duracao_min, comissao_pct')
+      .from('servicos').select('id, nome, preco, duracao_min, comissao_pct')
       .in('id', servicos).eq('salao_id', req.salao_id);
 
     const { data: prof } = await supabase
-      .from('profissionais').select('comissao_pct').eq('id', profissional_id).single();
+      .from('profissionais').select('comissao_pct, nome, email').eq('id', profissional_id).single();
+
+    const { data: clienteInfo } = await supabase
+      .from('clientes').select('nome').eq('id', cliente_id).single();
+    const nomesServicos = (srvcs || []).map(s => s.nome).filter(Boolean);
 
     // ── Sem recorrência: comportamento normal, um único agendamento ──
     if (!datasRecorrencia) {
@@ -1122,6 +1197,15 @@ app.post('/api/agendamentos', auth, async (req, res) => {
         }).eq('id', consumo.pacoteCliente.id);
       }
 
+      // Notificação por e-mail pro profissional — best-effort (não atrasa nem
+      // quebra a resposta se o envio falhar)
+      if (prof && prof.email) {
+        notificarProfissionalNovoAgendamento(
+          prof.email, prof.nome, clienteInfo?.nome || 'Cliente',
+          data_hora, nomesServicos, resultado.agendamento.valor_total
+        ).catch(() => {});
+      }
+
       return res.status(201).json(resultado.agendamento);
     }
 
@@ -1142,6 +1226,13 @@ app.post('/api/agendamentos', auth, async (req, res) => {
 
     if (!criados.length) {
       return res.status(409).json({ error: 'Nenhum agendamento pôde ser criado — todos os horários da recorrência já estão ocupados.' });
+    }
+
+    // Notificação por e-mail pro profissional — best-effort, um único e-mail
+    // resumindo a série inteira (evita spam de vários e-mails separados)
+    if (prof && prof.email) {
+      notificarProfissionalRecorrencia(prof.email, prof.nome, clienteInfo?.nome || 'Cliente', criados, nomesServicos)
+        .catch(() => {});
     }
 
     res.status(201).json({
@@ -1541,6 +1632,15 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
         .select().single());
     }
     if (error) throw error;
+
+    // Notificação por e-mail pro profissional — best-effort
+    const { data: profInfo } = await supabase.from('profissionais')
+      .select('nome, email').eq('id', profissional_id).single();
+    if (profInfo && profInfo.email) {
+      notificarProfissionalComissaoFechada(profInfo.email, profInfo.nome, total_comissao, ini, fim)
+        .catch(() => {});
+    }
+
     res.json(data);
   } catch(e) {
     res.status(500).json({ error: e.message });
