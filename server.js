@@ -1727,7 +1727,7 @@ app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   try {
     const { data: usuarios, error } = await supabase.from('usuarios')
-      .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado, profissionais(nome)')
+      .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado')
       .eq('salao_id', req.salao_id).order('nome');
     if (error) throw error;
 
@@ -1741,9 +1741,21 @@ app.get('/api/usuarios', auth, async (req, res) => {
       (permsRows || []).forEach(p => { permissoesPorUsuario[p.usuario_id] = p.permissoes; });
     }
 
+    // Busca os nomes dos profissionais vinculados também separadamente —
+    // o embed automático (usuarios -> profissionais) falha quando o banco
+    // tem mais de uma relação possível entre essas duas tabelas.
+    const profissionalIds = [...new Set((usuarios || []).map(u => u.profissional_id).filter(Boolean))];
+    let nomePorProfissional = {};
+    if (profissionalIds.length) {
+      const { data: profsRows } = await supabase.from('profissionais')
+        .select('id, nome').in('id', profissionalIds);
+      (profsRows || []).forEach(p => { nomePorProfissional[p.id] = p.nome; });
+    }
+
     const TODAS_PERMISSOES_ADMIN = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
     const comPermissoes = (usuarios || []).map(u => ({
       ...u,
+      profissionais: (u.profissional_id && nomePorProfissional[u.profissional_id]) ? { nome: nomePorProfissional[u.profissional_id] } : null,
       permissoes: u.perfil === 'admin' ? TODAS_PERMISSOES_ADMIN : (permissoesPorUsuario[u.id] || [])
     }));
     res.json(comPermissoes);
@@ -1797,6 +1809,26 @@ app.delete('/api/usuarios/:id', auth, async (req, res) => {
 // (proteção real de financeiro/estoque/profissionais/serviços já é feita
 // rota a rota via requirePermissao(), acima)
 
+
+// Envia um e-mail de teste pro endereço informado — forma rápida de
+// confirmar se o Resend está configurado certo, sem precisar criar usuário
+// de teste nem esperar um agendamento/comissão de verdade.
+app.post('/api/admin/testar-email', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  const { email } = req.body;
+  if (!email || !emailValido(email)) return res.status(422).json({ error: 'Informe um e-mail válido' });
+
+  const resultado = await enviarEmailSimples(
+    email,
+    '✅ Teste de e-mail — Beleza Pro',
+    'Se você está lendo isso, o envio de e-mail do seu sistema Beleza Pro está funcionando! 🎉\n\nEste é só um teste, não precisa fazer nada.\n\n— Beleza Pro'
+  );
+
+  if (!resultado.enviado) {
+    return res.status(502).json({ error: 'Falha ao enviar: ' + resultado.motivo });
+  }
+  res.json({ message: 'E-mail de teste enviado! Confira a caixa de entrada (e o spam) de ' + email });
+});
 
 app.get('/api/saloes/meu', auth, async (req, res) => {
   const { data, error } = await supabase.from('saloes')
