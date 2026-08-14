@@ -2220,12 +2220,30 @@ function abrirNovoAgendamento() {
     sel.innerHTML = '<option value="">Selecionar pacote...</option>' +
       PACOTES_CACHE.map(function(p){ return '<option value="' + p.id + '" data-preco="' + p.preco + '">' + p.nome + ' — ' + brl(p.preco) + '</option>'; }).join('');
   }
+  var buscaServico = document.getElementById('ag-svc-busca');
+  if (buscaServico) { buscaServico.value = ''; filtrarServicosAgendamento(''); }
   openM('m-ag');
   // Sempre recalcula as sessões de pacote disponíveis ao abrir o modal —
   // não depende só do evento onchange do cliente/serviço, porque se o
   // cliente já estava selecionado de uma vez anterior (valor não muda),
   // o onchange não dispara e a seção ficaria vazia mesmo tendo sessão sobrando.
   atualizarPacotesDisponiveis();
+}
+
+// Filtra os "pills" de serviço já renderizados pelo texto digitado, sem
+// perder a seleção ("on") de quem já estava marcado.
+function filtrarServicosAgendamento(termo) {
+  var termoNorm = (termo || '').trim().toLowerCase();
+  var pills = document.querySelectorAll('#ag-svcs .svc-pill');
+  var algumVisivel = false;
+  pills.forEach(function(pill) {
+    var nome = (pill.textContent || '').toLowerCase();
+    var visivel = !termoNorm || nome.indexOf(termoNorm) >= 0;
+    pill.style.display = visivel ? '' : 'none';
+    if (visivel) algumVisivel = true;
+  });
+  var vazio = document.getElementById('ag-svc-vazio');
+  if (vazio) vazio.style.display = (pills.length && !algumVisivel) ? 'block' : 'none';
 }
 
 function toggleVenderPacoteAgendamento() {
@@ -2335,6 +2353,7 @@ function saveAg() {
     document.getElementById('ag-pacotes-disponiveis').style.display = 'none';
     document.getElementById('ag-pacotes-disponiveis').innerHTML = '';
     document.querySelectorAll('#ag-svcs .svc-pill.on').forEach(function(el){ el.classList.remove('on'); });
+    if (document.getElementById('ag-svc-busca')) { document.getElementById('ag-svc-busca').value = ''; filtrarServicosAgendamento(''); }
     loadDashTl(); loadAgenda(); loadKPIs();
   }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ agBtn.disabled=false; agBtn.textContent='✅ Confirmar'; });
@@ -3065,9 +3084,12 @@ function criarUsuario() {
     document.getElementById('nu-senha').value = '';
     if (document.getElementById('nu-profissional')) document.getElementById('nu-profissional').value = '';
     loadUsuarios();
-    // Mostra modal de sucesso
     setTimeout(function(){
-      toast('Usuário ' + nome + ' criado com sucesso! ✅','ok');
+      if (r && r.email_enviado === false) {
+        toast('Usuário ' + nome + ' criado! ⚠️ Mas o e-mail de verificação NÃO foi enviado (' + (r.email_motivo_falha||'motivo desconhecido') + '). Confira a configuração do RESEND_API_KEY no Railway.', 'er');
+      } else {
+        toast('Usuário ' + nome + ' criado com sucesso! ✅','ok');
+      }
     }, 300);
   })
   .catch(function(e) { toast('Erro: ' + (e.message||'tente novamente'),'er'); })
@@ -3604,7 +3626,11 @@ function dispensarBannerPWA() {
         <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli" onchange="atualizarPacotesDisponiveis()"><option value="">Selecionar...</option></select></div>
         <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro"><option value="">Selecionar...</option></select></div>
       </div>
-      <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label><div id="ag-svcs" style="padding:4px 0"></div></div>
+      <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label>
+        <input class="fc" id="ag-svc-busca" placeholder="🔍 Buscar serviço..." oninput="filtrarServicosAgendamento(this.value)" style="margin-bottom:8px"/>
+        <div id="ag-svcs" style="padding:4px 0"></div>
+        <div id="ag-svc-vazio" class="empty" style="display:none;padding:14px">Nenhum serviço encontrado.</div>
+      </div>
       <div class="fr">
         <div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="ag-d"/></div>
         <div class="fg"><label class="fl">Horário*</label>
