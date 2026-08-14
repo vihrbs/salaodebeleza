@@ -287,15 +287,21 @@ app.post('/api/auth/register', async (req, res) => {
 
     const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
 
-    // Notificação de novo cadastro + código de verificação de e-mail
+    // Notificação de novo cadastro (não bloqueia a resposta, não é crítico)
     notificarNovoCadastro(salao.nome, nome, email, telefone).catch(e =>
       console.log('Notificação falhou (não crítico):', e.message)
     );
-    enviarCodigoVerificacao(email, nome, codigoVerificacao).catch(e =>
-      console.log('Envio de código falhou (não crítico):', e.message)
-    );
 
-    res.status(201).json({ token, usuario: { ...usuario, saloes: salao }, salao });
+    // Código de verificação: espera o resultado real do envio, pra devolver
+    // pro frontend se deu certo ou não (em vez de falhar em silêncio)
+    const resultadoEmail = await enviarCodigoVerificacao(email, nome, codigoVerificacao)
+      .catch(e => ({ enviado: false, motivo: e.message }));
+
+    res.status(201).json({
+      token, usuario: { ...usuario, saloes: salao }, salao,
+      email_enviado: resultadoEmail.enviado,
+      email_motivo_falha: resultadoEmail.enviado ? null : resultadoEmail.motivo
+    });
   } catch(e) {
     console.error('Register error:', e);
     res.status(500).json({ error: 'Erro ao criar conta: ' + e.message });
@@ -443,7 +449,12 @@ app.post('/api/auth/reenviar-codigo', async (req, res) => {
       codigo_verificacao: codigo, codigo_verificacao_expira: expiracaoCodigoVerificacao()
     }).eq('id', usuario.id);
 
-    enviarCodigoVerificacao(email, usuario.nome, codigo).catch(() => {});
+    const resultadoEmail = await enviarCodigoVerificacao(email, usuario.nome, codigo)
+      .catch(e => ({ enviado: false, motivo: e.message }));
+
+    if (!resultadoEmail.enviado) {
+      return res.status(502).json({ error: 'Não foi possível enviar o e-mail: ' + resultadoEmail.motivo });
+    }
     res.json({ message: 'Código reenviado! Confira sua caixa de entrada.' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1592,7 +1603,9 @@ app.post('/api/usuarios', auth, async (req, res) => {
       .select('id, nome, email, perfil, profissional_id, email_verificado').single();
     if (error) throw error;
 
-    enviarCodigoVerificacao(email, nome, codigoVerificacao).catch(() => {});
+    // Espera o resultado real do envio, pra devolver pro admin se deu certo ou não
+    const resultadoEmail = await enviarCodigoVerificacao(email, nome, codigoVerificacao)
+      .catch(e => ({ enviado: false, motivo: e.message }));
 
     // Salva permissões customizadas
     try {
@@ -1601,24 +1614,43 @@ app.post('/api/usuarios', auth, async (req, res) => {
       }, { onConflict: 'usuario_id' });
     } catch(permErr) { console.log('Permissoes nao salvas:', permErr.message); }
 
-    res.status(201).json({ ...data, permissoes: permissoes_final });
+    res.status(201).json({
+      ...data, permissoes: permissoes_final,
+      email_enviado: resultadoEmail.enviado,
+      email_motivo_falha: resultadoEmail.enviado ? null : resultadoEmail.motivo
+    });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // Listar usuários do salão
 app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
-  const { data } = await supabase.from('usuarios')
-    .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado, profissionais(nome), usuario_permissoes(permissoes)')
-    .eq('salao_id', req.salao_id).order('nome');
+  try {
+    const { data: usuarios, error } = await supabase.from('usuarios')
+      .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado, profissionais(nome)')
+      .eq('salao_id', req.salao_id).order('nome');
+    if (error) throw error;
 
-  const TODAS_PERMISSOES_ADMIN = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
-  const comPermissoes = (data || []).map(u => {
-    const permissoesSalvas = (u.usuario_permissoes && u.usuario_permissoes.permissoes) || null;
-    const { usuario_permissoes, ...resto } = u;
-    return { ...resto, permissoes: u.perfil === 'admin' ? TODAS_PERMISSOES_ADMIN : (permissoesSalvas || []) };
-  });
-  res.json(comPermissoes);
+    // Busca as permissões separadamente (sem depender de relação/FK declarada
+    // entre usuarios e usuario_permissoes — mais seguro e à prova de schema)
+    const ids = (usuarios || []).map(u => u.id);
+    let permissoesPorUsuario = {};
+    if (ids.length) {
+      const { data: permsRows } = await supabase.from('usuario_permissoes')
+        .select('usuario_id, permissoes').in('usuario_id', ids);
+      (permsRows || []).forEach(p => { permissoesPorUsuario[p.usuario_id] = p.permissoes; });
+    }
+
+    const TODAS_PERMISSOES_ADMIN = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
+    const comPermissoes = (usuarios || []).map(u => ({
+      ...u,
+      permissoes: u.perfil === 'admin' ? TODAS_PERMISSOES_ADMIN : (permissoesPorUsuario[u.id] || [])
+    }));
+    res.json(comPermissoes);
+  } catch(e) {
+    console.error('Erro ao listar usuarios:', e.message);
+    res.status(500).json({ error: 'Erro ao carregar usuários: ' + e.message });
+  }
 });
 
 // Editar permissões (e vínculo com profissional) do usuário
