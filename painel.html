@@ -262,6 +262,36 @@ select.fc option{background:var(--bg2)}
 .dia-toggle{font-size:.74rem;font-weight:700;padding:8px 14px;border-radius:50px;cursor:pointer;border:1.5px solid #16A34A;background:rgba(74,222,128,.1);color:#4ADE80;transition:all .15s}
 .dia-toggle[data-fechado="true"]{border-color:#DC2626;background:rgba(248,113,113,.1);color:#F87171}
 
+/* ── AGENDA EM GRADE (calendário por profissional) ──── */
+.ag-grid-scroll{overflow:auto;max-height:70vh;position:relative}
+.ag-grid-header-row{display:flex;position:sticky;top:0;z-index:3;background:var(--wh);border-bottom:1px solid var(--bd)}
+.ag-corner{flex:0 0 56px;position:sticky;left:0;z-index:4;background:var(--wh);border-right:1px solid var(--bd)}
+.ag-col-header{flex:0 0 176px;padding:10px 8px;border-right:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center}
+.ag-col-header-nome{font-size:.72rem;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ag-grid-body-row{display:flex;position:relative}
+.ag-time-col{flex:0 0 56px;position:sticky;left:0;z-index:2;background:var(--wh);border-right:1px solid var(--bd)}
+.ag-time-label{position:absolute;right:8px;font-size:.6rem;color:var(--t3);transform:translateY(-50%);white-space:nowrap}
+.ag-columns{display:flex;position:relative}
+.ag-col{flex:0 0 176px;border-right:1px solid var(--bd);position:relative}
+.ag-grid-lines{position:absolute;inset:0;pointer-events:none;z-index:0}
+.ag-hour-line{position:absolute;left:0;right:0;border-top:1px dashed var(--bd)}
+.ag-linha-agora{position:absolute;left:0;right:0;border-top:2px solid var(--er);z-index:1}
+.ag-linha-agora::before{content:'';position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:var(--er)}
+.ag-block{position:absolute;left:3px;right:3px;border-radius:7px;padding:4px 7px;overflow:hidden;font-size:.66rem;line-height:1.3;cursor:pointer;border-left:3px solid transparent;z-index:1;transition:box-shadow .15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.ag-block:hover{box-shadow:0 2px 8px rgba(0,0,0,.35);z-index:2}
+.ag-block-hora{font-weight:700;opacity:.85}
+.ag-block-cliente{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-block-servico{opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-block-agendado{background:rgba(96,165,250,.16);border-left-color:#60A5FA;color:#DBEAFE}
+.ag-block-confirmado{background:rgba(126,200,164,.2);border-left-color:var(--ac3);color:#D1FAE5}
+.ag-block-em_atendimento{background:rgba(201,169,110,.24);border-left-color:var(--ac);color:#FDE8C8}
+.ag-block-concluido{background:rgba(74,222,128,.2);border-left-color:#4ADE80;color:#DCFCE7}
+.ag-block-cancelado{background:rgba(248,113,113,.14);border-left-color:#F87171;color:#FCA5A5;opacity:.6;text-decoration:line-through}
+.ag-block-nao_compareceu{background:rgba(251,191,36,.14);border-left-color:#FBBF24;color:#FEF3C7;opacity:.7}
+@media(max-width:880px){
+  .ag-grid-scroll{max-height:60vh}
+}
+
 /* ── MOBILE ──────────────────────────────── */
 @media(max-width:880px){
   #sidebar{
@@ -303,6 +333,8 @@ select.fc option{background:var(--bg2)}
 </style>
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-JGXF0WHVYX"></script>
+  <!-- SheetJS — leitor de Excel de verdade (o .xlsx é um arquivo binário, não texto) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
@@ -340,6 +372,9 @@ select.fc option{background:var(--bg2)}
         <input class="inp" type="password" id="in-pw" placeholder="••••••"/>
         <input type="hidden" id="in-api" value=""/>
         <button class="l-btn" id="btn-in" onclick="doLogin()">Entrar no Painel</button>
+        <div style="text-align:center;margin-top:10px">
+          <a href="javascript:void(0)" onclick="abrirEsqueciSenha()" style="font-size:.76rem;color:var(--ac)">Esqueci minha senha</a>
+        </div>
         <div class="l-hint">Novo por aqui? Clique em <strong>Criar Conta</strong> para cadastrar seu salão gratuitamente.</div>
       </div>
       <div class="l-pane" id="pane-up">
@@ -359,6 +394,31 @@ select.fc option{background:var(--bg2)}
         <button class="l-btn" id="btn-up" onclick="doRegister()">Criar Conta Grátis</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Modal Esqueci Minha Senha -->
+<div class="mov" id="m-esqueci-senha">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">🔑 Esqueci Minha Senha</span><button class="mx" onclick="closeM('m-esqueci-senha')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.82rem;color:var(--t2);margin-bottom:14px">Informe o e-mail da sua conta — se ele existir no sistema, você recebe um link pra escolher uma nova senha (válido por 1 hora).</div>
+      <div class="fg"><label class="fl">E-mail</label><input class="fc" type="email" id="esq-email" placeholder="seu@email.com"/></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-esqueci-senha')">Cancelar</button><button class="btn btnp" onclick="enviarEsqueciSenha()">Enviar Link</button></div>
+  </div>
+</div>
+
+<!-- Modal Redefinir Senha (aberto automaticamente via link do e-mail) -->
+<div class="mov" id="m-redefinir-senha">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">🔐 Escolher Nova Senha</span></div>
+    <div class="mb">
+      <input type="hidden" id="red-token"/>
+      <div class="fg"><label class="fl">Nova senha (mín. 6 caracteres)</label><input class="fc" type="password" id="red-senha" placeholder="••••••"/></div>
+      <div class="fg"><label class="fl">Confirmar nova senha</label><input class="fc" type="password" id="red-senha2" placeholder="••••••"/></div>
+    </div>
+    <div class="mf"><button class="btn btnp" style="width:100%" onclick="confirmarRedefinicaoSenha()">Salvar Nova Senha</button></div>
   </div>
 </div>
 
@@ -462,9 +522,28 @@ select.fc option{background:var(--bg2)}
         <input type="date" class="fc" id="ag-dt" style="width:auto" onchange="loadAgenda()"/>
         <select class="fc" id="ag-prf" style="width:auto" onchange="loadAgenda()"><option value="">Todos profissionais</option></select>
         <button class="btn btns btnsm" onclick="document.getElementById('ag-dt').value='';loadAgenda()">Próximos 3 dias</button>
+        <button class="btn btns btnsm" id="ag-modo-btn" onclick="alternarModoAgenda()">📋 Ver como lista</button>
         <button class="btn btnp" style="margin-left:auto" onclick="abrirNovoAgendamento()">+ Novo Agendamento</button>
       </div>
-      <div class="card">
+
+      <!-- GRADE — visão de calendário por profissional (padrão pra um dia específico) -->
+      <div class="card" id="ag-grade-card" style="padding:0;overflow:hidden">
+        <div class="crow" style="padding:14px 18px 10px;margin-bottom:0"><span class="ch" id="ag-ttl-grade">Agenda</span></div>
+        <div class="ag-grid-scroll" id="ag-grid-scroll">
+          <div class="ag-grid-header-row" id="ag-grid-header-row">
+            <div class="ag-corner"></div>
+          </div>
+          <div class="ag-grid-body-row">
+            <div class="ag-time-col" id="ag-time-col"></div>
+            <div class="ag-columns" id="ag-columns">
+              <div class="ag-grid-lines" id="ag-grid-lines"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LISTA — tabela simples (usada nos "Próximos 3 dias" ou se preferir) -->
+      <div class="card" id="ag-lista-card" style="display:none">
         <div class="crow"><span class="ch" id="ag-ttl">Agenda</span></div>
         <div class="tw"><table><thead><tr><th>Hora</th><th>Cliente</th><th>Serviço</th><th>Profissional</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
         <tbody id="ag-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
@@ -614,11 +693,19 @@ select.fc option{background:var(--bg2)}
 
         <div class="card">
           <div class="ct">Maquininha de Cartão</div>
-          <div style="font-size:.75rem;color:var(--t3);margin-bottom:14px">Taxa cobrada pela operadora do cartão. Ao concluir um atendimento pago no crédito/débito, o sistema desconta automaticamente <strong>metade dessa taxa</strong> da comissão do profissional.</div>
-          <label class="fl">Taxa da maquininha (%)</label>
-          <input type="number" class="fc fg" id="cfg-taxa-maquininha" min="0" max="100" step="0.01" placeholder="Ex.: 3.5" oninput="atualizarPreviewTaxaMaquininha()"/>
-          <div style="font-size:.68rem;color:var(--t3);margin-bottom:14px" id="cfg-taxa-preview">Deixe em 0 (ou vazio) para não aplicar nenhum desconto.</div>
-          <button class="btn btnp" onclick="saveTaxaMaquininha()">Salvar Taxa</button>
+          <div style="font-size:.75rem;color:var(--t3);margin-bottom:14px">Taxas cobradas pela operadora, uma pra débito e outra pra crédito (costumam ser diferentes). Ao concluir um atendimento pago no cartão, o sistema desconta automaticamente <strong>metade dessa taxa</strong> da comissão do profissional.</div>
+          <div class="fr fg">
+            <div>
+              <label class="fl">Taxa no Débito (%)</label>
+              <input type="number" class="fc" id="cfg-taxa-debito" min="0" max="100" step="0.01" placeholder="Ex.: 1.5" oninput="atualizarPreviewTaxaMaquininha()"/>
+            </div>
+            <div>
+              <label class="fl">Taxa no Crédito (%)</label>
+              <input type="number" class="fc" id="cfg-taxa-credito" min="0" max="100" step="0.01" placeholder="Ex.: 3.5" oninput="atualizarPreviewTaxaMaquininha()"/>
+            </div>
+          </div>
+          <div style="font-size:.68rem;color:var(--t3);margin-bottom:14px" id="cfg-taxa-preview">Deixe em 0 (ou vazio) para não aplicar nenhum desconto naquela forma de pagamento.</div>
+          <button class="btn btnp" onclick="saveTaxaMaquininha()">Salvar Taxas</button>
         </div>
 
         <style>
@@ -802,6 +889,48 @@ function doLogin() {
   });
 }
 
+// ── ESQUECI MINHA SENHA ───────────────────────────────
+function abrirEsqueciSenha() {
+  document.getElementById('esq-email').value = document.getElementById('in-email').value || '';
+  openM('m-esqueci-senha');
+}
+
+function enviarEsqueciSenha() {
+  var email = document.getElementById('esq-email').value.trim();
+  if (!email) { toast('Informe o e-mail','er'); return; }
+  API = API_FIXA;
+  var btn = document.querySelector('#m-esqueci-senha .btnp');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  fetch(API + '/api/auth/esqueci-senha', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email: email }) })
+  .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Erro ao solicitar redefinição'); return d; }); })
+  .then(function(){
+    toast('Se esse e-mail existir, você vai receber o link em instantes. Confira sua caixa de entrada.', 'ok');
+    closeM('m-esqueci-senha');
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Enviar Link'; });
+}
+
+function confirmarRedefinicaoSenha() {
+  var token = document.getElementById('red-token').value;
+  var senha = document.getElementById('red-senha').value;
+  var senha2 = document.getElementById('red-senha2').value;
+  if (!senha || senha.length < 6) { toast('A senha precisa ter pelo menos 6 caracteres','er'); return; }
+  if (senha !== senha2) { toast('As senhas não coincidem','er'); return; }
+  API = API_FIXA;
+  var btn = document.querySelector('#m-redefinir-senha .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  fetch(API + '/api/auth/redefinir-senha', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ token: token, senha: senha }) })
+  .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Link inválido ou expirado'); return d; }); })
+  .then(function(){
+    toast('Senha redefinida com sucesso! Faça login com a nova senha.', 'ok');
+    closeM('m-redefinir-senha');
+    window.history.replaceState({}, '', window.location.pathname);
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'link inválido ou expirado'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Nova Senha'; });
+}
+
 function doRegister() {
   var btn = document.getElementById('btn-up');
   var err = document.getElementById('err-up');
@@ -884,7 +1013,17 @@ function doLogout() {
 }
 
 // ── NAV ─────────────────────────────────────────────────
+var MODULOS_COM_PERMISSAO = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
+
 function nav(page, el) {
+  // Bloqueio de verdade: mesmo que o botão de alguma forma fique visível ou
+  // alguém chame nav() manualmente, a troca de página não acontece se o
+  // usuário não tiver essa permissão (exceto admin, que sempre pode tudo).
+  if (USER_PERFIL !== 'admin' && MODULOS_COM_PERMISSAO.indexOf(page) >= 0 && USER_PERMISSOES.indexOf(page) < 0) {
+    toast('Você não tem permissão para acessar essa área. Fale com o administrador.', 'er');
+    return;
+  }
+
   // Troca a página visível
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('on'); });
   var pg = document.getElementById('page-'+page);
@@ -1278,6 +1417,10 @@ function renderCal() {
 }
 
 // ── AGENDA ──────────────────────────────────────────────
+var AGENDA_MODO = 'grade'; // 'grade' ou 'lista'
+var AGENDA_ULTIMA_LISTA = [];
+var AGENDA_ULTIMA_AGRUPADA = false;
+
 function loadAgenda() {
   var data = document.getElementById('ag-dt').value;
   var pro  = document.getElementById('ag-prf').value;
@@ -1286,24 +1429,127 @@ function loadAgenda() {
   if (data) {
     // Visão de um dia específico
     var dt = new Date(data+'T12:00');
-    document.getElementById('ag-ttl').textContent = 'Agenda — ' + dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+    var titulo = 'Agenda — ' + dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+    document.getElementById('ag-ttl').textContent = titulo;
+    document.getElementById('ag-ttl-grade').textContent = titulo;
+    document.getElementById('ag-modo-btn').style.display = '';
     params.set('data', data);
     if (pro) params.set('profissional_id', pro);
     apiFetch('/api/agendamentos?' + params).then(function(r){
-      renderAgenda(r || (DEMO ? D.ags.filter(function(a){ return a.data_hora.startsWith(data); }) : []), false);
-    }).catch(function(){ renderAgenda(DEMO ? D.ags.filter(function(a){ return a.data_hora.startsWith(data); }) : [], false); });
+      exibirAgenda(r || (DEMO ? D.ags.filter(function(a){ return a.data_hora.startsWith(data); }) : []), false);
+    }).catch(function(){ exibirAgenda(DEMO ? D.ags.filter(function(a){ return a.data_hora.startsWith(data); }) : [], false); });
   } else {
-    // Visão padrão: próximos 3 dias agrupados
+    // Visão padrão: próximos 3 dias agrupados (só faz sentido como lista)
     var hojeStr = today();
     var d3 = new Date(); d3.setDate(d3.getDate()+2);
     var fimStr = d3.getFullYear()+'-'+String(d3.getMonth()+1).padStart(2,'0')+'-'+String(d3.getDate()).padStart(2,'0');
     document.getElementById('ag-ttl').textContent = 'Agenda — Próximos 3 dias';
+    document.getElementById('ag-modo-btn').style.display = 'none';
     params.set('data_inicio', hojeStr);
     params.set('data_fim', fimStr);
     if (pro) params.set('profissional_id', pro);
     apiFetch('/api/agendamentos?' + params).then(function(r){
-      renderAgenda(r || (DEMO ? D.ags : []), true);
-    }).catch(function(){ renderAgenda(DEMO ? D.ags : [], true); });
+      exibirAgenda(r || (DEMO ? D.ags : []), true);
+    }).catch(function(){ exibirAgenda(DEMO ? D.ags : [], true); });
+  }
+}
+
+// Decide se mostra a grade (calendário por profissional) ou a lista simples,
+// e guarda o último resultado pra poder alternar sem recarregar da API.
+function exibirAgenda(list, agrupado) {
+  AGENDA_ULTIMA_LISTA = list;
+  AGENDA_ULTIMA_AGRUPADA = agrupado;
+  var mostrarGrade = !agrupado && AGENDA_MODO === 'grade';
+  document.getElementById('ag-grade-card').style.display = mostrarGrade ? 'block' : 'none';
+  document.getElementById('ag-lista-card').style.display = mostrarGrade ? 'none' : 'block';
+  if (mostrarGrade) renderAgendaGrid(list);
+  else renderAgenda(list, agrupado);
+}
+
+function alternarModoAgenda() {
+  AGENDA_MODO = AGENDA_MODO === 'grade' ? 'lista' : 'grade';
+  document.getElementById('ag-modo-btn').textContent = AGENDA_MODO === 'grade' ? '📋 Ver como lista' : '🗓️ Ver como grade';
+  exibirAgenda(AGENDA_ULTIMA_LISTA, AGENDA_ULTIMA_AGRUPADA);
+}
+
+// ── AGENDA EM GRADE (calendário visual por profissional) ─
+var HORA_GRADE_INICIO = 7;
+var HORA_GRADE_FIM = 21;
+var PX_POR_MINUTO = 1.4;
+
+function minutosDoDiaBrasil(dataHoraStr) {
+  var dt = new Date(dataHoraStr);
+  var brasil = new Date(dt.getTime() - 3*60*60*1000);
+  return brasil.getUTCHours()*60 + brasil.getUTCMinutes();
+}
+
+function renderAgendaGrid(list) {
+  var todosProfs = (PROS && PROS.length) ? PROS : (DEMO ? D.pros : []);
+  var filtroProf = document.getElementById('ag-prf').value;
+  var profs = filtroProf ? todosProfs.filter(function(p){ return p.id === filtroProf; }) : todosProfs;
+  var alturaGrade = (HORA_GRADE_FIM - HORA_GRADE_INICIO) * 60 * PX_POR_MINUTO;
+
+  // Cabeçalho — um bloco por profissional
+  var headerRow = document.getElementById('ag-grid-header-row');
+  headerRow.innerHTML = '<div class="ag-corner"></div>' + profs.map(function(p){
+    return '<div class="ag-col-header"><div class="pro-av" style="width:28px;height:28px;font-size:.66rem;background:' + (p.cor_agenda||COLS[0]) + '">' + (p.nome?p.nome[0]:'?') + '</div>' +
+      '<div class="ag-col-header-nome">' + (p.nome||'') + '</div></div>';
+  }).join('');
+
+  // Rótulos de hora, alinhados à esquerda
+  var horasHtml = '';
+  for (var h = HORA_GRADE_INICIO; h <= HORA_GRADE_FIM; h++) {
+    var top = (h*60 - HORA_GRADE_INICIO*60) * PX_POR_MINUTO;
+    horasHtml += '<div class="ag-time-label" style="top:' + top + 'px">' + String(h).padStart(2,'0') + ':00</div>';
+  }
+  var timeCol = document.getElementById('ag-time-col');
+  timeCol.innerHTML = horasHtml;
+  timeCol.style.height = alturaGrade + 'px';
+
+  // Linhas horizontais de referência + linha do horário atual (só se for hoje)
+  var linhasHtml = '';
+  for (var h2 = HORA_GRADE_INICIO; h2 <= HORA_GRADE_FIM; h2++) {
+    var topL = (h2*60 - HORA_GRADE_INICIO*60) * PX_POR_MINUTO;
+    linhasHtml += '<div class="ag-hour-line" style="top:' + topL + 'px"></div>';
+  }
+  var dataSelecionada = document.getElementById('ag-dt').value;
+  if (dataSelecionada === today()) {
+    var minutosAgora = minutosDoDiaBrasil(new Date().toISOString());
+    var topAgora = (minutosAgora - HORA_GRADE_INICIO*60) * PX_POR_MINUTO;
+    if (topAgora >= 0 && topAgora <= alturaGrade) {
+      linhasHtml += '<div class="ag-linha-agora" style="top:' + topAgora + 'px"></div>';
+    }
+  }
+
+  // Colunas com os agendamentos posicionados por horário
+  var colunasHtml = profs.map(function(p){
+    var agsDoProf = list.filter(function(a){
+      if (!a.profissionais) return false;
+      if (a.profissionais.id) return a.profissionais.id === p.id;
+      return a.profissionais.nome === p.nome; // fallback pra dados sem id (ex.: modo demo)
+    });
+    var blocosHtml = agsDoProf.map(function(a){
+      var minutos = minutosDoDiaBrasil(a.data_hora);
+      var top = Math.max(0, (minutos - HORA_GRADE_INICIO*60) * PX_POR_MINUTO);
+      var altura = Math.max((a.duracao_min||30) * PX_POR_MINUTO, 30);
+      var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).filter(Boolean).join(', ') || '';
+      var statusClasse = 'ag-block-' + (a.status||'agendado');
+      var nomeCliente = (a.clientes&&a.clientes.nome)||'—';
+      return '<div class="ag-block ' + statusClasse + '" style="top:' + top + 'px;height:' + altura + 'px" onclick="toast(\'' + nomeCliente.replace(/'/g,"\\'") + '\',\'inf\')" title="' + nomeCliente.replace(/"/g,'') + (sv?' · '+sv.replace(/"/g,''):'') + '">' +
+        '<div class="ag-block-hora">' + fhr(a.data_hora) + '</div>' +
+        '<div class="ag-block-cliente">' + nomeCliente + '</div>' +
+        (sv ? '<div class="ag-block-servico">' + sv + '</div>' : '') +
+        '</div>';
+    }).join('');
+    return '<div class="ag-col" style="height:' + alturaGrade + 'px">' + blocosHtml + '</div>';
+  }).join('');
+
+  var colunas = document.getElementById('ag-columns');
+  colunas.style.height = alturaGrade + 'px';
+  colunas.innerHTML = '<div class="ag-grid-lines" id="ag-grid-lines" style="height:' + alturaGrade + 'px">' + linhasHtml + '</div>' + colunasHtml;
+
+  if (!profs.length) {
+    colunas.innerHTML = '<div class="empty" style="padding:40px">Cadastre profissionais pra ver a grade da agenda.</div>';
   }
 }
 
@@ -1605,9 +1851,13 @@ function renderCom(list) {
     var acaoBtn = v.foiPago
       ? '<button class="btnic btn btnsm" style="color:var(--t3)" data-fid="'+p.fechamento.id+'" data-nome="'+p.nome.replace(/"/g,'')+'" onclick="reabrirFechamento(this.dataset.fid,this.dataset.nome)" title="Reabrir caso tenha pago por engano">↩️</button>'
       : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.total_comissao + ')">Pagar ' + brl(p.total_comissao) + '</button>';
+    var comprasPendentes = p.compras_pendentes_total || 0;
+    var avisoCompras = comprasPendentes > 0
+      ? '<div style="font-size:.68rem;color:var(--warn);margin-top:2px;cursor:pointer" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')" title="Ver e quitar parcelas">🛒 ' + brl(comprasPendentes) + ' em compras pendentes — clique pra descontar</div>'
+      : '';
     return '<div style="display:flex;align-items:center;gap:13px;padding:13px;background:var(--wh);border-radius:var(--r);border:1.5px solid var(--bd);margin-bottom:7px">' +
       '<div class="pro-av" style="background:' + (p.cor||COLS[0]) + '">' + p.nome[0] + '</div>' +
-      '<div><div style="font-weight:700;font-size:.85rem">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div></div>' +
+      '<div><div style="font-weight:700;font-size:.85rem">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div>' + avisoCompras + '</div>' +
       '<div style="display:flex;gap:18px;margin-left:auto;text-align:center">' +
       '<div><div style="font-size:.88rem;font-weight:800">' + v.servicos + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.88rem;font-weight:800">' + brl(v.bruto) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div>' +
@@ -1901,6 +2151,7 @@ function abrirVenderPacote(pacoteId, pacoteNome, preco) {
   document.getElementById('vpac-pacote-id').value = pacoteId;
   document.getElementById('vpac-pacote-nome').textContent = pacoteNome;
   document.getElementById('vpac-valor').value = preco;
+  document.getElementById('vpac-pagar-depois').checked = false;
   var sel = document.getElementById('vpac-cliente');
   sel.innerHTML = '<option value="">Selecionar cliente...</option>' +
     CLIS.map(function(c){ return '<option value="' + c.id + '">' + c.nome + '</option>'; }).join('');
@@ -1911,12 +2162,18 @@ function salvarVendaPacote() {
   var pacoteId = document.getElementById('vpac-pacote-id').value;
   var clienteId = document.getElementById('vpac-cliente').value;
   var valor = document.getElementById('vpac-valor').value;
+  var pagarDepois = document.getElementById('vpac-pagar-depois').checked;
   if (!clienteId) { toast('Selecione o cliente','er'); return; }
 
   var btn = document.querySelector('#m-vender-pacote .btnp');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  apiFetch('/api/clientes/' + clienteId + '/pacotes', { method: 'POST', body: { pacote_id: pacoteId, valor_pago: valor ? parseFloat(valor) : undefined } })
-  .then(function(){ toast('Pacote vendido! ✅','ok'); closeM('m-vender-pacote'); loadFin(); })
+  apiFetch('/api/clientes/' + clienteId + '/pacotes', { method: 'POST', body: {
+    pacote_id: pacoteId, valor_pago: valor ? parseFloat(valor) : undefined, pago: !pagarDepois
+  } })
+  .then(function(){
+    toast(pagarDepois ? 'Pacote vendido — marcado como a receber! ⏳' : 'Pacote vendido! ✅', 'ok');
+    closeM('m-vender-pacote'); loadFin();
+  })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda'; });
 }
@@ -1963,9 +2220,12 @@ function abrirNovoAgendamento() {
     sel.innerHTML = '<option value="">Selecionar pacote...</option>' +
       PACOTES_CACHE.map(function(p){ return '<option value="' + p.id + '" data-preco="' + p.preco + '">' + p.nome + ' — ' + brl(p.preco) + '</option>'; }).join('');
   }
-  document.getElementById('ag-pacotes-disponiveis').style.display = 'none';
-  document.getElementById('ag-pacotes-disponiveis').innerHTML = '';
   openM('m-ag');
+  // Sempre recalcula as sessões de pacote disponíveis ao abrir o modal —
+  // não depende só do evento onchange do cliente/serviço, porque se o
+  // cliente já estava selecionado de uma vez anterior (valor não muda),
+  // o onchange não dispara e a seção ficaria vazia mesmo tendo sessão sobrando.
+  atualizarPacotesDisponiveis();
 }
 
 function toggleVenderPacoteAgendamento() {
@@ -1979,6 +2239,13 @@ function atualizarPacotesDisponiveis() {
   var cliId = document.getElementById('ag-cli').value;
   var wrap = document.getElementById('ag-pacotes-disponiveis');
   var svcsSelecionados = Array.from(document.querySelectorAll('#ag-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
+
+  // Preserva o que já estava marcado antes de recriar o HTML (ex: usuário
+  // marcou o uso de uma sessão e depois clicou em outro serviço — sem isso,
+  // a marcação se perdia silenciosamente no re-render).
+  var jaMarcados = Array.from(document.querySelectorAll('.ag-pacote-uso:checked')).map(function(el){
+    return el.dataset.pacoteClienteId + '|' + el.dataset.servicoId;
+  });
 
   if (!cliId || !svcsSelecionados.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
 
@@ -2002,8 +2269,10 @@ function atualizarPacotesDisponiveis() {
     wrap.innerHTML = '<div class="fg" style="background:rgba(126,200,164,.1);border:1px solid var(--ac3);border-radius:var(--rs);padding:12px">' +
       '<label class="fl" style="color:var(--ac3)">🎁 Este cliente tem sessões de pacote disponíveis</label>' +
       opcoes.map(function(o, i){
+        var chave = o.pacote_cliente_id + '|' + o.servico_id;
+        var marcado = jaMarcados.indexOf(chave) >= 0 ? 'checked' : '';
         return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:.8rem">' +
-          '<input type="checkbox" class="ag-pacote-uso" data-pacote-cliente-id="' + o.pacote_cliente_id + '" data-servico-id="' + o.servico_id + '" style="accent-color:var(--ac3)"/> ' + o.label +
+          '<input type="checkbox" class="ag-pacote-uso" ' + marcado + ' data-pacote-cliente-id="' + o.pacote_cliente_id + '" data-servico-id="' + o.servico_id + '" style="accent-color:var(--ac3)"/> ' + o.label +
           '</label>';
       }).join('') +
       '</div>';
@@ -2032,7 +2301,8 @@ function saveAg() {
     var pacoteId = document.getElementById('ag-vender-pacote-id').value;
     if (!pacoteId) { toast('Selecione qual pacote deseja vender','er'); return; }
     var valorPacote = document.getElementById('ag-vender-pacote-valor').value;
-    body.vender_pacote = { pacote_id: pacoteId, valor_pago: valorPacote ? parseFloat(valorPacote) : undefined };
+    var pagarDepois = document.getElementById('ag-vender-pacote-pagar-depois').checked;
+    body.vender_pacote = { pacote_id: pacoteId, valor_pago: valorPacote ? parseFloat(valorPacote) : undefined, pago: !pagarDepois };
   }
 
   var pacotesUtilizados = Array.from(document.querySelectorAll('.ag-pacote-uso:checked')).map(function(el){
@@ -2061,6 +2331,7 @@ function saveAg() {
     document.getElementById('ag-vender-pacote-toggle').checked = false;
     document.getElementById('ag-vender-pacote-opcoes').style.display = 'none';
     document.getElementById('ag-vender-pacote-valor').value = '';
+    document.getElementById('ag-vender-pacote-pagar-depois').checked = false;
     document.getElementById('ag-pacotes-disponiveis').style.display = 'none';
     document.getElementById('ag-pacotes-disponiveis').innerHTML = '';
     document.querySelectorAll('#ag-svcs .svc-pill.on').forEach(function(el){ el.classList.remove('on'); });
@@ -2192,34 +2463,47 @@ function carregarHorarioFuncionamento() {
       var dia = parseInt(btn.dataset.dia);
       btn.dataset.fechado = diasFechado.includes(dia) ? 'true' : 'false';
     });
-    if (cfg.taxa_maquininha_pct !== undefined && cfg.taxa_maquininha_pct !== null) {
-      document.getElementById('cfg-taxa-maquininha').value = cfg.taxa_maquininha_pct;
-      atualizarPreviewTaxaMaquininha();
-    }
+    // Débito/crédito com fallback pro campo antigo único (quem configurou antes da separação)
+    var debito  = cfg.taxa_maquininha_debito_pct  !== undefined && cfg.taxa_maquininha_debito_pct  !== null ? cfg.taxa_maquininha_debito_pct  : cfg.taxa_maquininha_pct;
+    var credito = cfg.taxa_maquininha_credito_pct !== undefined && cfg.taxa_maquininha_credito_pct !== null ? cfg.taxa_maquininha_credito_pct : cfg.taxa_maquininha_pct;
+    if (debito  !== undefined && debito  !== null) document.getElementById('cfg-taxa-debito').value  = debito;
+    if (credito !== undefined && credito !== null) document.getElementById('cfg-taxa-credito').value = credito;
+    atualizarPreviewTaxaMaquininha();
   }).catch(function(){});
 }
 
 function atualizarPreviewTaxaMaquininha() {
-  var pct = parseFloat(document.getElementById('cfg-taxa-maquininha').value) || 0;
+  var pctDebito  = parseFloat(document.getElementById('cfg-taxa-debito').value)  || 0;
+  var pctCredito = parseFloat(document.getElementById('cfg-taxa-credito').value) || 0;
   var el = document.getElementById('cfg-taxa-preview');
-  if (pct <= 0) { el.textContent = 'Deixe em 0 (ou vazio) para não aplicar nenhum desconto.'; return; }
+  if (pctDebito <= 0 && pctCredito <= 0) { el.textContent = 'Deixe em 0 (ou vazio) para não aplicar nenhum desconto naquela forma de pagamento.'; return; }
   var exemplo = 100;
-  var taxaTotal = exemplo * pct / 100;
-  var taxaProfissional = taxaTotal / 2;
-  el.textContent = 'Exemplo: num serviço de R$ 100,00 no cartão, a taxa é R$ ' + taxaTotal.toFixed(2).replace('.',',') +
-    ' — o profissional absorve metade: R$ ' + taxaProfissional.toFixed(2).replace('.',',') + '.';
+  var linhas = [];
+  if (pctDebito > 0) {
+    var tD = exemplo * pctDebito / 100;
+    linhas.push('Débito: taxa R$ ' + tD.toFixed(2).replace('.',',') + ' — profissional absorve R$ ' + (tD/2).toFixed(2).replace('.',','));
+  }
+  if (pctCredito > 0) {
+    var tC = exemplo * pctCredito / 100;
+    linhas.push('Crédito: taxa R$ ' + tC.toFixed(2).replace('.',',') + ' — profissional absorve R$ ' + (tC/2).toFixed(2).replace('.',','));
+  }
+  el.textContent = 'Exemplo num serviço de R$ 100,00: ' + linhas.join(' · ');
 }
 
 function saveTaxaMaquininha() {
-  var input = document.getElementById('cfg-taxa-maquininha');
-  var pct = parseFloat(input.value);
-  if (isNaN(pct) || pct < 0 || pct > 100) { toast('Informe uma taxa entre 0 e 100','er'); return; }
+  var pctDebito  = parseFloat(document.getElementById('cfg-taxa-debito').value);
+  var pctCredito = parseFloat(document.getElementById('cfg-taxa-credito').value);
+  if (isNaN(pctDebito))  pctDebito  = 0;
+  if (isNaN(pctCredito)) pctCredito = 0;
+  if (pctDebito < 0 || pctDebito > 100 || pctCredito < 0 || pctCredito > 100) { toast('Informe taxas entre 0 e 100','er'); return; }
   var btn = document.querySelector('[onclick="saveTaxaMaquininha()"]');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  apiFetch('/api/saloes/meu', { method: 'PUT', body: { configuracoes: { taxa_maquininha_pct: pct } } })
-  .then(function(){ toast('Taxa da maquininha salva! ✅','ok'); atualizarPreviewTaxaMaquininha(); })
+  apiFetch('/api/saloes/meu', { method: 'PUT', body: { configuracoes: {
+    taxa_maquininha_debito_pct: pctDebito, taxa_maquininha_credito_pct: pctCredito
+  } } })
+  .then(function(){ toast('Taxas da maquininha salvas! ✅','ok'); atualizarPreviewTaxaMaquininha(); })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Taxa'; });
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Taxas'; });
 }
 function saveApi() {
   var url = (document.getElementById('cfg-api').value||'').trim().replace(/\/+$/,'');
@@ -2516,19 +2800,49 @@ function processFile(file) {
     toast('Use .xlsx, .xls ou .csv','er');
     return;
   }
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var text = e.target.result;
-    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-    var separator = text.indexOf(';') > text.indexOf(',') ? ';' : ',';
-    var rows = text.split('\n').map(function(r) {
-      return r.split(separator).map(function(c) {
-        return c.trim().replace(/^["']|["']$/g,'');
-      });
-    }).filter(function(r) { return r[0] && r[0].length > 0; });
-    parseRows(rows);
+
+  if (ext === 'csv') {
+    var readerCsv = new FileReader();
+    readerCsv.onload = function(e) {
+      var text = e.target.result;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      var separator = text.indexOf(';') > text.indexOf(',') ? ';' : ',';
+      var rows = text.split('\n').map(function(r) {
+        return r.split(separator).map(function(c) {
+          return c.trim().replace(/^["']|["']$/g,'');
+        });
+      }).filter(function(r) { return r[0] && r[0].length > 0; });
+      parseRows(rows);
+    };
+    readerCsv.onerror = function() { toast('Não foi possível ler o arquivo CSV','er'); };
+    readerCsv.readAsText(file, 'UTF-8');
+    return;
+  }
+
+  // .xlsx / .xls são arquivos BINÁRIOS (na prática, um zip com XML dentro) —
+  // ler como texto puro gera lixo. Usa o SheetJS (carregado via CDN) pra
+  // interpretar o arquivo de verdade.
+  if (typeof XLSX === 'undefined') {
+    toast('Não foi possível carregar o leitor de Excel — verifique sua conexão e tente de novo.','er');
+    return;
+  }
+  var readerXlsx = new FileReader();
+  readerXlsx.onload = function(e) {
+    try {
+      var dados = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(dados, { type: 'array' });
+      var primeiraAba = workbook.SheetNames[0];
+      var planilha = workbook.Sheets[primeiraAba];
+      var rows = XLSX.utils.sheet_to_json(planilha, { header: 1, blankrows: false, defval: '' })
+        .map(function(r) { return r.map(function(c) { return String(c === null || c === undefined ? '' : c).trim(); }); })
+        .filter(function(r) { return r[0] && String(r[0]).length > 0; });
+      parseRows(rows);
+    } catch(err) {
+      toast('Erro ao ler o Excel — confira se o arquivo não está corrompido.','er');
+    }
   };
-  reader.readAsText(file, 'UTF-8');
+  readerXlsx.onerror = function() { toast('Não foi possível ler o arquivo','er'); };
+  readerXlsx.readAsArrayBuffer(file);
 }
 
 function parseRows(rows) {
@@ -2662,14 +2976,34 @@ function loadUsuarios() {
   });
 }
 
+// Permissões recomendadas pro modelo pronto de "Recepcionista": foco no
+// atendimento do dia a dia, sem acesso a dinheiro/estoque/gestão.
+var PRESET_RECEPCIONISTA = ['dashboard', 'agenda', 'clientes', 'pacotes'];
+
 function toggleTipoAcesso() {
   var isAdmin = document.getElementById('tipo-admin').checked;
-  document.getElementById('nu-permissoes-wrap').style.display = isAdmin ? 'none' : 'block';
+  var isRecepcionista = document.getElementById('tipo-recepcionista').checked;
+  var mostrarPersonalizacao = !isAdmin; // recepcionista também mostra os checkboxes, só que pré-marcados
+
+  document.getElementById('nu-permissoes-wrap').style.display = mostrarPersonalizacao ? 'block' : 'none';
   document.getElementById('nu-profissional-wrap').style.display = isAdmin ? 'none' : 'block';
+
   document.getElementById('tipo-admin-lbl').style.background = isAdmin ? '#EDE9FF' : '';
   document.getElementById('tipo-admin-lbl').style.borderColor = isAdmin ? 'var(--ac)' : 'var(--bd)';
-  document.getElementById('tipo-custom-lbl').style.background = !isAdmin ? '#EDE9FF' : '';
-  document.getElementById('tipo-custom-lbl').style.borderColor = !isAdmin ? 'var(--ac)' : 'var(--bd)';
+  document.getElementById('tipo-recepcionista-lbl').style.background = isRecepcionista ? '#EDE9FF' : '';
+  document.getElementById('tipo-recepcionista-lbl').style.borderColor = isRecepcionista ? 'var(--ac)' : 'var(--bd)';
+  document.getElementById('tipo-custom-lbl').style.background = (!isAdmin && !isRecepcionista) ? '#EDE9FF' : '';
+  document.getElementById('tipo-custom-lbl').style.borderColor = (!isAdmin && !isRecepcionista) ? 'var(--ac)' : 'var(--bd)';
+
+  // Ao escolher "Recepcionista", pré-marca o modelo recomendado — a pessoa
+  // ainda pode ajustar manualmente antes de salvar.
+  if (isRecepcionista) {
+    document.querySelectorAll('#nu-permissoes input[type=checkbox]').forEach(function(cb) {
+      cb.checked = PRESET_RECEPCIONISTA.indexOf(cb.value) >= 0;
+      updatePermLabel(cb);
+    });
+    document.getElementById('nu-fechar-comissao').checked = false;
+  }
 }
 
 function updatePermLabel(cb) {
@@ -2686,10 +3020,15 @@ function abrirNovoUsuario() {
     options += (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
     sel.innerHTML = options;
   }
+  // Reseta o formulário sempre pro estado "Personalizado" em branco
+  document.getElementById('tipo-custom').checked = true;
+  document.getElementById('nu-fechar-comissao').checked = false;
+  toggleTipoAcesso();
   openM('m-novo-user');
 }
 
 function criarUsuario() {
+  if (DEMO) { toast('Você está em modo DEMONSTRAÇÃO (sem conexão com o servidor) — este usuário não será salvo de verdade. Confira a conexão em Config → API.', 'er'); return; }
   var nome  = document.getElementById('nu-nome').value.trim();
   var cargo = document.getElementById('nu-cargo').value.trim();
   var email = document.getElementById('nu-email').value.trim();
@@ -2705,10 +3044,11 @@ function criarUsuario() {
     document.querySelectorAll('#nu-permissoes input[type=checkbox]:checked').forEach(function(cb) {
       if (permissoes.indexOf(cb.value) < 0) permissoes.push(cb.value);
     });
+    if (document.getElementById('nu-fechar-comissao').checked) permissoes.push('fechar_comissao');
     var profSel = document.getElementById('nu-profissional');
     profissionalId = profSel ? profSel.value : '';
   } else {
-    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
+    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
   }
 
   var btn = document.querySelector('#m-novo-user .btnp');
@@ -2746,31 +3086,20 @@ function deletarUsuario(id, nome) {
 // ── PERMISSÕES ──────────────────────────────────────
 function aplicarPermissoes() {
   var permitidos = USER_PERMISSOES;
-  var todosModulos = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
 
-  // Esconde/mostra botões do menu desktop e mobile
-  ['nb','mob-nb'].forEach(function(cls) {
-    document.querySelectorAll('.' + cls).forEach(function(btn) {
-      var onclick = btn.getAttribute('onclick') || '';
-      todosModulos.forEach(function(m) {
-        if (onclick.indexOf("'"+m+"'") >= 0) {
-          btn.style.display = permitidos.indexOf(m) >= 0 ? '' : 'none';
-        }
-      });
+  // Admin sempre vê tudo — nem passa pela filtragem
+  if (USER_PERFIL === 'admin') {
+    document.querySelectorAll('.sb-item[data-page]').forEach(function(btn){ btn.style.display = ''; });
+  } else {
+    // Esconde/mostra os itens do menu lateral com base nas permissões reais do usuário
+    document.querySelectorAll('.sb-item[data-page]').forEach(function(btn) {
+      var pagina = btn.getAttribute('data-page');
+      if (MODULOS_COM_PERMISSAO.indexOf(pagina) < 0) return;
+      btn.style.display = permitidos.indexOf(pagina) >= 0 ? '' : 'none';
     });
-  });
+  }
 
-  // Menu extra mobile
-  document.querySelectorAll('#mob-menu-extra button').forEach(function(btn) {
-    var onclick = btn.getAttribute('onclick') || '';
-    todosModulos.forEach(function(m) {
-      if (onclick.indexOf("'"+m+"'") >= 0) {
-        btn.style.display = permitidos.indexOf(m) >= 0 ? '' : 'none';
-      }
-    });
-  });
-
-  // Esconde Config do menu se não for admin
+  // Esconde botões de importar dados pra quem não é admin
   if (USER_PERFIL !== 'admin') {
     document.querySelectorAll('[onclick*="openImport"]').forEach(function(b){ b.style.display='none'; });
   }
@@ -2785,16 +3114,18 @@ function aplicarPermissoes() {
     var uname = document.getElementById('uname');
     if (uname) uname.parentNode.insertBefore(badge, uname.nextSibling);
   }
-}
 
-// Override nav to check permissions
-function navComPermissao(page, el) {
-  var permitidos = PERMISSOES[USER_PERFIL] || PERMISSOES.admin;
-  if (permitidos.indexOf(page) < 0) {
-    toast('Acesso restrito — fale com o administrador', 'er');
-    return;
+  // Se a página aberta no momento não é mais permitida (ex: permissão foi
+  // revogada), joga o usuário de volta pro Dashboard
+  if (USER_PERFIL !== 'admin') {
+    var paginaAtiva = document.querySelector('.page.on');
+    if (paginaAtiva) {
+      var idAtual = paginaAtiva.id.replace('page-', '');
+      if (MODULOS_COM_PERMISSAO.indexOf(idAtual) >= 0 && permitidos.indexOf(idAtual) < 0) {
+        nav('dashboard', document.querySelector('.sb-item[data-page="dashboard"]'));
+      }
+    }
   }
-  nav(page, el);
 }
 
 // ── EDITAR PERMISSÕES ───────────────────────────────
@@ -2824,6 +3155,7 @@ function abrirEditPerms(uid, nome) {
         lbl.style.background  = this.checked ? '#EDE9FF'  : '';
       };
     });
+    document.getElementById('ep-fechar-comissao').checked = perms.indexOf('fechar_comissao') >= 0;
     if (selProf) selProf.value = (u && u.profissional_id) ? u.profissional_id : '';
   }).catch(function() {
     // Se não conseguir buscar, abre com todos desmarcados
@@ -2836,6 +3168,7 @@ function salvarEditPerms() {
   var uid = document.getElementById('ep-uid').value;
   var perms = [];
   document.querySelectorAll('#ep-checkboxes input[type=checkbox]:checked').forEach(function(cb){ perms.push(cb.value); });
+  if (document.getElementById('ep-fechar-comissao').checked) perms.push('fechar_comissao');
   if (!perms.length) { toast('Selecione pelo menos uma permissão','er'); return; }
   var selProf = document.getElementById('ep-profissional');
   var profissionalId = selProf ? selProf.value : '';
@@ -3119,6 +3452,15 @@ window.addEventListener('load', function(){
       })
       .catch(function(){ localStorage.removeItem('bpro_tk'); TK=''; });
   }
+
+  // Se veio de um link de "esqueci minha senha" (?redefinir_senha=TOKEN),
+  // abre direto a tela de escolher nova senha, por cima do login.
+  var urlParams = new URLSearchParams(window.location.search);
+  var tokenRedefinicao = urlParams.get('redefinir_senha');
+  if (tokenRedefinicao) {
+    document.getElementById('red-token').value = tokenRedefinicao;
+    openM('m-redefinir-senha');
+  }
 });
 
 </script>
@@ -3291,6 +3633,9 @@ function dispensarBannerPWA() {
             </div>
             <div class="fg"><label class="fl">Valor cobrado (R$)</label><input type="number" class="fc" id="ag-vender-pacote-valor" step="0.01"/></div>
           </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.78rem;padding:8px 10px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:8px">
+            <input type="checkbox" id="ag-vender-pacote-pagar-depois" style="accent-color:var(--warn)"/> ⏳ Cliente vai pagar depois
+          </label>
           <div style="font-size:.68rem;color:var(--t3)">O pacote é vendido pro cliente selecionado acima, independente do serviço deste agendamento.</div>
         </div>
       </div>
@@ -3565,6 +3910,10 @@ function dispensarBannerPWA() {
             <input type="radio" name="nu-tipo" value="admin" id="tipo-admin" onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
             <div><div style="font-weight:600">Admin</div><div style="font-size:.7rem;color:var(--t2)">Acesso total</div></div>
           </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--bd);border-radius:var(--rs);flex:1;transition:all .15s" id="tipo-recepcionista-lbl">
+            <input type="radio" name="nu-tipo" value="recepcionista" id="tipo-recepcionista" onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
+            <div><div style="font-weight:600">Recepcionista</div><div style="font-size:.7rem;color:var(--t2)">Modelo pronto</div></div>
+          </label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--ac);border-radius:var(--rs);flex:1;background:#EDE9FF;transition:all .15s" id="tipo-custom-lbl">
             <input type="radio" name="nu-tipo" value="custom" id="tipo-custom" checked onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
             <div><div style="font-weight:600">Personalizado</div><div style="font-size:.7rem;color:var(--t2)">Você escolhe</div></div>
@@ -3609,6 +3958,12 @@ function dispensarBannerPWA() {
             <input type="checkbox" value="pacotes" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 🎁 Pacotes
           </label>
         </div>
+      </div>
+      <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="nu-fechar-comissao" value="fechar_comissao" style="accent-color:var(--warn)"/> 💸 Pode fechar/reabrir comissões
+        </label>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Ação sensível — permite marcar comissões de profissionais como pagas (mexe com dinheiro). Fica desligada por padrão mesmo se a pessoa tiver acesso à página de Comissões.</div>
       </div>
     </div>
     <div class="mf">
@@ -3659,6 +4014,11 @@ function dispensarBannerPWA() {
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
           <input type="checkbox" value="pacotes" style="accent-color:var(--ac)"/> 🎁 Pacotes
+        </label>
+      </div>
+      <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px;margin-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="ep-fechar-comissao" value="fechar_comissao" style="accent-color:var(--warn)"/> 💸 Pode fechar/reabrir comissões
         </label>
       </div>
     </div>
@@ -3747,7 +4107,10 @@ function dispensarBannerPWA() {
         <select class="fc" id="vpac-cliente"><option value="">Selecionar cliente...</option></select>
       </div>
       <div class="fg"><label class="fl">Valor pago (R$)</label><input type="number" class="fc" id="vpac-valor" step="0.01"/></div>
-      <div style="font-size:.7rem;color:var(--t3)">Pode ajustar o valor se der um desconto pontual — por padrão vem o preço cheio do pacote.</div>
+      <div style="font-size:.7rem;color:var(--t3);margin-bottom:12px">Pode ajustar o valor se der um desconto pontual — por padrão vem o preço cheio do pacote.</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;padding:10px 12px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs)">
+        <input type="checkbox" id="vpac-pagar-depois" style="accent-color:var(--warn)"/> ⏳ Cliente vai pagar depois (fica como "a receber" no Financeiro)
+      </label>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-vender-pacote')">Cancelar</button><button class="btn btnp" onclick="salvarVendaPacote()">Confirmar Venda</button></div>
   </div>
