@@ -219,6 +219,61 @@ h2{
   background:rgba(74,222,128,.08);color:var(--green);border:1px solid rgba(74,222,128,.15);
 }
 
+/* ── MIGRAÇÃO ── */
+#migracao{padding:120px 40px;background:var(--bg2);position:relative}
+#migracao::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+}
+.migra-steps{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+  max-width:940px;margin:0 auto;position:relative;
+}
+.migra-steps::before{
+  content:'';position:absolute;top:20px;left:15%;right:15%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--bd),var(--bd),transparent);
+  z-index:0;
+}
+.migra-step{text-align:center;padding:0 20px;position:relative;z-index:1}
+.migra-num{
+  width:40px;height:40px;border-radius:50%;margin:0 auto 18px;
+  background:var(--bg2);border:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-weight:900;font-size:1.1rem;color:var(--gold);
+}
+.migra-title{font-size:.9rem;font-weight:700;color:var(--ink);margin-bottom:8px}
+.migra-desc{font-size:.8rem;color:var(--ink2);line-height:1.7}
+.migra-note{
+  text-align:center;margin-top:48px;font-size:.78rem;color:var(--ink3);
+  display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;
+}
+.migra-pill{
+  font-size:.68rem;font-weight:600;padding:4px 12px;border-radius:50px;
+  background:rgba(201,169,110,.06);border:1px solid var(--bd);color:var(--ink2);
+}
+
+/* ── FAQ ── */
+#faq{padding:120px 40px}
+.faq-list{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:2px}
+.faq-item{
+  background:var(--bg3);border:1px solid var(--bd2);border-radius:var(--r);
+  padding:4px 24px;transition:border-color .2s;
+}
+.faq-item + .faq-item{margin-top:10px}
+.faq-item:hover{border-color:var(--bd)}
+.faq-item summary{
+  padding:20px 0;cursor:pointer;list-style:none;
+  font-size:.88rem;font-weight:700;color:var(--ink);
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+}
+.faq-item summary::-webkit-details-marker{display:none}
+.faq-item summary::after{
+  content:'+';font-family:'Fraunces',serif;font-size:1.3rem;font-weight:400;
+  color:var(--gold);flex-shrink:0;transition:transform .25s;
+}
+.faq-item[open] summary::after{transform:rotate(45deg)}
+.faq-item p{font-size:.83rem;color:var(--ink2);line-height:1.75;padding-bottom:22px}
+
 /* ── SHOWCASE / PARALLAX STRIP ── */
 #showcase{
   padding:120px 40px;
@@ -414,13 +469,15 @@ footer{
   #hero{height:100svh}
   .hero-stats{gap:24px}
   h1{font-size:clamp(2.2rem,8vw,3.5rem)}
-  #features,#showcase,#pricing,#testimonials,#cta{padding:80px 20px}
+  #features,#showcase,#pricing,#testimonials,#cta,#migracao,#faq{padding:80px 20px}
   .features-grid{grid-template-columns:1fr;border-radius:var(--r)}
   .showcase-inner{grid-template-columns:1fr;gap:48px}
   .showcase-text h2,.showcase-text .section-sub{text-align:center;margin-left:auto}
   .check-list{align-items:center}
   .phone-mockup{width:240px}
   .tests-grid{grid-template-columns:1fr}
+  .migra-steps{grid-template-columns:1fr;gap:36px}
+  .migra-steps::before{display:none}
   footer{flex-direction:column;align-items:center;text-align:center}
   .footer-links{justify-content:center}
 }
@@ -440,9 +497,10 @@ footer{
   <a href="#" class="nav-logo">Bele<em>za</em> Pro</a>
   <div class="nav-links">
     <a href="#features">Funcionalidades</a>
+    <a href="#migracao">Migração</a>
     <a href="#showcase">Como funciona</a>
     <a href="#pricing">Preços</a>
-    <a href="#testimonials">Depoimentos</a>
+    <a href="#faq">Dúvidas</a>
     <a href="painel.html" class="nav-cta">Entrar no sistema →</a>
   </div>
   <button class="nav-ham" onclick="toggleMob()">☰</button>
@@ -452,9 +510,10 @@ footer{
 <div class="mob-menu" id="mob-menu">
   <button class="mob-close" onclick="toggleMob()">✕</button>
   <a href="#features" onclick="toggleMob()">Funcionalidades</a>
+  <a href="#migracao" onclick="toggleMob()">Migração</a>
   <a href="#showcase" onclick="toggleMob()">Como funciona</a>
   <a href="#pricing" onclick="toggleMob()">Preços</a>
-  <a href="#testimonials" onclick="toggleMob()">Depoimentos</a>
+  <a href="#faq" onclick="toggleMob()">Dúvidas</a>
   <a href="painel.html" class="btn-p" style="font-size:.9rem">Entrar no sistema →</a>
 </div>
 
@@ -501,27 +560,33 @@ footer{
   <div class="features-grid reveal">
     <div class="feat-card">
       <div class="feat-ic">📅</div>
-      <div class="feat-title">Agenda Inteligente</div>
-      <div class="feat-desc">Visualize todos os agendamentos dos próximos 3 dias. Bloqueio automático de conflito de horários.</div>
+      <div class="feat-title">Agenda Visual em Grade</div>
+      <div class="feat-desc">Veja o dia inteiro lado a lado por profissional, com cores por status. Alterne para lista quando preferir.</div>
       <span class="feat-tag">Tempo real</span>
     </div>
     <div class="feat-card">
       <div class="feat-ic">🔗</div>
-      <div class="feat-title">Agendamento Online</div>
-      <div class="feat-desc">Link exclusivo do seu salão. O cliente escolhe serviço, profissional e horário sem precisar ligar.</div>
+      <div class="feat-title">Agendamento Online sem Conflito</div>
+      <div class="feat-desc">Link exclusivo do seu salão. O sistema mostra só os horários realmente livres, considerando a duração de cada serviço.</div>
       <span class="feat-tag">Sem app necessário</span>
     </div>
     <div class="feat-card">
       <div class="feat-ic">💰</div>
       <div class="feat-title">Financeiro Completo</div>
-      <div class="feat-desc">Controle de entradas e saídas, lançamentos pendentes e relatório de faturamento por período.</div>
+      <div class="feat-desc">Entradas, saídas, lançamentos pendentes e relatório de faturamento por período — tudo em um só lugar.</div>
       <span class="feat-tag">Simplificado</span>
     </div>
     <div class="feat-card">
       <div class="feat-ic">💸</div>
-      <div class="feat-title">Comissões Automáticas</div>
-      <div class="feat-desc">Calcula e fecha a comissão de cada profissional por mês, com histórico e controle de pagamento.</div>
+      <div class="feat-title">Comissões com Maquininha</div>
+      <div class="feat-desc">Fecha a comissão de cada profissional automaticamente, já descontando a taxa da maquininha — débito e crédito configurados à parte.</div>
       <span class="feat-tag">Zero erro</span>
+    </div>
+    <div class="feat-card">
+      <div class="feat-ic">🎁</div>
+      <div class="feat-title">Pacotes de Serviço</div>
+      <div class="feat-desc">Venda pacotes de sessões e o sistema desconta uma a cada atendimento, avisando quando estiver acabando.</div>
+      <span class="feat-tag">Fidelização</span>
     </div>
     <div class="feat-card">
       <div class="feat-ic">👥</div>
@@ -530,11 +595,57 @@ footer{
       <span class="feat-tag">CRM integrado</span>
     </div>
     <div class="feat-card">
-      <div class="feat-ic">📱</div>
-      <div class="feat-title">App Mobile (PWA)</div>
-      <div class="feat-desc">Instale no celular como app nativo. Funciona no Android e iPhone sem precisar de App Store.</div>
-      <span class="feat-tag">iOS & Android</span>
+      <div class="feat-ic">🔐</div>
+      <div class="feat-title">Equipe com Permissão Sob Medida</div>
+      <div class="feat-desc">Cadastre sua equipe com acesso individual — cada um vê só o que precisa. Modelo pronto de recepcionista.</div>
+      <span class="feat-tag">Controle total</span>
     </div>
+    <div class="feat-card">
+      <div class="feat-ic">📦</div>
+      <div class="feat-title">Controle de Estoque</div>
+      <div class="feat-desc">Alerta automático quando um produto está acabando, com histórico de entradas e saídas.</div>
+      <span class="feat-tag">Sem surpresa</span>
+    </div>
+    <div class="feat-card">
+      <div class="feat-ic">📧</div>
+      <div class="feat-title">Notificações Automáticas</div>
+      <div class="feat-desc">Sua equipe recebe e-mail na hora de um agendamento novo e quando a comissão é fechada.</div>
+      <span class="feat-tag">Sempre informado</span>
+    </div>
+  </div>
+</section>
+
+<!-- MIGRAÇÃO -->
+<section id="migracao" class="parallax-section">
+  <div class="section-label reveal">Já usa outro sistema?</div>
+  <h2 class="reveal">Troque sem perder<br>seu histórico</h2>
+  <p class="section-sub reveal">Clientes, profissionais, serviços, produtos, pacotes e até seu financeiro migram em minutos — o sistema reconhece as colunas da sua planilha sozinho, mesmo vindas de outro app.</p>
+
+  <div class="migra-steps reveal">
+    <div class="migra-step">
+      <div class="migra-num">1</div>
+      <div class="migra-title">Exporte sua planilha</div>
+      <div class="migra-desc">Do sistema que você usa hoje. A maioria exporta em Excel com um clique.</div>
+    </div>
+    <div class="migra-step">
+      <div class="migra-num">2</div>
+      <div class="migra-title">O sistema identifica sozinho</div>
+      <div class="migra-desc">Reconhece as colunas automaticamente, mesmo com nomes diferentes ou fora de ordem.</div>
+    </div>
+    <div class="migra-step">
+      <div class="migra-num">3</div>
+      <div class="migra-title">Pronto para usar</div>
+      <div class="migra-desc">Clientes, equipe, serviços e financeiro já aparecem no seu novo painel.</div>
+    </div>
+  </div>
+
+  <div class="migra-note reveal">
+    <span class="migra-pill">📋 Clientes</span>
+    <span class="migra-pill">👥 Profissionais</span>
+    <span class="migra-pill">✂️ Serviços</span>
+    <span class="migra-pill">📦 Produtos</span>
+    <span class="migra-pill">🎁 Pacotes</span>
+    <span class="migra-pill">💰 Financeiro</span>
   </div>
 </section>
 
@@ -615,13 +726,14 @@ footer{
     <div class="pricing-price"><sup>R$</sup>59<small>,90/mês</small></div>
     <div class="pricing-desc">Tudo incluso para gerenciar seu salão com profissionalismo.</div>
     <div class="pricing-feat">
-      <div class="pf"><span class="pf-ic">✓</span>Agendamentos ilimitados</div>
+      <div class="pf"><span class="pf-ic">✓</span>Agendamentos ilimitados, sem conflito de horário</div>
       <div class="pf"><span class="pf-ic">✓</span>Link de agendamento online para clientes</div>
       <div class="pf"><span class="pf-ic">✓</span>Controle financeiro completo</div>
-      <div class="pf"><span class="pf-ic">✓</span>Gestão de comissões por profissional</div>
-      <div class="pf"><span class="pf-ic">✓</span>Controle de estoque</div>
+      <div class="pf"><span class="pf-ic">✓</span>Comissões automáticas, com maquininha</div>
+      <div class="pf"><span class="pf-ic">✓</span>Pacotes de serviço e controle de estoque</div>
+      <div class="pf"><span class="pf-ic">✓</span>Equipe com permissões individuais</div>
+      <div class="pf"><span class="pf-ic">✓</span>Migração de outro sistema incluída</div>
       <div class="pf"><span class="pf-ic">✓</span>App mobile (PWA) para Android e iPhone</div>
-      <div class="pf"><span class="pf-ic">✓</span>Múltiplos usuários com permissões</div>
       <div class="pf"><span class="pf-ic">✓</span>Suporte via WhatsApp</div>
     </div>
     <button class="pricing-btn" onclick="window.location.href='painel.html'">Começar grátis agora →</button>
@@ -660,6 +772,40 @@ footer{
         <div><div class="test-name">Patricia L.</div><div class="test-role">Esmalteria — MG</div></div>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="section-label reveal">Perguntas frequentes</div>
+  <h2 class="reveal">Ainda com dúvidas?</h2>
+  <p class="section-sub reveal">Se não encontrar a resposta aqui, chama no WhatsApp — respondemos rápido.</p>
+
+  <div class="faq-list reveal">
+    <details class="faq-item">
+      <summary>Preciso de cartão de crédito para testar?</summary>
+      <p>Não. Você usa o sistema completo por 14 dias sem informar nenhum dado de pagamento. Se não continuar, não é cobrado nada.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Já uso outro sistema — dá para migrar meus dados?</summary>
+      <p>Sim. Clientes, profissionais, serviços, produtos, pacotes e até seu histórico financeiro podem ser importados direto da planilha que você já exporta do seu sistema atual.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Quantos profissionais posso cadastrar?</summary>
+      <p>Sem limite. E cada funcionário pode ter um nível de acesso diferente — desde só ver a própria agenda até gerenciar o financeiro inteiro.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Meus clientes precisam baixar algum aplicativo?</summary>
+      <p>Não. Eles agendam direto pelo link do seu salão, no navegador do celular, sem instalar nada.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Como funciona o cálculo de comissão com maquininha?</summary>
+      <p>Você configura a taxa de débito e crédito da sua maquininha uma vez. Quando um atendimento é pago no cartão, o sistema já desconta a parte da taxa que cabe ao profissional na hora de fechar a comissão.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Posso cancelar quando quiser?</summary>
+      <p>Sim, sem multa e sem burocracia. Você cancela direto pelo painel a qualquer momento.</p>
+    </details>
   </div>
 </section>
 
