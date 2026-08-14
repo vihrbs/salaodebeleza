@@ -190,7 +190,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.5.0-motivo-real-erro-resend' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.6.0-import-trinks-horarios-livres' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -795,16 +795,23 @@ app.get('/api/pacotes', auth, async (req, res) => {
   const { data, error } = await supabase.from('pacotes')
     .select('*').eq('salao_id', req.salao_id).eq('ativo', true).order('nome');
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || []);
+  // Sinaliza pacotes sem nenhum serviço configurado (ex.: vieram de uma
+  // importação que só trouxe nome+preço) — a pessoa precisa completar depois
+  const comSinal = (data || []).map(p => ({ ...p, precisa_configurar: !p.servicos || p.servicos.length === 0 }));
+  res.json(comSinal);
 });
 
 app.post('/api/pacotes', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode criar pacotes' });
   const { nome, descricao, preco, validade_dias, servicos } = req.body;
-  if (!nome || !preco || !servicos || !servicos.length) {
-    return res.status(422).json({ error: 'Nome, preço e ao menos um serviço são obrigatórios' });
+  if (!nome || !preco) {
+    return res.status(422).json({ error: 'Nome e preço são obrigatórios' });
   }
-  for (const s of servicos) {
+  // Serviços são opcionais na criação — permite importar pacotes de outro
+  // sistema que só trazem nome+preço, sem o detalhamento de sessões. Quando
+  // informados, cada um precisa ter estrutura válida.
+  const servicosFinal = Array.isArray(servicos) ? servicos : [];
+  for (const s of servicosFinal) {
     if (!s.servico_id || !s.qtd_sessoes || s.qtd_sessoes < 1) {
       return res.status(422).json({ error: 'Cada serviço do pacote precisa de servico_id e ao menos 1 sessão' });
     }
@@ -813,7 +820,7 @@ app.post('/api/pacotes', auth, async (req, res) => {
     const { data, error } = await supabase.from('pacotes')
       .insert({
         salao_id: req.salao_id, nome, descricao: descricao || null, preco: Number(preco),
-        validade_dias: validade_dias ? parseInt(validade_dias) : null, servicos
+        validade_dias: validade_dias ? parseInt(validade_dias) : null, servicos: servicosFinal
       }).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -1445,6 +1452,41 @@ app.post('/api/financeiro/lancamentos', auth, requirePermissao('financeiro'), as
     .from('lancamentos').insert({ ...req.body, salao_id: req.salao_id }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// Insere vários lançamentos de uma vez (usado pela importação de dados de
+// outros sistemas — ex.: histórico de vendas/despesas com milhares de
+// linhas). Uma requisição só, em vez de uma por linha, e o banco recebe em
+// blocos de 500 pra não estourar o tamanho de uma única inserção.
+app.post('/api/financeiro/lancamentos/lote', auth, requirePermissao('financeiro'), async (req, res) => {
+  const { lancamentos } = req.body;
+  if (!Array.isArray(lancamentos) || !lancamentos.length) {
+    return res.status(422).json({ error: 'Envie uma lista de lançamentos em "lancamentos"' });
+  }
+  if (lancamentos.length > 20000) {
+    return res.status(422).json({ error: 'Máximo de 20.000 lançamentos por importação' });
+  }
+  const TAMANHO_BLOCO = 500;
+  let totalInseridos = 0;
+  try {
+    for (let i = 0; i < lancamentos.length; i += TAMANHO_BLOCO) {
+      const bloco = lancamentos.slice(i, i + TAMANHO_BLOCO).map(l => ({
+        tipo: l.tipo === 'saida' ? 'saida' : 'entrada',
+        categoria: l.categoria || 'Outros',
+        descricao: l.descricao || '',
+        valor: Number(l.valor) || 0,
+        data: l.data,
+        pago: l.pago !== false,
+        salao_id: req.salao_id
+      }));
+      const { error } = await supabase.from('lancamentos').insert(bloco);
+      if (error) throw error;
+      totalInseridos += bloco.length;
+    }
+    res.status(201).json({ message: totalInseridos + ' lançamento(s) importado(s) com sucesso!', total: totalInseridos });
+  } catch(e) {
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + lancamentos.length + '): ' + e.message });
+  }
 });
 
 // Marca um lançamento como pago ou não pago
@@ -2147,9 +2189,9 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
       return res.status(409).json({ error: 'Este horário já foi reservado. Escolha outro.' });
     }
 
-    // Busca comissão do profissional (fallback)
+    // Busca comissão do profissional (fallback) — e nome/e-mail pra notificação
     const { data: prof } = await supabase.from('profissionais')
-      .select('comissao_pct').eq('id', profissional_id).single();
+      .select('comissao_pct, nome, email').eq('id', profissional_id).single();
 
     // Cria o agendamento já confirmado
     const { data: agendamento, error } = await supabase.from('agendamentos')
@@ -2179,6 +2221,14 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
         valor: servico.preco, data, pago: false
       });
     } catch(lancErr) { console.log('Lancamento nao criado:', lancErr.message); }
+
+    // Notificação por e-mail pro profissional — o link público de agendamento
+    // é um caminho SEPARADO do agendamento criado pelo painel admin, então
+    // precisa da própria chamada (não reaproveita a lógica de /api/agendamentos)
+    if (prof && prof.email) {
+      notificarProfissionalNovoAgendamento(prof.email, prof.nome, nome, data_hora, [servico.nome], servico.preco)
+        .catch(() => {});
+    }
 
     res.status(201).json({
       message: 'Agendamento confirmado!',
