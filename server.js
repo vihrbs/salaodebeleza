@@ -190,7 +190,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.4.0-embed-fix-testar-email' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.5.0-motivo-real-erro-resend' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -203,6 +203,19 @@ function gerarCodigoVerificacao() {
 
 function expiracaoCodigoVerificacao() {
   return new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+}
+
+// O Resend devolve o motivo real do erro no corpo da resposta (geralmente
+// JSON com um campo "message", ex: domínio não verificado, chave sem
+// permissão pra esse remetente, etc.). Extrai isso pra mostrar pro admin em
+// vez de só o código de status HTTP, que sozinho não diz muita coisa.
+function extrairMensagemErroResend(textoResposta) {
+  try {
+    const json = JSON.parse(textoResposta);
+    return json.message || json.error || textoResposta || 'sem detalhes';
+  } catch(e) {
+    return textoResposta || 'sem detalhes';
+  }
 }
 
 async function enviarCodigoVerificacao(email, nome, codigo) {
@@ -227,9 +240,10 @@ async function enviarCodigoVerificacao(email, nome, codigo) {
       })
     });
     if (!r.ok) {
-      const detalhe = await r.text().catch(() => '');
-      console.error('Resend recusou o envio do código (status ' + r.status + '): ' + detalhe);
-      return { enviado: false, motivo: 'Resend retornou status ' + r.status };
+      const detalheTexto = await r.text().catch(() => '');
+      const detalheLegivel = extrairMensagemErroResend(detalheTexto);
+      console.error('Resend recusou o envio do código (status ' + r.status + '): ' + detalheTexto);
+      return { enviado: false, motivo: 'Resend (' + r.status + '): ' + detalheLegivel };
     }
     return { enviado: true };
   } catch(e) {
@@ -488,9 +502,10 @@ async function enviarEmailRedefinicaoSenha(email, nome, token) {
       })
     });
     if (!r.ok) {
-      const detalhe = await r.text().catch(() => '');
-      console.error('Resend recusou o envio do link de redefinição (status ' + r.status + '): ' + detalhe);
-      return { enviado: false, motivo: 'Resend retornou status ' + r.status };
+      const detalheTexto = await r.text().catch(() => '');
+      const detalheLegivel = extrairMensagemErroResend(detalheTexto);
+      console.error('Resend recusou o envio do link de redefinição (status ' + r.status + '): ' + detalheTexto);
+      return { enviado: false, motivo: 'Resend (' + r.status + '): ' + detalheLegivel };
     }
     return { enviado: true };
   } catch(e) {
@@ -515,9 +530,10 @@ async function enviarEmailSimples(email, assunto, corpo) {
       body: JSON.stringify({ from: remetente, to: [email], subject: assunto, text: corpo })
     });
     if (!r.ok) {
-      const detalhe = await r.text().catch(() => '');
-      console.error('Resend recusou notificação (status ' + r.status + '): ' + detalhe);
-      return { enviado: false, motivo: 'Resend retornou status ' + r.status };
+      const detalheTexto = await r.text().catch(() => '');
+      const detalheLegivel = extrairMensagemErroResend(detalheTexto);
+      console.error('Resend recusou notificação (status ' + r.status + '): ' + detalheTexto);
+      return { enviado: false, motivo: 'Resend (' + r.status + '): ' + detalheLegivel };
     }
     return { enviado: true };
   } catch(e) {
