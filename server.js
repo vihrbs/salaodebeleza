@@ -190,7 +190,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.3.0-notificacoes-profissional' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.4.0-embed-fix-testar-email' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
