@@ -388,6 +388,7 @@ select.fc option{background:var(--bg2)}
         <button class="sb-item" data-page="estoque" onclick="nav('estoque',this)"><span class="sb-ic">📦</span>Estoque</button>
         <button class="sb-item" data-page="profissionais" onclick="nav('profissionais',this)"><span class="sb-ic">👤</span>Profissionais</button>
         <button class="sb-item" data-page="servicos" onclick="nav('servicos',this)"><span class="sb-ic">✂️</span>Serviços</button>
+        <button class="sb-item" data-page="pacotes" onclick="nav('pacotes',this)"><span class="sb-ic">🎁</span>Pacotes</button>
         <div class="sb-section">Sistema</div>
         <button class="sb-item" data-page="config" onclick="nav('config',this)"><span class="sb-ic">⚙️</span>Config</button>
       </nav>
@@ -413,7 +414,7 @@ select.fc option{background:var(--bg2)}
         <button id="mob-ham" onclick="abrirSidebarMob()">☰</button>
         <div class="tb-title" id="tb-page-title">Dashboard</div>
         <div class="tb-r">
-          <button class="ib" onclick="openM('m-ag')" title="Novo Agendamento">📅</button>
+          <button class="ib" onclick="abrirNovoAgendamento()" title="Novo Agendamento">📅</button>
           <button class="ib" onclick="toast('Sem notificações novas','inf')" title="Notificações">🔔</button>
         </div>
       </div>
@@ -422,6 +423,12 @@ select.fc option{background:var(--bg2)}
       <div id="trial-banner">
         <span id="trial-msg">⏰ Seu trial expira em breve — assine para continuar usando.</span>
         <button onclick="assinar()" style="background:var(--ac);color:#0F0E0C;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">Assinar R$ 59,90/mês →</button>
+      </div>
+
+      <!-- BANNER E-MAIL NÃO VERIFICADO -->
+      <div id="email-verif-banner" style="display:none;background:linear-gradient(90deg,rgba(96,165,250,.15),rgba(96,165,250,.08));border-bottom:1px solid rgba(96,165,250,.25);padding:10px 20px;align-items:center;justify-content:space-between;font-size:.8rem;gap:12px;flex-wrap:wrap;color:#60A5FA">
+        <span>📧 Confirme seu e-mail para garantir o acesso total à sua conta.</span>
+        <button onclick="abrirVerificarEmail()" style="background:#60A5FA;color:#0F0E0C;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">Verificar agora →</button>
       </div>
 
       <div id="content">
@@ -435,7 +442,7 @@ select.fc option{background:var(--bg2)}
       </div>
       <div class="g31" style="margin-bottom:14px">
         <div class="card">
-          <div class="crow"><span class="ch">Próximos 3 Dias</span><button class="btn btnp btnsm" onclick="openM('m-ag')">+ Novo</button></div>
+          <div class="crow"><span class="ch">Próximos 3 Dias</span><button class="btn btnp btnsm" onclick="abrirNovoAgendamento()">+ Novo</button></div>
           <div id="dash-tl"><div class="lc"><div class="spin"></div></div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:13px">
@@ -455,7 +462,7 @@ select.fc option{background:var(--bg2)}
         <input type="date" class="fc" id="ag-dt" style="width:auto" onchange="loadAgenda()"/>
         <select class="fc" id="ag-prf" style="width:auto" onchange="loadAgenda()"><option value="">Todos profissionais</option></select>
         <button class="btn btns btnsm" onclick="document.getElementById('ag-dt').value='';loadAgenda()">Próximos 3 dias</button>
-        <button class="btn btnp" style="margin-left:auto" onclick="openM('m-ag')">+ Novo Agendamento</button>
+        <button class="btn btnp" style="margin-left:auto" onclick="abrirNovoAgendamento()">+ Novo Agendamento</button>
       </div>
       <div class="card">
         <div class="crow"><span class="ch" id="ag-ttl">Agenda</span></div>
@@ -548,6 +555,16 @@ select.fc option{background:var(--bg2)}
       <div class="card">
         <div class="tw"><table><thead><tr><th>Serviço</th><th>Categoria</th><th>Duração</th><th>Preço</th><th>Comissão</th><th>Ativo</th><th>Ações</th></tr></thead>
         <tbody id="svc-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- PACOTES -->
+    <div class="page" id="page-pacotes">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+        <button class="btn btnp" onclick="abrirNovoPacote()">+ Novo Pacote</button>
+      </div>
+      <div id="pac-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">
+        <div class="lc"><div class="spin"></div></div>
       </div>
     </div>
 
@@ -690,9 +707,11 @@ var DEMO = false; // nunca entra em demo se API_FIXA estiver definida
 var PROS = [], SVCS = [], CLIS = [];
 var COR_SEL = '#6C63FF';
 var USER_PERFIL = 'admin'; // 'admin' ou 'recepcionista'
+var USER_EMAIL = '';
+var USER_EMAIL_VERIFICADO = true; // otimista até o login/registro dizer o contrário
 
 // Permissões do usuário atual (carregadas do login)
-var USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+var USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
 
 var SL = {agendado:'Agendado',confirmado:'Confirmado',em_atendimento:'Em Atendimento',concluido:'Concluído',cancelado:'Cancelado',nao_compareceu:'Não Compareceu'};
 var SC = {agendado:'bg2',confirmado:'bi',em_atendimento:'bs',concluido:'bp',cancelado:'bd2',nao_compareceu:'bw'};
@@ -771,7 +790,7 @@ function doLogin() {
       if (data.usuario && data.usuario.salao_id) localStorage.setItem('bpro_salao_id', data.usuario.salao_id);
       if (data.usuario && data.usuario.saloes && data.usuario.saloes.id) localStorage.setItem('bpro_salao_id', data.usuario.saloes.id);
       DEMO = false;
-      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms);
+      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms, data.usuario && data.usuario.email, data.usuario && data.usuario.email_verificado);
     } else {
       DEMO = true;
       enterApp(email ? email.split('@')[0] : 'Admin Demo', 'Studio Demo', 'DEMO');
@@ -798,18 +817,23 @@ function doRegister() {
   .then(function(data){
     TK = data.token; localStorage.setItem('bpro_tk', TK); DEMO = false;
     if (data.salao && data.salao.id) localStorage.setItem('bpro_salao_id', data.salao.id);
-    enterApp(data.usuario && data.usuario.nome||'Admin', data.salao && data.salao.nome||'Meu Salão', 'LIVE');
+    enterApp(data.usuario && data.usuario.nome||'Admin', data.salao && data.salao.nome||'Meu Salão', 'LIVE', 'admin', null, data.usuario && data.usuario.email, data.usuario && data.usuario.email_verificado);
     toast('Conta criada! Trial de 14 dias ativo 🎉','ok');
+    if (data.usuario && data.usuario.email_verificado === false) {
+      setTimeout(function(){ abrirVerificarEmail(); }, 800);
+    }
   }).catch(function(e){ err.textContent=e.message; err.style.display='block'; })
   .finally(function(){ btn.disabled=false; btn.textContent='Criar Conta Grátis'; });
 }
 
-function enterApp(nome, salon, mode, perfil, permissoes) {
+function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado) {
   USER_PERFIL = perfil || 'admin';
+  USER_EMAIL = email || '';
+  USER_EMAIL_VERIFICADO = (emailVerificado === undefined || emailVerificado === null) ? true : !!emailVerificado;
   if (permissoes && permissoes.length) {
     USER_PERMISSOES = permissoes;
   } else if (perfil === 'admin') {
-    USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+    USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
   } else {
     // Tenta carregar do localStorage
     var stored = localStorage.getItem('bpro_permissoes');
@@ -832,6 +856,9 @@ function enterApp(nome, salon, mode, perfil, permissoes) {
   setTimeout(checkTrial, 2000);
   iniciarAtualizacaoAutomatica();
   setTimeout(iniciarTutorial, 1200);
+
+  var bannerEmail = document.getElementById('email-verif-banner');
+  if (bannerEmail) bannerEmail.style.display = USER_EMAIL_VERIFICADO ? 'none' : 'flex';
 
   // Verifica retorno do Mercado Pago
   var urlParams = new URLSearchParams(window.location.search);
@@ -872,7 +899,7 @@ function nav(page, el) {
   });
 
   // Título da topbar
-  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',clientes:'Clientes',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',config:'Configurações'};
+  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',clientes:'Clientes',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
   var tbTitle = document.getElementById('tb-page-title');
   if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
 
@@ -946,7 +973,7 @@ var D = {
 function loadAll() {
   loadKPIs(); loadDashTl(); loadTopSvc(); loadAlertas();
   loadAgenda(); loadClientes(); loadFin(); loadEst();
-  loadCom(); loadPros(); loadSvcs();
+  loadCom(); loadPros(); loadSvcs(); loadPacotes();
   renderCal(); renderDashChart();
   fillSelects();
 }
@@ -1392,7 +1419,7 @@ function renderCli(list) {
       '<td><span class="badge ' + (stC[c.status]||'bg2') + '">' + (stL[c.status]||'Ativo') + '</span></td>' +
       '<td><div style="display:flex;gap:3px">' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'WhatsApp...\',\'ok\')" title="WhatsApp">💬</button>' +
-      '<button class="btnic btn btnsm" onclick="event.stopPropagation();openM(\'m-ag\')" title="Agendar">📅</button>' +
+      '<button class="btnic btn btnsm" onclick="event.stopPropagation();abrirNovoAgendamento()" title="Agendar">📅</button>' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();editCli(this)" data-cli="' + JSON.stringify(c).replace(/"/g,"&quot;") + '" title="Editar">✏️</button>' +
       '</div></td></tr>';
   }).join('');
@@ -1632,7 +1659,7 @@ function renderPros(list) {
       '<div><div style="font-size:.9rem;font-weight:800;color:var(--ac)">' + (p.comissao_pct||40) + '%</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
       '<div><div style="font-size:.8rem;font-weight:800;color:var(--ac3)">' + brl(p.faturado||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div></div>' +
       '<div style="display:flex;gap:7px;margin-top:11px">' +
-      '<button class="btn btns btnsm" style="flex:1" onclick="openM(\'m-ag\')">📅 Agendar</button>' +
+      '<button class="btn btns btnsm" style="flex:1" onclick="abrirNovoAgendamento()">📅 Agendar</button>' +
       '<button class="btn btns btnsm" style="flex:1" onclick="toast(\'WhatsApp...\',\'ok\')">💬 WhatsApp</button></div>' +
       '<div style="display:flex;gap:7px;margin-top:7px">' +
       '<button class="btn btns btnsm" style="flex:1" onclick="abrirVendaParcelada(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🛒 Vender parcelado</button>' +
@@ -1760,6 +1787,140 @@ function renderSvcs(list) {
   }).join('');
 }
 
+// ── PACOTES ──────────────────────────────────────────────
+var PACOTES_CACHE = [];
+
+function loadPacotes() {
+  apiFetch('/api/pacotes').then(function(r){
+    PACOTES_CACHE = r || [];
+    renderPacotes(PACOTES_CACHE);
+  }).catch(function(){ renderPacotes([]); });
+}
+
+function renderPacotes(list) {
+  var el = document.getElementById('pac-grid');
+  if (!el) return;
+  if (!list.length) { el.innerHTML = '<div class="empty">Nenhum pacote cadastrado ainda.</div>'; return; }
+  el.innerHTML = list.map(function(p){
+    var servicosTxt = (p.servicos || []).map(function(s){
+      var svc = SVCS.find(function(sv){ return sv.id === s.servico_id; });
+      return (svc ? svc.nome : 'Serviço') + ' × ' + s.qtd_sessoes;
+    }).join(', ');
+    return '<div class="pro-card">' +
+      '<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">' +
+      '<div class="pro-av" style="background:var(--ac)">🎁</div>' +
+      '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + servicosTxt + '</div></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs);margin-bottom:11px">' +
+      '<div><div style="font-size:1rem;font-weight:800;color:var(--ac)">' + brl(p.preco) + '</div><div style="font-size:.62rem;color:var(--t3)">Preço</div></div>' +
+      '<div><div style="font-size:1rem;font-weight:800">' + (p.validade_dias ? p.validade_dias + ' dias' : 'Sem validade') + '</div><div style="font-size:.62rem;color:var(--t3)">Validade</div></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:7px">' +
+      '<button class="btn btnp btnsm" style="flex:1" onclick="abrirVenderPacote(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.preco + ')">💰 Vender</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="desativarPacote(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')" title="Desativar">🗑</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+var PAC_SERVICOS_SELECIONADOS = []; // [{servico_id, qtd_sessoes}]
+
+function abrirNovoPacote() {
+  document.getElementById('pac-nome').value = '';
+  document.getElementById('pac-preco').value = '';
+  document.getElementById('pac-validade').value = '';
+  PAC_SERVICOS_SELECIONADOS = [];
+  renderPacServicosSelecionados();
+  var sel = document.getElementById('pac-add-servico');
+  sel.innerHTML = '<option value="">Adicionar serviço...</option>' +
+    SVCS.map(function(s){ return '<option value="' + s.id + '">' + s.nome + '</option>'; }).join('');
+  openM('m-pacote');
+}
+
+function adicionarServicoPacote() {
+  var sel = document.getElementById('pac-add-servico');
+  var servicoId = sel.value;
+  if (!servicoId) return;
+  if (PAC_SERVICOS_SELECIONADOS.some(function(s){ return s.servico_id === servicoId; })) {
+    toast('Este serviço já está no pacote','er'); return;
+  }
+  PAC_SERVICOS_SELECIONADOS.push({ servico_id: servicoId, qtd_sessoes: 1 });
+  sel.value = '';
+  renderPacServicosSelecionados();
+}
+
+function removerServicoPacote(servicoId) {
+  PAC_SERVICOS_SELECIONADOS = PAC_SERVICOS_SELECIONADOS.filter(function(s){ return s.servico_id !== servicoId; });
+  renderPacServicosSelecionados();
+}
+
+function atualizarQtdSessoesPacote(servicoId, qtd) {
+  var item = PAC_SERVICOS_SELECIONADOS.find(function(s){ return s.servico_id === servicoId; });
+  if (item) item.qtd_sessoes = parseInt(qtd) || 1;
+}
+
+function renderPacServicosSelecionados() {
+  var el = document.getElementById('pac-servicos-lista');
+  if (!PAC_SERVICOS_SELECIONADOS.length) { el.innerHTML = '<div style="font-size:.76rem;color:var(--t3);padding:8px 0">Nenhum serviço adicionado ainda.</div>'; return; }
+  el.innerHTML = PAC_SERVICOS_SELECIONADOS.map(function(s){
+    var svc = SVCS.find(function(sv){ return sv.id === s.servico_id; });
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--bd)">' +
+      '<div style="flex:1;font-size:.8rem">' + (svc ? svc.nome : 'Serviço') + '</div>' +
+      '<input type="number" class="fc" style="width:70px" min="1" value="' + s.qtd_sessoes + '" onchange="atualizarQtdSessoesPacote(\'' + s.servico_id + '\',this.value)"/>' +
+      '<span style="font-size:.7rem;color:var(--t3)">sessões</span>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerServicoPacote(\'' + s.servico_id + '\')">✕</button>' +
+      '</div>';
+  }).join('');
+}
+
+function salvarPacote() {
+  var nome = document.getElementById('pac-nome').value.trim();
+  var preco = parseFloat(document.getElementById('pac-preco').value);
+  var validade = document.getElementById('pac-validade').value;
+  if (!nome) { toast('Nome do pacote é obrigatório','er'); return; }
+  if (!preco || preco <= 0) { toast('Informe um preço válido','er'); return; }
+  if (!PAC_SERVICOS_SELECIONADOS.length) { toast('Adicione pelo menos um serviço ao pacote','er'); return; }
+
+  var btn = document.querySelector('#m-pacote .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/pacotes', { method: 'POST', body: {
+    nome: nome, preco: preco, validade_dias: validade ? parseInt(validade) : null, servicos: PAC_SERVICOS_SELECIONADOS
+  }})
+  .then(function(){ toast('Pacote criado! ✅','ok'); closeM('m-pacote'); loadPacotes(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Pacote'; });
+}
+
+function desativarPacote(id, nome) {
+  if (!confirm('Desativar o pacote "' + nome + '"? Clientes que já compraram continuam usando as sessões restantes, mas ele deixa de ser vendido.')) return;
+  apiFetch('/api/pacotes/' + id, { method: 'DELETE' })
+  .then(function(){ toast('Pacote desativado','ok'); loadPacotes(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+}
+
+function abrirVenderPacote(pacoteId, pacoteNome, preco) {
+  document.getElementById('vpac-pacote-id').value = pacoteId;
+  document.getElementById('vpac-pacote-nome').textContent = pacoteNome;
+  document.getElementById('vpac-valor').value = preco;
+  var sel = document.getElementById('vpac-cliente');
+  sel.innerHTML = '<option value="">Selecionar cliente...</option>' +
+    CLIS.map(function(c){ return '<option value="' + c.id + '">' + c.nome + '</option>'; }).join('');
+  openM('m-vender-pacote');
+}
+
+function salvarVendaPacote() {
+  var pacoteId = document.getElementById('vpac-pacote-id').value;
+  var clienteId = document.getElementById('vpac-cliente').value;
+  var valor = document.getElementById('vpac-valor').value;
+  if (!clienteId) { toast('Selecione o cliente','er'); return; }
+
+  var btn = document.querySelector('#m-vender-pacote .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/clientes/' + clienteId + '/pacotes', { method: 'POST', body: { pacote_id: pacoteId, valor_pago: valor ? parseFloat(valor) : undefined } })
+  .then(function(){ toast('Pacote vendido! ✅','ok'); closeM('m-vender-pacote'); loadFin(); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda'; });
+}
+
 // ── FILL SELECTS ────────────────────────────────────────
 function fillSelects() {
   Promise.allSettled([
@@ -1784,12 +1945,71 @@ function fillSelects() {
 
     var sw = document.getElementById('ag-svcs');
     if (sw) sw.innerHTML = svcs.map(function(s){
-      return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\')">' + s.nome + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
+      return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');atualizarPacotesDisponiveis()">' + s.nome + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
     }).join('');
   });
 }
 
 // ── SAVES ───────────────────────────────────────────────
+function toggleRepetirAgendamento() {
+  var checked = document.getElementById('ag-repetir').checked;
+  document.getElementById('ag-repetir-opcoes').style.display = checked ? 'block' : 'none';
+}
+
+// Abre o modal de novo agendamento já com o select de "vender pacote" atualizado
+function abrirNovoAgendamento() {
+  var sel = document.getElementById('ag-vender-pacote-id');
+  if (sel) {
+    sel.innerHTML = '<option value="">Selecionar pacote...</option>' +
+      PACOTES_CACHE.map(function(p){ return '<option value="' + p.id + '" data-preco="' + p.preco + '">' + p.nome + ' — ' + brl(p.preco) + '</option>'; }).join('');
+  }
+  document.getElementById('ag-pacotes-disponiveis').style.display = 'none';
+  document.getElementById('ag-pacotes-disponiveis').innerHTML = '';
+  openM('m-ag');
+}
+
+function toggleVenderPacoteAgendamento() {
+  var checked = document.getElementById('ag-vender-pacote-toggle').checked;
+  document.getElementById('ag-vender-pacote-opcoes').style.display = checked ? 'block' : 'none';
+}
+
+// Busca os pacotes ativos do cliente selecionado e mostra, pra cada serviço
+// já escolhido no agendamento, se há sessão disponível pra usar em vez de cobrar de novo.
+function atualizarPacotesDisponiveis() {
+  var cliId = document.getElementById('ag-cli').value;
+  var wrap = document.getElementById('ag-pacotes-disponiveis');
+  var svcsSelecionados = Array.from(document.querySelectorAll('#ag-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
+
+  if (!cliId || !svcsSelecionados.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+
+  apiFetch('/api/clientes/' + cliId + '/pacotes').then(function(pacotesCliente){
+    var opcoes = [];
+    (pacotesCliente || []).forEach(function(pc){
+      if (pc.status !== 'ativo') return;
+      (pc.sessoes || []).forEach(function(s){
+        if (svcsSelecionados.indexOf(s.servico_id) < 0) return;
+        var restantes = s.qtd_total - s.qtd_usada;
+        if (restantes <= 0) return;
+        var svc = SVCS.find(function(sv){ return sv.id === s.servico_id; });
+        opcoes.push({ pacote_cliente_id: pc.id, servico_id: s.servico_id, restantes: restantes,
+          label: pc.nome_snapshot + ' — ' + (svc ? svc.nome : 'serviço') + ' (' + restantes + ' restante' + (restantes>1?'s':'') + ')' });
+      });
+    });
+
+    if (!opcoes.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+
+    wrap.style.display = 'block';
+    wrap.innerHTML = '<div class="fg" style="background:rgba(126,200,164,.1);border:1px solid var(--ac3);border-radius:var(--rs);padding:12px">' +
+      '<label class="fl" style="color:var(--ac3)">🎁 Este cliente tem sessões de pacote disponíveis</label>' +
+      opcoes.map(function(o, i){
+        return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:.8rem">' +
+          '<input type="checkbox" class="ag-pacote-uso" data-pacote-cliente-id="' + o.pacote_cliente_id + '" data-servico-id="' + o.servico_id + '" style="accent-color:var(--ac3)"/> ' + o.label +
+          '</label>';
+      }).join('') +
+      '</div>';
+  }).catch(function(){ wrap.style.display = 'none'; wrap.innerHTML = ''; });
+}
+
 function saveAg() {
   var cli  = document.getElementById('ag-cli').value;
   var pro  = document.getElementById('ag-pro').value;
@@ -1797,13 +2017,52 @@ function saveAg() {
   var hora = document.getElementById('ag-h').value;
   var svcs = Array.from(document.querySelectorAll('#ag-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
   if (!cli || !pro || !svcs.length) { toast('Preencha cliente, profissional e pelo menos 1 serviço','er'); return; }
+
+  var body = {cliente_id:cli,profissional_id:pro,data_hora:data+'T'+hora+':00',servicos:svcs,observacoes:document.getElementById('ag-obs').value,origem:document.getElementById('ag-or').value};
+
+  var repetir = document.getElementById('ag-repetir').checked;
+  if (repetir) {
+    var ate = document.getElementById('ag-repetir-ate').value;
+    if (!ate) { toast('Informe até quando repetir o agendamento','er'); return; }
+    body.recorrencia = { frequencia: document.getElementById('ag-repetir-freq').value, ate: ate };
+  }
+
+  var venderPacote = document.getElementById('ag-vender-pacote-toggle').checked;
+  if (venderPacote) {
+    var pacoteId = document.getElementById('ag-vender-pacote-id').value;
+    if (!pacoteId) { toast('Selecione qual pacote deseja vender','er'); return; }
+    var valorPacote = document.getElementById('ag-vender-pacote-valor').value;
+    body.vender_pacote = { pacote_id: pacoteId, valor_pago: valorPacote ? parseFloat(valorPacote) : undefined };
+  }
+
+  var pacotesUtilizados = Array.from(document.querySelectorAll('.ag-pacote-uso:checked')).map(function(el){
+    return { pacote_cliente_id: el.dataset.pacoteClienteId, servico_id: el.dataset.servicoId };
+  });
+  if (pacotesUtilizados.length) body.pacotes_utilizados = pacotesUtilizados;
+
   var agBtn = document.querySelector('#m-ag .btnp');
   agBtn.disabled=true; agBtn.textContent='Salvando...';
-  (DEMO ? Promise.resolve({id:'demo_'+Date.now()}) : apiFetch('/api/agendamentos',{method:'POST',body:{cliente_id:cli,profissional_id:pro,data_hora:data+'T'+hora+':00',servicos:svcs,observacoes:document.getElementById('ag-obs').value,origem:document.getElementById('ag-or').value}}))
-  .then(function(){
-    toast('Agendamento criado! ✅','ok');
+  (DEMO ? Promise.resolve({id:'demo_'+Date.now()}) : apiFetch('/api/agendamentos',{method:'POST',body:body}))
+  .then(function(r){
+    if (r && r.recorrencia_id) {
+      var msg = r.total_criados + ' agendamento(s) criado(s)';
+      if (r.total_pulados > 0) msg += ', ' + r.total_pulados + ' pulado(s) por conflito de horário';
+      toast(msg + '! ✅', 'ok');
+    } else if (pacotesUtilizados.length) {
+      toast('Agendamento criado usando sessão do pacote! 🎁✅','ok');
+    } else {
+      toast('Agendamento criado! ✅','ok');
+    }
     closeM('m-ag');
     document.getElementById('ag-obs').value='';
+    document.getElementById('ag-repetir').checked = false;
+    document.getElementById('ag-repetir-opcoes').style.display = 'none';
+    document.getElementById('ag-repetir-ate').value = '';
+    document.getElementById('ag-vender-pacote-toggle').checked = false;
+    document.getElementById('ag-vender-pacote-opcoes').style.display = 'none';
+    document.getElementById('ag-vender-pacote-valor').value = '';
+    document.getElementById('ag-pacotes-disponiveis').style.display = 'none';
+    document.getElementById('ag-pacotes-disponiveis').innerHTML = '';
     document.querySelectorAll('#ag-svcs .svc-pill.on').forEach(function(el){ el.classList.remove('on'); });
     loadDashTl(); loadAgenda(); loadKPIs();
   }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -2377,7 +2636,7 @@ function loadUsuarios() {
   apiFetch('/api/usuarios').then(function(r) {
     var list = r || [];
     if (!list.length) { el.innerHTML = '<div class="empty">Nenhum usuário cadastrado além de você.</div>'; return; }
-    el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vínculo</th><th>Ações</th></tr></thead><tbody>' +
+    el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vínculo</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>' +
       list.map(function(u) {
         var isAdmin = u.perfil === 'admin';
         var perfBadge = isAdmin
@@ -2387,12 +2646,16 @@ function loadUsuarios() {
           ? '<span class="badge bi">👤 ' + u.profissionais.nome + '</span>'
           : '<span style="font-size:.7rem;color:var(--t3)">— (acesso geral)</span>';
 
+        var emailStatus = u.email_verificado
+          ? '<span class="badge bs">✅ Verificado</span>'
+          : '<span class="badge bw" style="cursor:pointer" onclick="reenviarCodigoVerificacao(\'' + u.email + '\')" title="Clique para reenviar o código">⚠️ Não verificado</span>';
+
         var acoes = isAdmin ? '<span style="font-size:.7rem;color:var(--t3)">—</span>' :
           '<div style="display:flex;gap:4px">' +
           '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="abrirEditPerms(this.dataset.uid,this.dataset.unome)" title="Editar permissões">✏️</button>' +
           '<button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Excluir">🗑</button>' +
           '</div>';
-        return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + acoes + '</td></tr>';
+        return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + emailStatus + '</td><td>' + acoes + '</td></tr>';
       }).join('') + '</tbody></table>';
   }).catch(function() {
     el.innerHTML = '<div class="empty">Erro ao carregar usuários.</div>';
@@ -2445,7 +2708,7 @@ function criarUsuario() {
     var profSel = document.getElementById('nu-profissional');
     profissionalId = profSel ? profSel.value : '';
   } else {
-    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
   }
 
   var btn = document.querySelector('#m-novo-user .btnp');
@@ -2483,7 +2746,7 @@ function deletarUsuario(id, nome) {
 // ── PERMISSÕES ──────────────────────────────────────
 function aplicarPermissoes() {
   var permitidos = USER_PERMISSOES;
-  var todosModulos = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+  var todosModulos = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
 
   // Esconde/mostra botões do menu desktop e mobile
   ['nb','mob-nb'].forEach(function(cls) {
@@ -2755,6 +3018,39 @@ function assinar() {
   .finally(function(){ btn.textContent='Assinar R$ 59,90/mês →'; btn.disabled=false; });
 }
 
+// ── VERIFICAÇÃO DE E-MAIL ────────────────────────────
+function abrirVerificarEmail() {
+  document.getElementById('vem-email').textContent = USER_EMAIL || '—';
+  document.getElementById('vem-codigo').value = '';
+  openM('m-verificar-email');
+}
+
+function confirmarCodigoEmail() {
+  var codigo = document.getElementById('vem-codigo').value.trim();
+  if (!codigo || codigo.length !== 6) { toast('Informe o código de 6 dígitos que chegou no seu e-mail','er'); return; }
+
+  var btn = document.querySelector('#m-verificar-email .btnp');
+  btn.disabled = true; btn.textContent = 'Verificando...';
+  apiFetch('/api/auth/verificar-email', { method: 'POST', body: { email: USER_EMAIL, codigo: codigo } })
+  .then(function(){
+    toast('E-mail verificado com sucesso! ✅','ok');
+    USER_EMAIL_VERIFICADO = true;
+    var banner = document.getElementById('email-verif-banner');
+    if (banner) banner.style.display = 'none';
+    closeM('m-verificar-email');
+    if (document.getElementById('page-config').classList.contains('on')) loadUsuarios();
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'código inválido'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Código'; });
+}
+
+function reenviarCodigoVerificacao(emailAlvo) {
+  var email = emailAlvo || USER_EMAIL;
+  apiFetch('/api/auth/reenviar-codigo', { method: 'POST', body: { email: email } })
+  .then(function(){ toast('Código reenviado! Confira a caixa de entrada de ' + email, 'ok'); })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+}
+
 function checkTrial() {
   // Admin nunca é bloqueado (dono do sistema)
   if (USER_PERFIL === 'admin' && DEMO) return;
@@ -2819,7 +3115,7 @@ window.addEventListener('load', function(){
         var _p  = d.perfil || localStorage.getItem('bpro_perfil') || 'admin';
         var _pm = d.permissoes || (function(){ try{ return JSON.parse(localStorage.getItem('bpro_permissoes')||'null'); }catch(e){ return null; } })();
         if (d.saloes && d.saloes.id) localStorage.setItem('bpro_salao_id', d.saloes.id);
-        enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE', _p, _pm);
+        enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE', _p, _pm, d.email, d.email_verificado);
       })
       .catch(function(){ localStorage.removeItem('bpro_tk'); TK=''; });
   }
@@ -2963,7 +3259,7 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">Novo Agendamento</span><button class="mx" onclick="closeM('m-ag')">✕</button></div>
     <div class="mb">
       <div class="fr">
-        <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli"><option value="">Selecionar...</option></select></div>
+        <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli" onchange="atualizarPacotesDisponiveis()"><option value="">Selecionar...</option></select></div>
         <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro"><option value="">Selecionar...</option></select></div>
       </div>
       <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label><div id="ag-svcs" style="padding:4px 0"></div></div>
@@ -2983,6 +3279,39 @@ function dispensarBannerPWA() {
         <select class="fc" id="ag-or"><option value="backoffice">Backoffice</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option></select>
       </div>
       <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ag-obs" rows="2" placeholder="Preferências, alergias..."></textarea></div>
+      <div id="ag-pacotes-disponiveis" style="display:none"></div>
+      <div class="fg" style="background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs);padding:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="ag-vender-pacote-toggle" onchange="toggleVenderPacoteAgendamento()" style="accent-color:var(--ac)"/> 🎁 Vender um pacote agora
+        </label>
+        <div id="ag-vender-pacote-opcoes" style="display:none;margin-top:12px">
+          <div class="fr">
+            <div class="fg"><label class="fl">Pacote</label>
+              <select class="fc" id="ag-vender-pacote-id"><option value="">Selecionar pacote...</option></select>
+            </div>
+            <div class="fg"><label class="fl">Valor cobrado (R$)</label><input type="number" class="fc" id="ag-vender-pacote-valor" step="0.01"/></div>
+          </div>
+          <div style="font-size:.68rem;color:var(--t3)">O pacote é vendido pro cliente selecionado acima, independente do serviço deste agendamento.</div>
+        </div>
+      </div>
+      <div class="fg" style="background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs);padding:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="ag-repetir" onchange="toggleRepetirAgendamento()" style="accent-color:var(--ac)"/> 🔁 Repetir este agendamento
+        </label>
+        <div id="ag-repetir-opcoes" style="display:none;margin-top:12px">
+          <div class="fr">
+            <div class="fg"><label class="fl">Frequência</label>
+              <select class="fc" id="ag-repetir-freq">
+                <option value="semanal">Semanal</option>
+                <option value="quinzenal">Quinzenal</option>
+                <option value="mensal">Mensal</option>
+              </select>
+            </div>
+            <div class="fg"><label class="fl">Repetir até*</label><input type="date" class="fc" id="ag-repetir-ate"/></div>
+          </div>
+          <div style="font-size:.68rem;color:var(--t3)">Cria um agendamento para o mesmo cliente/profissional/horário em cada ocorrência, pulando automaticamente datas que já estiverem ocupadas.</div>
+        </div>
+      </div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-ag')">Cancelar</button><button class="btn btnp" onclick="saveAg()">✅ Confirmar</button></div>
   </div>
@@ -3276,6 +3605,9 @@ function dispensarBannerPWA() {
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
             <input type="checkbox" value="servicos" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> ✂️ Serviços
           </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="pacotes" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 🎁 Pacotes
+          </label>
         </div>
       </div>
     </div>
@@ -3325,6 +3657,9 @@ function dispensarBannerPWA() {
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
           <input type="checkbox" value="servicos" style="accent-color:var(--ac)"/> ✂️ Serviços
         </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="pacotes" style="accent-color:var(--ac)"/> 🎁 Pacotes
+        </label>
       </div>
     </div>
     <div class="mf">
@@ -3335,6 +3670,21 @@ function dispensarBannerPWA() {
 </div>
 
 
+
+<!-- Modal Verificar E-mail -->
+<div class="mov" id="m-verificar-email">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">📧 Verificar E-mail</span><button class="mx" onclick="closeM('m-verificar-email')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.82rem;color:var(--t2);margin-bottom:14px">Enviamos um código de 6 dígitos para <strong id="vem-email">—</strong>. Digite abaixo para confirmar que este e-mail é seu.</div>
+      <div class="fg"><label class="fl">Código de verificação</label>
+        <input class="fc" id="vem-codigo" maxlength="6" placeholder="000000" style="letter-spacing:4px;font-size:1.1rem;text-align:center"/>
+      </div>
+      <button class="btn btns" style="width:100%" onclick="reenviarCodigoVerificacao()">Reenviar código</button>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-verificar-email')">Depois</button><button class="btn btnp" onclick="confirmarCodigoEmail()">Confirmar Código</button></div>
+  </div>
+</div>
 
 <!-- Modal Clientes Inativos -->
 <div class="mov" id="m-inativos">
@@ -3363,6 +3713,43 @@ function dispensarBannerPWA() {
       <button class="btn btns" onclick="closeM('m-mov')">Cancelar</button>
       <button class="btn btnp" id="mov-btn" onclick="salvarMov()">Confirmar</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal Novo Pacote -->
+<div class="mov" id="m-pacote">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">🎁 Novo Pacote</span><button class="mx" onclick="closeM('m-pacote')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Nome do pacote*</label><input class="fc" id="pac-nome" placeholder="Ex.: Pacote 5 Massagens"/></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Preço total (R$)*</label><input type="number" class="fc" id="pac-preco" step="0.01" placeholder="0,00"/></div>
+        <div class="fg"><label class="fl">Validade (dias, opcional)</label><input type="number" class="fc" id="pac-validade" placeholder="Ex.: 90"/></div>
+      </div>
+      <div class="fg">
+        <label class="fl">Serviços incluídos*</label>
+        <select class="fc" id="pac-add-servico" onchange="adicionarServicoPacote()"><option value="">Adicionar serviço...</option></select>
+        <div id="pac-servicos-lista" style="margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-pacote')">Cancelar</button><button class="btn btnp" onclick="salvarPacote()">Salvar Pacote</button></div>
+  </div>
+</div>
+
+<!-- Modal Vender Pacote pra Cliente -->
+<div class="mov" id="m-vender-pacote">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">💰 Vender Pacote</span><button class="mx" onclick="closeM('m-vender-pacote')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="vpac-pacote-id"/>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:14px" id="vpac-pacote-nome">—</div>
+      <div class="fg"><label class="fl">Cliente*</label>
+        <select class="fc" id="vpac-cliente"><option value="">Selecionar cliente...</option></select>
+      </div>
+      <div class="fg"><label class="fl">Valor pago (R$)</label><input type="number" class="fc" id="vpac-valor" step="0.01"/></div>
+      <div style="font-size:.7rem;color:var(--t3)">Pode ajustar o valor se der um desconto pontual — por padrão vem o preço cheio do pacote.</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-vender-pacote')">Cancelar</button><button class="btn btnp" onclick="salvarVendaPacote()">Confirmar Venda</button></div>
   </div>
 </div>
 
