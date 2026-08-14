@@ -2,6 +2,7 @@ const express  = require('express');
 const cors     = require('cors');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
+const crypto   = require('crypto');
 
 const app = express();
 app.use(cors());
@@ -160,7 +161,40 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.1.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.2.0' }));
+
+// ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
+function emailValido(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+}
+
+function gerarCodigoVerificacao() {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6 dígitos
+}
+
+function expiracaoCodigoVerificacao() {
+  return new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+}
+
+async function enviarCodigoVerificacao(email, nome, codigo) {
+  const RESEND_KEY = process.env.RESEND_API_KEY || '';
+  if (!RESEND_KEY) {
+    console.log('RESEND_API_KEY não configurado — código de verificação para ' + email + ': ' + codigo);
+    return;
+  }
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_KEY },
+      body: JSON.stringify({
+        from: 'Beleza Pro <noreply@belezaprooficial.com.br>',
+        to: [email],
+        subject: 'Seu código de verificação — Beleza Pro',
+        text: 'Olá ' + nome + '!\n\nSeu código de verificação é: ' + codigo + '\n\nEle expira em 15 minutos. Se você não pediu isso, pode ignorar este e-mail.'
+      })
+    });
+  } catch(e) { console.error('Erro ao enviar código de verificação:', e.message); }
+}
 
 // ═══════════════════════════════════════════════════
 // AUTH
@@ -172,6 +206,7 @@ app.post('/api/auth/register', async (req, res) => {
   if (!nome_salao || !nome || !email || !senha) {
     return res.status(422).json({ error: 'Preencha todos os campos obrigatórios' });
   }
+  if (!emailValido(email)) return res.status(422).json({ error: 'Informe um e-mail válido' });
   try {
     const { data: existe } = await supabase
       .from('usuarios').select('id').eq('email', email).single();
@@ -196,17 +231,26 @@ app.post('/api/auth/register', async (req, res) => {
       .select().single();
     if (salaoErr) throw salaoErr;
 
+    const codigoVerificacao = gerarCodigoVerificacao();
+
     const { data: usuario, error: userErr } = await supabase
       .from('usuarios')
-      .insert({ salao_id: salao.id, nome, email, senha_hash, perfil: 'admin' })
-      .select('id, nome, email, perfil, salao_id').single();
+      .insert({
+        salao_id: salao.id, nome, email, senha_hash, perfil: 'admin',
+        email_verificado: false, codigo_verificacao: codigoVerificacao,
+        codigo_verificacao_expira: expiracaoCodigoVerificacao()
+      })
+      .select('id, nome, email, perfil, salao_id, email_verificado').single();
     if (userErr) throw userErr;
 
     const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
 
-    // Notificação de novo cadastro
+    // Notificação de novo cadastro + código de verificação de e-mail
     notificarNovoCadastro(salao.nome, nome, email, telefone).catch(e =>
       console.log('Notificação falhou (não crítico):', e.message)
+    );
+    enviarCodigoVerificacao(email, nome, codigoVerificacao).catch(e =>
+      console.log('Envio de código falhou (não crítico):', e.message)
     );
 
     res.status(201).json({ token, usuario: { ...usuario, saloes: salao }, salao });
@@ -271,7 +315,7 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { data: usuario } = await supabase
       .from('usuarios')
-      .select('id, nome, email, senha_hash, perfil, ativo, salao_id, profissional_id, saloes(id, nome, slug, trial_ate)')
+      .select('id, nome, email, senha_hash, perfil, ativo, salao_id, profissional_id, email_verificado, saloes(id, nome, slug, trial_ate)')
       .eq('email', email).single();
     if (!usuario) return res.status(401).json({ error: 'Email ou senha incorretos' });
     if (!usuario.ativo) return res.status(403).json({ error: 'Conta desativada' });
@@ -285,7 +329,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { senha_hash, ...userSafe } = usuario;
     // Retorna permissões do usuário
     if (userSafe.perfil === 'admin') {
-      userSafe.permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config'];
+      userSafe.permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
     } else {
       // Busca permissões customizadas do banco
       try {
@@ -308,9 +352,52 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', auth, async (req, res) => {
   const { data } = await supabase
     .from('usuarios')
-    .select('id, nome, email, perfil, profissional_id, ultimo_login, saloes(id, nome, slug, trial_ate)')
+    .select('id, nome, email, perfil, profissional_id, email_verificado, ultimo_login, saloes(id, nome, slug, trial_ate)')
     .eq('id', req.user.id).single();
   res.json(data);
+});
+
+// Confirma o código de verificação enviado por e-mail
+app.post('/api/auth/verificar-email', async (req, res) => {
+  const { email, codigo } = req.body;
+  if (!email || !codigo) return res.status(422).json({ error: 'E-mail e código são obrigatórios' });
+  try {
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('id, email_verificado, codigo_verificacao, codigo_verificacao_expira')
+      .eq('email', email).single();
+    if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (usuario.email_verificado) return res.status(409).json({ error: 'Este e-mail já foi verificado' });
+    if (!usuario.codigo_verificacao || String(usuario.codigo_verificacao) !== String(codigo)) {
+      return res.status(422).json({ error: 'Código inválido' });
+    }
+    if (usuario.codigo_verificacao_expira && new Date(usuario.codigo_verificacao_expira) < new Date()) {
+      return res.status(422).json({ error: 'Código expirado. Solicite um novo.' });
+    }
+    await supabase.from('usuarios').update({
+      email_verificado: true, codigo_verificacao: null, codigo_verificacao_expira: null
+    }).eq('id', usuario.id);
+    res.json({ message: 'E-mail verificado com sucesso!' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Reenvia um novo código de verificação
+app.post('/api/auth/reenviar-codigo', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(422).json({ error: 'E-mail é obrigatório' });
+  try {
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('id, nome, email_verificado').eq('email', email).single();
+    if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (usuario.email_verificado) return res.status(409).json({ error: 'Este e-mail já foi verificado' });
+
+    const codigo = gerarCodigoVerificacao();
+    await supabase.from('usuarios').update({
+      codigo_verificacao: codigo, codigo_verificacao_expira: expiracaoCodigoVerificacao()
+    }).eq('id', usuario.id);
+
+    enviarCodigoVerificacao(email, usuario.nome, codigo).catch(() => {});
+    res.json({ message: 'Código reenviado! Confira sua caixa de entrada.' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════
@@ -471,6 +558,125 @@ app.delete('/api/servicos/:id', auth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════
+// PACOTES DE SERVIÇO (modelo Trinks)
+// ═══════════════════════════════════════════════════
+// Um "pacote" é um modelo (template) vendável: um conjunto de serviços com um
+// número de sessões cada, por um preço fechado. Quando o cliente compra um
+// pacote, cria-se uma instância (pacotes_clientes) com o saldo de sessões
+// disponível, que pode ser consumido em agendamentos futuros.
+
+app.get('/api/pacotes', auth, async (req, res) => {
+  const { data, error } = await supabase.from('pacotes')
+    .select('*').eq('salao_id', req.salao_id).eq('ativo', true).order('nome');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/pacotes', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode criar pacotes' });
+  const { nome, descricao, preco, validade_dias, servicos } = req.body;
+  if (!nome || !preco || !servicos || !servicos.length) {
+    return res.status(422).json({ error: 'Nome, preço e ao menos um serviço são obrigatórios' });
+  }
+  for (const s of servicos) {
+    if (!s.servico_id || !s.qtd_sessoes || s.qtd_sessoes < 1) {
+      return res.status(422).json({ error: 'Cada serviço do pacote precisa de servico_id e ao menos 1 sessão' });
+    }
+  }
+  try {
+    const { data, error } = await supabase.from('pacotes')
+      .insert({
+        salao_id: req.salao_id, nome, descricao: descricao || null, preco: Number(preco),
+        validade_dias: validade_dias ? parseInt(validade_dias) : null, servicos
+      }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/pacotes/:id', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode editar pacotes' });
+  const { nome, descricao, preco, validade_dias, servicos, ativo } = req.body;
+  const updates = {};
+  if (nome !== undefined) updates.nome = nome;
+  if (descricao !== undefined) updates.descricao = descricao;
+  if (preco !== undefined) updates.preco = Number(preco);
+  if (validade_dias !== undefined) updates.validade_dias = validade_dias ? parseInt(validade_dias) : null;
+  if (servicos !== undefined) updates.servicos = servicos;
+  if (ativo !== undefined) updates.ativo = ativo;
+  const { data, error } = await supabase.from('pacotes').update(updates)
+    .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
+  if (error || !data) return res.status(404).json({ error: 'Pacote não encontrado' });
+  res.json(data);
+});
+
+app.delete('/api/pacotes/:id', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode remover pacotes' });
+  await supabase.from('pacotes').update({ ativo: false }).eq('id', req.params.id).eq('salao_id', req.salao_id);
+  res.json({ message: 'Pacote desativado' });
+});
+
+// Vende uma instância de um pacote pra um cliente — cria o saldo de sessões
+// disponível e lança a entrada financeira do valor pago pelo pacote.
+async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago, dataCompra }) {
+  const { data: pacote } = await supabase.from('pacotes')
+    .select('*').eq('id', pacoteId).eq('salao_id', salaoId).eq('ativo', true).single();
+  if (!pacote) { const e = new Error('Pacote não encontrado'); e.status = 404; throw e; }
+
+  const dataCompraFinal = dataCompra || new Date().toISOString().split('T')[0];
+  let validade = null;
+  if (pacote.validade_dias) {
+    const [ano, mes, dia] = dataCompraFinal.split('-').map(Number);
+    validade = new Date(Date.UTC(ano, mes - 1, dia + pacote.validade_dias)).toISOString().split('T')[0];
+  }
+
+  const sessoes = (pacote.servicos || []).map(s => ({ servico_id: s.servico_id, qtd_total: s.qtd_sessoes, qtd_usada: 0 }));
+  const valorFinal = (valorPago !== undefined && valorPago !== null && valorPago !== '') ? Number(valorPago) : Number(pacote.preco);
+
+  const { data: pacoteCliente, error } = await supabase.from('pacotes_clientes')
+    .insert({
+      salao_id: salaoId, cliente_id: clienteId, pacote_id: pacote.id, nome_snapshot: pacote.nome,
+      data_compra: dataCompraFinal, valor_pago: valorFinal, validade, sessoes, status: 'ativo'
+    }).select().single();
+  if (error) throw error;
+
+  await supabase.from('lancamentos').insert({
+    salao_id: salaoId, tipo: 'entrada', categoria: 'Pacote',
+    descricao: 'Pacote: ' + pacote.nome, valor: valorFinal, data: dataCompraFinal, pago: true
+  });
+
+  return pacoteCliente;
+}
+
+app.post('/api/clientes/:id/pacotes', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode vender pacotes' });
+  const { pacote_id, valor_pago, data_compra } = req.body;
+  if (!pacote_id) return res.status(422).json({ error: 'pacote_id é obrigatório' });
+  try {
+    const { data: cliente } = await supabase.from('clientes')
+      .select('id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+    const pc = await venderPacoteParaCliente({
+      salaoId: req.salao_id, clienteId: req.params.id, pacoteId: pacote_id,
+      valorPago: valor_pago, dataCompra: data_compra
+    });
+    res.status(201).json(pc);
+  } catch(e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// Lista os pacotes comprados por um cliente, com o saldo de sessões de cada um
+app.get('/api/clientes/:id/pacotes', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('pacotes_clientes')
+      .select('*').eq('salao_id', req.salao_id).eq('cliente_id', req.params.id)
+      .order('data_compra', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════
 // CLIENTES
 // ═══════════════════════════════════════════════════
 app.get('/api/clientes', auth, async (req, res) => {
@@ -557,8 +763,109 @@ app.get('/api/agendamentos', auth, async (req, res) => {
   res.json(rows || []);
 });
 
+// ── AGENDAMENTO RECORRENTE ────────────────────────────
+// Soma um intervalo (semanal/quinzenal/mensal) a uma data "YYYY-MM-DD" e
+// retorna a próxima data no mesmo formato.
+function adicionarIntervaloRecorrencia(dataISO, frequencia) {
+  const [ano, mes, dia] = dataISO.split('-').map(Number);
+  if (frequencia === 'semanal')   return new Date(Date.UTC(ano, mes - 1, dia + 7)).toISOString().split('T')[0];
+  if (frequencia === 'quinzenal') return new Date(Date.UTC(ano, mes - 1, dia + 14)).toISOString().split('T')[0];
+  if (frequencia === 'mensal')    return new Date(Date.UTC(ano, mes, dia)).toISOString().split('T')[0];
+  throw new Error('Frequência de recorrência inválida');
+}
+
+// Gera a lista de datas (strings "YYYY-MM-DD") de uma recorrência, começando
+// na data base (inclusive) até a data final (inclusive), com um teto de
+// segurança de 52 ocorrências pra nunca gerar uma série absurdamente longa.
+function gerarDatasRecorrencia(dataInicialISO, frequencia, dataFimISO) {
+  const MAX_OCORRENCIAS = 52;
+  const datas = [dataInicialISO];
+  let atual = dataInicialISO;
+  while (datas.length < MAX_OCORRENCIAS) {
+    const proxima = adicionarIntervaloRecorrencia(atual, frequencia);
+    if (proxima > dataFimISO) break; // comparação lexicográfica funciona em "YYYY-MM-DD"
+    datas.push(proxima);
+    atual = proxima;
+  }
+  return datas;
+}
+
+// Cria UM agendamento (usado tanto pelo fluxo normal quanto por cada ocorrência
+// de uma recorrência). Faz checagem de conflito de horário e, se livre, insere
+// o agendamento + os serviços vinculados + o lançamento financeiro pendente.
+// Retorna { status: 'criado', agendamento } ou { status: 'conflito', data_hora }.
+async function criarAgendamentoUnico({
+  salaoId, clienteId, profissionalId, dataHora, servicosInfo,
+  profComissaoPct, observacoes, origem, recorrenciaId, pacotePorServico
+}) {
+  pacotePorServico = pacotePorServico || {}; // { [servico_id]: pacote_cliente_id } — serviços pagos via pacote
+
+  const duracao_total = servicosInfo.reduce((s, sv) => s + sv.duracao_min, 0);
+  // Só cobra agora os serviços que NÃO vieram de um pacote já pago antes
+  const valor_total = servicosInfo.reduce((s, sv) => s + (pacotePorServico[sv.id] ? 0 : Number(sv.preco)), 0);
+
+  const data_hora_final = /[+-]\d{2}:\d{2}$|Z$/.test(dataHora) ? dataHora : dataHora + '-03:00';
+  const dataParte = data_hora_final.split('T')[0];
+  const inicioDia = dataParte + 'T03:00:00+00:00';
+  const fimDia     = adicionarDia(dataParte) + 'T02:59:59+00:00';
+
+  const { data: existentes } = await supabase.from('agendamentos')
+    .select('id, data_hora, duracao_min')
+    .eq('salao_id', salaoId).eq('profissional_id', profissionalId)
+    .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+    .neq('status', 'cancelado');
+
+  const novoInicioMin = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
+  const novoFimMin    = novoInicioMin + duracao_total;
+
+  const conflito = (existentes || []).find(function(ag) {
+    var agInicio = utcParaMinutosBrasil(ag.data_hora);
+    var agFim = agInicio + (ag.duracao_min || 60);
+    return (novoInicioMin < agFim && novoFimMin > agInicio);
+  });
+
+  if (conflito) return { status: 'conflito', data_hora: data_hora_final };
+
+  const insertPayload = {
+    salao_id: salaoId, cliente_id: clienteId, profissional_id: profissionalId,
+    data_hora: data_hora_final, duracao_min: duracao_total, valor_total,
+    origem: origem || 'backoffice', observacoes
+  };
+  if (recorrenciaId) insertPayload.recorrencia_id = recorrenciaId;
+
+  const { data: ag, error } = await supabase.from('agendamentos')
+    .insert(insertPayload).select().single();
+  if (error) throw error;
+
+  // A comissão é calculada sobre o preço CHEIO do serviço — o profissional
+  // continua recebendo normalmente mesmo quando o cliente já pagou pelo
+  // pacote antes. Só a cobrança do cliente (lançamento) é que não se repete.
+  const linhas = servicosInfo.map(sv => {
+    const cpct = sv.comissao_pct ?? profComissaoPct ?? 40;
+    const pacoteClienteId = pacotePorServico[sv.id] || null;
+    return {
+      agendamento_id: ag.id, servico_id: sv.id, preco: sv.preco,
+      comissao_pct: cpct, comissao_valor: (Number(sv.preco) * cpct) / 100,
+      pago_via_pacote: !!pacoteClienteId, pacote_cliente_id: pacoteClienteId
+    };
+  });
+  if (linhas.length) await supabase.from('agendamento_servicos').insert(linhas);
+
+  // Só lança cobrança financeira se sobrou algo pra cobrar do cliente agora
+  if (valor_total > 0) {
+    await supabase.from('lancamentos').insert({
+      salao_id: salaoId, agendamento_id: ag.id, tipo: 'entrada',
+      categoria: 'Serviço', descricao: 'Agendamento #' + ag.id.slice(-6).toUpperCase(),
+      valor: valor_total, data: dataParte, pago: false
+    });
+  }
+
+  return { status: 'criado', agendamento: ag };
+}
+
 app.post('/api/agendamentos', auth, async (req, res) => {
-  const { cliente_id, profissional_id, data_hora, servicos, observacoes, origem } = req.body;
+  const { cliente_id, profissional_id, data_hora, servicos, observacoes, origem, recorrencia,
+          vender_pacote, pacotes_utilizados } = req.body;
   if (!cliente_id || !profissional_id || !data_hora || !servicos || !servicos.length) {
     return res.status(422).json({ error: 'Dados incompletos' });
   }
@@ -569,6 +876,27 @@ app.post('/api/agendamentos', auth, async (req, res) => {
     return res.status(403).json({ error: 'Você só pode criar agendamentos para sua própria agenda' });
   }
 
+  // Valida a recorrência, se enviada
+  const dataBaseISO = data_hora.split('T')[0];
+  const horaParte = data_hora.split('T')[1] || '09:00:00';
+  let datasRecorrencia = null;
+  if (recorrencia && recorrencia.ate) {
+    const frequenciasValidas = ['semanal', 'quinzenal', 'mensal'];
+    if (!frequenciasValidas.includes(recorrencia.frequencia)) {
+      return res.status(422).json({ error: 'Frequência de recorrência inválida (use semanal, quinzenal ou mensal)' });
+    }
+    if (recorrencia.ate < dataBaseISO) {
+      return res.status(422).json({ error: 'A data final da recorrência deve ser depois da data do primeiro agendamento' });
+    }
+    datasRecorrencia = gerarDatasRecorrencia(dataBaseISO, recorrencia.frequencia, recorrencia.ate);
+  }
+
+  // Pacotes (venda na hora e/ou consumo de sessão existente) só valem pra
+  // agendamento único — mantém a recorrência simples e previsível
+  if (datasRecorrencia && (vender_pacote || (pacotes_utilizados && pacotes_utilizados.length))) {
+    return res.status(422).json({ error: 'Pacotes não podem ser combinados com agendamento recorrente' });
+  }
+
   try {
     const { data: srvcs } = await supabase
       .from('servicos').select('id, preco, duracao_min, comissao_pct')
@@ -577,57 +905,91 @@ app.post('/api/agendamentos', auth, async (req, res) => {
     const { data: prof } = await supabase
       .from('profissionais').select('comissao_pct').eq('id', profissional_id).single();
 
-    const duracao_total = (srvcs || []).reduce((s, sv) => s + sv.duracao_min, 0);
-    const valor_total   = (srvcs || []).reduce((s, sv) => s + Number(sv.preco), 0);
+    // ── Sem recorrência: comportamento normal, um único agendamento ──
+    if (!datasRecorrencia) {
+      // Vende um pacote novo na hora, se pedido (modelo Trinks: oferecer o
+      // pacote enquanto agenda). Se falhar, aborta antes de criar o agendamento.
+      if (vender_pacote && vender_pacote.pacote_id) {
+        await venderPacoteParaCliente({
+          salaoId: req.salao_id, clienteId: cliente_id, pacoteId: vender_pacote.pacote_id,
+          valorPago: vender_pacote.valor_pago, dataCompra: dataBaseISO
+        });
+      }
 
-    // Corrige data_hora para ter fuso horário explícito (Brasil = UTC-3) se ainda não tiver
-    const data_hora_final = /[+-]\d{2}:\d{2}$|Z$/.test(data_hora) ? data_hora : data_hora + '-03:00';
+      // Valida e resolve o consumo de sessões de pacotes já existentes
+      const pacotePorServico = {};
+      const consumosParaAplicar = []; // aplicados só depois que o agendamento for criado com sucesso
+      if (pacotes_utilizados && pacotes_utilizados.length) {
+        for (const uso of pacotes_utilizados) {
+          if (!servicos.includes(uso.servico_id)) {
+            return res.status(422).json({ error: 'Serviço do pacote não faz parte dos serviços selecionados no agendamento' });
+          }
+          const { data: pc } = await supabase.from('pacotes_clientes')
+            .select('*').eq('id', uso.pacote_cliente_id).eq('salao_id', req.salao_id).eq('cliente_id', cliente_id).single();
+          if (!pc) return res.status(404).json({ error: 'Pacote do cliente não encontrado' });
+          if (pc.status !== 'ativo') return res.status(422).json({ error: 'Este pacote não está mais ativo' });
+          if (pc.validade && pc.validade < dataBaseISO) return res.status(422).json({ error: 'Este pacote está vencido' });
 
-    // Verifica conflito de horário para este profissional
-    const dataParte = data_hora_final.split('T')[0];
-    const inicioDia = dataParte + 'T03:00:00+00:00';
-    const fimDia     = adicionarDia(dataParte) + 'T02:59:59+00:00';
+          const sessoes = pc.sessoes || [];
+          const linha = sessoes.find(s => s.servico_id === uso.servico_id);
+          if (!linha || linha.qtd_usada >= linha.qtd_total) {
+            return res.status(422).json({ error: 'Este pacote não tem mais sessões disponíveis para o serviço selecionado' });
+          }
 
-    const { data: existentes } = await supabase.from('agendamentos')
-      .select('id, data_hora, duracao_min')
-      .eq('salao_id', req.salao_id).eq('profissional_id', profissional_id)
-      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
-      .neq('status', 'cancelado');
+          pacotePorServico[uso.servico_id] = pc.id;
+          consumosParaAplicar.push({ pacoteCliente: pc, servicoId: uso.servico_id });
+        }
+      }
 
-    const novoInicioMin = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
-    const novoFimMin    = novoInicioMin + duracao_total;
+      const resultado = await criarAgendamentoUnico({
+        salaoId: req.salao_id, clienteId: cliente_id, profissionalId: profissional_id,
+        dataHora: data_hora, servicosInfo: srvcs || [], profComissaoPct: prof?.comissao_pct,
+        observacoes, origem, pacotePorServico
+      });
+      if (resultado.status === 'conflito') {
+        return res.status(409).json({ error: 'Este profissional já tem um agendamento nesse horário. Escolha outro horário ou profissional.' });
+      }
 
-    const conflito = (existentes || []).find(function(ag) {
-      var agInicio = utcParaMinutosBrasil(ag.data_hora);
-      var agFim = agInicio + (ag.duracao_min || 60);
-      return (novoInicioMin < agFim && novoFimMin > agInicio);
-    });
+      // Agendamento criado com sucesso — agora sim debita as sessões usadas
+      for (const consumo of consumosParaAplicar) {
+        const sessoesAtualizadas = (consumo.pacoteCliente.sessoes || []).map(s =>
+          s.servico_id === consumo.servicoId ? { ...s, qtd_usada: s.qtd_usada + 1 } : s
+        );
+        const todasEsgotadas = sessoesAtualizadas.every(s => s.qtd_usada >= s.qtd_total);
+        await supabase.from('pacotes_clientes').update({
+          sessoes: sessoesAtualizadas,
+          status: todasEsgotadas ? 'finalizado' : 'ativo'
+        }).eq('id', consumo.pacoteCliente.id);
+      }
 
-    if (conflito) {
-      return res.status(409).json({ error: 'Este profissional já tem um agendamento nesse horário. Escolha outro horário ou profissional.' });
+      return res.status(201).json(resultado.agendamento);
     }
 
-    const { data: ag, error } = await supabase
-      .from('agendamentos')
-      .insert({ salao_id: req.salao_id, cliente_id, profissional_id, data_hora: data_hora_final,
-                duracao_min: duracao_total, valor_total, origem: origem || 'backoffice', observacoes })
-      .select().single();
-    if (error) throw error;
+    // ── Com recorrência: cria uma ocorrência por data, pulando conflitos ──
+    const recorrenciaId = crypto.randomUUID();
+    const criados = [];
+    const pulados = [];
+    for (const dataISO of datasRecorrencia) {
+      const dataHoraCompleta = dataISO + 'T' + horaParte;
+      const resultado = await criarAgendamentoUnico({
+        salaoId: req.salao_id, clienteId: cliente_id, profissionalId: profissional_id,
+        dataHora: dataHoraCompleta, servicosInfo: srvcs || [], profComissaoPct: prof?.comissao_pct,
+        observacoes, origem, recorrenciaId
+      });
+      if (resultado.status === 'criado') criados.push(resultado.agendamento);
+      else pulados.push(resultado.data_hora);
+    }
 
-    const linhas = (srvcs || []).map(sv => {
-      const cpct  = sv.comissao_pct ?? prof?.comissao_pct ?? 40;
-      return { agendamento_id: ag.id, servico_id: sv.id, preco: sv.preco,
-               comissao_pct: cpct, comissao_valor: (Number(sv.preco) * cpct) / 100 };
+    if (!criados.length) {
+      return res.status(409).json({ error: 'Nenhum agendamento pôde ser criado — todos os horários da recorrência já estão ocupados.' });
+    }
+
+    res.status(201).json({
+      recorrencia_id: recorrenciaId,
+      total_criados: criados.length,
+      total_pulados: pulados.length,
+      criados, pulados
     });
-    if (linhas.length) await supabase.from('agendamento_servicos').insert(linhas);
-
-    await supabase.from('lancamentos').insert({
-      salao_id: req.salao_id, agendamento_id: ag.id, tipo: 'entrada',
-      categoria: 'Serviço', descricao: 'Agendamento #' + ag.id.slice(-6).toUpperCase(),
-      valor: valor_total, data: dataParte, pago: false
-    });
-
-    res.status(201).json(ag);
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
@@ -1027,10 +1389,11 @@ app.post('/api/usuarios', auth, async (req, res) => {
   const { nome, cargo, email, senha, perfil, permissoes, profissional_id } = req.body;
   if (!nome || !email || !senha) return res.status(422).json({ error: 'Nome, email e senha obrigatórios' });
   if (String(senha).length < 6) return res.status(422).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+  if (!emailValido(email)) return res.status(422).json({ error: 'Informe um e-mail válido' });
 
   const perfil_final = perfil === 'admin' ? 'admin' : 'custom';
   const permissoes_final = perfil_final === 'admin'
-    ? ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','config']
+    ? ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config']
     : (permissoes || ['dashboard','agenda','clientes','estoque','comissoes']);
 
   try {
@@ -1047,13 +1410,17 @@ app.post('/api/usuarios', auth, async (req, res) => {
     }
 
     const senha_hash = await bcrypt.hash(senha, 12);
+    const codigoVerificacao = gerarCodigoVerificacao();
     const { data, error } = await supabase.from('usuarios')
       .insert({
         salao_id: req.salao_id, nome, email, senha_hash, perfil: perfil_final,
-        profissional_id: profissional_id_final
+        profissional_id: profissional_id_final, email_verificado: false,
+        codigo_verificacao: codigoVerificacao, codigo_verificacao_expira: expiracaoCodigoVerificacao()
       })
-      .select('id, nome, email, perfil, profissional_id').single();
+      .select('id, nome, email, perfil, profissional_id, email_verificado').single();
     if (error) throw error;
+
+    enviarCodigoVerificacao(email, nome, codigoVerificacao).catch(() => {});
 
     // Salva permissões customizadas
     try {
@@ -1070,7 +1437,7 @@ app.post('/api/usuarios', auth, async (req, res) => {
 app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   const { data } = await supabase.from('usuarios')
-    .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, profissionais(nome)')
+    .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado, profissionais(nome)')
     .eq('salao_id', req.salao_id).order('nome');
   res.json(data || []);
 });
