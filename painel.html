@@ -668,6 +668,7 @@ select.fc option{background:var(--bg2)}
           <div style="font-size:.7rem;color:var(--t3);margin-bottom:10px">A URL padrão já está configurada no sistema. Altere apenas se mudar o Railway.</div>
           <button class="btn btnp" onclick="saveApi()" style="margin-bottom:14px">Atualizar URL da API</button>
           <div style="padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.7rem;color:var(--t2)" id="api-st">Carregando...</div>
+          <div style="padding:10px;background:var(--bg);border-radius:var(--rs);font-size:.7rem;color:var(--t2);margin-top:8px" id="api-versao">Versão do backend: verificando...</div>
         </div>
 
         <div class="card">
@@ -2396,7 +2397,7 @@ function savePro() {
   if (!nome) { toast('Nome obrigatório','er'); return; }
   var btn = document.querySelector('#m-pro .btnp');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  var body = {nome:nome, especialidade:document.getElementById('pr-e').value, telefone:document.getElementById('pr-t').value, comissao_pct:parseFloat(document.getElementById('pr-c').value)||40, cor_agenda:COR_SEL};
+  var body = {nome:nome, especialidade:document.getElementById('pr-e').value, telefone:document.getElementById('pr-t').value, email:document.getElementById('pr-email').value.trim()||null, comissao_pct:parseFloat(document.getElementById('pr-c').value)||40, cor_agenda:COR_SEL};
   (DEMO ? Promise.resolve({nome:nome,especialidade:body.especialidade,comissao_pct:body.comissao_pct,cor_agenda:body.cor_agenda,total_servicos:0,faturado:0,id:'demo_'+Date.now()}) : apiFetch('/api/profissionais',{method:'POST',body:body}))
   .then(function(r){
     toast('Profissional cadastrado! ✅','ok');
@@ -2404,6 +2405,7 @@ function savePro() {
     document.getElementById('pr-n').value='';
     document.getElementById('pr-e').value='';
     document.getElementById('pr-t').value='';
+    document.getElementById('pr-email').value='';
     document.getElementById('pr-c').value='40';
     if (DEMO && r) { D.pros.push(r); PROS = D.pros; renderPros(PROS); } else { loadPros(); }
     fillSelects();
@@ -2538,6 +2540,18 @@ function updateApiStatus() {
   var el = document.getElementById('api-st'); if (!el) return;
   el.textContent = DEMO ? 'Modo demo — dados de exemplo' : '✅ Conectado em ' + API;
   if (document.getElementById('cfg-api')) document.getElementById('cfg-api').value = API || '';
+
+  // Mostra a versão real do backend que está no ar — a forma mais confiável
+  // de confirmar se o último deploy realmente subiu (em vez de adivinhar
+  // pelos sintomas).
+  var elVersao = document.getElementById('api-versao');
+  if (elVersao && API && !DEMO) {
+    fetch(API + '/health').then(function(r){ return r.json(); }).then(function(d){
+      elVersao.textContent = 'Versão do backend no ar: ' + (d.version || 'desconhecida');
+    }).catch(function(){
+      elVersao.textContent = 'Não foi possível verificar a versão do backend.';
+    });
+  }
 }
 function pickCor(el) {
   document.querySelectorAll('#cor-wrap div').forEach(function(e){ e.style.border='none'; });
@@ -2630,6 +2644,7 @@ function editPro(btn) {
   document.getElementById('epr-n').value  = p.nome || '';
   document.getElementById('epr-e').value  = p.especialidade || '';
   document.getElementById('epr-t').value  = p.telefone || '';
+  document.getElementById('epr-email').value = p.email || '';
   document.getElementById('epr-c').value  = p.comissao_pct || 40;
   document.getElementById('epr-cor').value = p.cor_agenda || '#6C63FF';
   // Marca cor selecionada
@@ -2649,6 +2664,7 @@ function updatePro() {
     nome: nome,
     especialidade: document.getElementById('epr-e').value,
     telefone: document.getElementById('epr-t').value,
+    email: document.getElementById('epr-email').value.trim() || null,
     comissao_pct: parseFloat(document.getElementById('epr-c').value)||40,
     cor_agenda: document.getElementById('epr-cor').value
   }})
@@ -2775,6 +2791,63 @@ var MODELOS = {
   }
 };
 
+// Sinônimos conhecidos pra cada campo — permite importar planilhas exportadas
+// de OUTROS sistemas (Trinks, etc.) sem precisar que o cabeçalho bata
+// exatamente com o nosso modelo. Quanto mais sinônimos, melhor o "encaixe
+// automático". Se você me mandar um modelo de outro app, eu adiciono os
+// nomes de coluna exatos que ele usa aqui.
+var SINONIMOS_CAMPOS = {
+  clientes: {
+    nome: ['nome','cliente','nome completo','nome do cliente','name','nome cliente'],
+    telefone: ['telefone','celular','whatsapp','fone','telefone whatsapp','contato','phone','telefone celular'],
+    email: ['email','e-mail','mail'],
+    data_nascimento: ['nascimento','data de nascimento','data_nascimento','aniversario','aniversário','birthday','dob','data nasc'],
+    observacoes: ['observacoes','observações','obs','notas','anotacoes','anotações','comentarios','comentários']
+  },
+  profissionais: {
+    nome: ['nome','profissional','funcionario','funcionário','colaborador','name','nome profissional'],
+    especialidade: ['especialidade','funcao','função','cargo','role','area','área','categoria profissional'],
+    telefone: ['telefone','celular','whatsapp','fone','contato','telefone whatsapp'],
+    comissao_pct: ['comissao','comissão','comissao_pct','porcentagem','percentual','comissao %','% comissao']
+  },
+  servicos: {
+    nome: ['nome','servico','serviço','service','nome servico','nome do servico'],
+    categoria: ['categoria','tipo','grupo','category','tipo de servico'],
+    duracao_min: ['duracao','duração','duracao_min','tempo','minutos','duration','tempo estimado','duracao minutos'],
+    preco: ['preco','preço','valor','price','valor unitario','valor do servico'],
+    comissao_pct: ['comissao','comissão','comissao_pct','porcentagem','percentual','comissao %','% comissao']
+  }
+};
+
+// Remove acentos, deixa minúsculo e troca _/- por espaço, pra comparar
+// cabeçalhos de formas bem diferentes de escrever a mesma coisa.
+function normalizarTextoColuna(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+    .replace(/[_\-]/g, ' ').replace(/\s+/g, ' ');
+}
+
+// Acha em qual índice do cabeçalho importado está um campo do nosso sistema,
+// testando a lista de sinônimos (primeiro por igualdade exata, depois por
+// "um contém o outro" como fallback mais flexível).
+function encontrarIndiceColuna(headerRow, sinonimos) {
+  var headersNorm = headerRow.map(normalizarTextoColuna);
+  for (var i = 0; i < sinonimos.length; i++) {
+    var alvo = normalizarTextoColuna(sinonimos[i]);
+    var idx = headersNorm.indexOf(alvo);
+    if (idx >= 0) return idx;
+  }
+  for (var j = 0; j < sinonimos.length; j++) {
+    var alvo2 = normalizarTextoColuna(sinonimos[j]);
+    if (!alvo2) continue;
+    for (var k = 0; k < headersNorm.length; k++) {
+      if (headersNorm[k] && (headersNorm[k].indexOf(alvo2) >= 0 || alvo2.indexOf(headersNorm[k]) >= 0)) return k;
+    }
+  }
+  return -1;
+}
+
 function openImport(tipo) {
   IMPORT_TIPO = tipo;
   IMPORT_DATA = [];
@@ -2785,6 +2858,7 @@ function openImport(tipo) {
   document.getElementById('import-result').style.display = 'none';
   document.getElementById('import-btn').style.display = 'none';
   document.getElementById('import-file').value = '';
+  if (document.getElementById('import-mapeamento')) document.getElementById('import-mapeamento').style.display = 'none';
   openM('m-import');
 }
 
@@ -2867,13 +2941,46 @@ function processFile(file) {
 function parseRows(rows) {
   if (!rows || rows.length < 2) { toast('Planilha vazia ou sem dados','er'); return; }
   var m = MODELOS[IMPORT_TIPO];
-  var data = rows.slice(1);
-  IMPORT_DATA = data.map(function(row) {
+  var sinonimosDoTipo = SINONIMOS_CAMPOS[IMPORT_TIPO] || {};
+  var headerRow = rows[0];
+  var dataRows = rows.slice(1);
+
+  // Descobre em qual coluna do arquivo importado está cada campo do nosso
+  // sistema — não depende mais da ordem das colunas bater com o nosso modelo
+  var mapaColunas = {}; // { nossoCampo: índice no arquivo importado (ou -1) }
+  m.colunas.forEach(function(campo) {
+    mapaColunas[campo] = encontrarIndiceColuna(headerRow, sinonimosDoTipo[campo] || [campo]);
+  });
+
+  IMPORT_DATA = dataRows.map(function(row) {
     var obj = {};
-    m.colunas.forEach(function(col, i) { obj[col] = String(row[i] || '').trim(); });
+    m.colunas.forEach(function(campo) {
+      var idx = mapaColunas[campo];
+      obj[campo] = idx >= 0 ? String(row[idx] || '').trim() : '';
+    });
     return obj;
   }).filter(function(obj) { return obj[m.colunas[0]]; });
-  if (!IMPORT_DATA.length) { toast('Nenhum dado valido encontrado','er'); return; }
+
+  if (!IMPORT_DATA.length) {
+    toast('Nenhum dado válido encontrado — confira se a primeira linha do arquivo é o cabeçalho com os nomes das colunas','er');
+    return;
+  }
+
+  // Mostra pro usuário como cada coluna foi identificada, pra ele conferir
+  // que o "encaixe automático" funcionou antes de importar de verdade
+  var elMapeamento = document.getElementById('import-mapeamento');
+  if (elMapeamento) {
+    var linhasMapeamento = m.colunas.map(function(campo, i) {
+      var idx = mapaColunas[campo];
+      var nomeColunaOriginal = idx >= 0 ? headerRow[idx] : null;
+      return nomeColunaOriginal
+        ? '<div style="font-size:.74rem;padding:2px 0">✅ <strong>' + m.labels[i] + '</strong> ← coluna "' + nomeColunaOriginal + '" do seu arquivo</div>'
+        : '<div style="font-size:.74rem;padding:2px 0;color:var(--warn)">⚠️ <strong>' + m.labels[i] + '</strong> — não encontrei essa coluna no arquivo, vai ficar em branco</div>';
+    });
+    elMapeamento.innerHTML = '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:6px">🔀 Como identifiquei as colunas do seu arquivo</div>' + linhasMapeamento.join('');
+    elMapeamento.style.display = 'block';
+  }
+
   var thead = document.getElementById('import-thead');
   var tbody = document.getElementById('import-tbody');
   thead.innerHTML = '<tr>' + m.labels.map(function(l) {
@@ -2990,8 +3097,12 @@ function loadUsuarios() {
           '</div>';
         return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + emailStatus + '</td><td>' + acoes + '</td></tr>';
       }).join('') + '</tbody></table>';
-  }).catch(function() {
-    el.innerHTML = '<div class="empty">Erro ao carregar usuários.</div>';
+  }).catch(function(e) {
+    // Mostra o erro REAL vindo do backend (não uma mensagem genérica) —
+    // isso é essencial pra diagnosticar problemas sem precisar adivinhar.
+    el.innerHTML = '<div class="empty" style="color:var(--er)">Erro ao carregar usuários: ' +
+      (e && e.message ? e.message : 'motivo desconhecido') +
+      '<br><button class="btn btns btnsm" style="margin-top:10px" onclick="loadUsuarios()">🔄 Tentar novamente</button></div>';
   });
 }
 
@@ -3765,6 +3876,9 @@ function dispensarBannerPWA() {
     <div class="mb">
       <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="pr-n" placeholder="Nome completo"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="pr-e" placeholder="Ex.: Cabeleireira"/></div></div>
       <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="pr-t" placeholder="(11) 99..."/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="pr-c" value="40"/></div></div>
+      <div class="fg"><label class="fl">E-mail (opcional)</label><input class="fc" type="email" id="pr-email" placeholder="para@enviar.notificacoes.com"/>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Se preenchido, ele recebe um e-mail automático a cada agendamento novo e quando a comissão dele é fechada.</div>
+      </div>
       <div class="fg"><label class="fl">Cor na agenda</label>
         <div style="display:flex;gap:8px;margin-top:5px" id="cor-wrap">
           <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer;border:3px solid #6C63FF" data-cor="#6C63FF" onclick="pickCor(this)"></div>
@@ -3812,6 +3926,9 @@ function dispensarBannerPWA() {
       <input type="hidden" id="epr-id"/>
       <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="epr-n"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="epr-e"/></div></div>
       <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
+      <div class="fg"><label class="fl">E-mail (opcional)</label><input class="fc" type="email" id="epr-email" placeholder="para@enviar.notificacoes.com"/>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Se preenchido, ele recebe um e-mail automático a cada agendamento novo e quando a comissão dele é fechada.</div>
+      </div>
       <div class="fg"><label class="fl">Cor na agenda</label>
         <div style="display:flex;gap:8px;margin-top:5px" id="epr-cor-wrap">
           <div style="width:26px;height:26px;border-radius:50%;background:#6C63FF;cursor:pointer" data-cor="#6C63FF" onclick="pickCorEdit(this,'epr-cor')"></div>
@@ -3892,6 +4009,11 @@ function dispensarBannerPWA() {
         <div style="font-size:.75rem;color:var(--t2);margin-top:4px">Suporta .xlsx, .xls e .csv</div>
       </div>
       <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(this)"/>
+
+      <!-- Mapeamento automático de colunas -->
+      <div id="import-mapeamento" style="display:none;margin-top:16px;background:var(--bg);border-radius:var(--rs);padding:12px">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:6px">🔀 Como identifiquei as colunas do seu arquivo</div>
+      </div>
 
       <!-- Preview -->
       <div id="import-preview" style="display:none;margin-top:16px">
