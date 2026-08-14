@@ -90,6 +90,27 @@ function profissionalFiltroDoUsuario(user) {
   return user.profissional_id || null;
 }
 
+// Middleware de permissão por módulo — bloqueia o acesso no SERVIDOR, não só
+// no frontend (esconder um botão não impede alguém de chamar a API direto).
+// Admin sempre passa; usuário custom só passa se o módulo estiver na lista
+// de permissões salva pra ele em usuario_permissoes.
+function requirePermissao(modulo) {
+  return async function(req, res, next) {
+    if (req.user.perfil === 'admin') return next();
+    try {
+      const { data: perm } = await supabase.from('usuario_permissoes')
+        .select('permissoes').eq('usuario_id', req.user.id).maybeSingle();
+      const permissoes = (perm && perm.permissoes) || [];
+      if (!permissoes.includes(modulo)) {
+        return res.status(403).json({ error: 'Você não tem permissão para acessar este módulo' });
+      }
+      next();
+    } catch(e) {
+      res.status(500).json({ error: 'Erro ao verificar permissões' });
+    }
+  };
+}
+
 // ── MAQUININHA DE CARTÃO ─────────────────────────────
 // Formas de pagamento que sofrem desconto de taxa de maquininha.
 // Precisa bater exatamente com os valores enviados pelo frontend (botões fpg-btn).
@@ -106,7 +127,15 @@ async function aplicarTaxaMaquininha(agendamentoId, salaoId, valorTotal, formaPg
 
   const { data: salao } = await supabase.from('saloes')
     .select('configuracoes').eq('id', salaoId).single();
-  const pct = Number(salao?.configuracoes?.taxa_maquininha_pct || 0);
+  const cfg = salao?.configuracoes || {};
+  const ehDebito = formaPgto === 'Cartão Débito';
+  // taxa_maquininha_pct (campo antigo) fica como fallback pra quem configurou
+  // antes de débito/crédito virarem campos separados.
+  const pct = Number(
+    ehDebito
+      ? (cfg.taxa_maquininha_debito_pct ?? cfg.taxa_maquininha_pct ?? 0)
+      : (cfg.taxa_maquininha_credito_pct ?? cfg.taxa_maquininha_pct ?? 0)
+  );
   if (!pct || pct <= 0) return { taxa_total: 0, taxa_profissional: 0 };
 
   const taxaTotal = Math.round(valorTotal * pct / 100 * 100) / 100;
@@ -180,20 +209,33 @@ async function enviarCodigoVerificacao(email, nome, codigo) {
   const RESEND_KEY = process.env.RESEND_API_KEY || '';
   if (!RESEND_KEY) {
     console.log('RESEND_API_KEY não configurado — código de verificação para ' + email + ': ' + codigo);
-    return;
+    return { enviado: false, motivo: 'RESEND_API_KEY não configurado' };
   }
+  // Usa o remetente de teste do Resend por padrão — funciona sem precisar
+  // verificar domínio. Defina RESEND_FROM_EMAIL no Railway pra usar um
+  // remetente com o seu próprio domínio verificado no Resend.
+  const remetente = process.env.RESEND_FROM_EMAIL || 'Beleza Pro <onboarding@resend.dev>';
   try {
-    await fetch('https://api.resend.com/emails', {
+    const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_KEY },
       body: JSON.stringify({
-        from: 'Beleza Pro <noreply@belezaprooficial.com.br>',
+        from: remetente,
         to: [email],
         subject: 'Seu código de verificação — Beleza Pro',
         text: 'Olá ' + nome + '!\n\nSeu código de verificação é: ' + codigo + '\n\nEle expira em 15 minutos. Se você não pediu isso, pode ignorar este e-mail.'
       })
     });
-  } catch(e) { console.error('Erro ao enviar código de verificação:', e.message); }
+    if (!r.ok) {
+      const detalhe = await r.text().catch(() => '');
+      console.error('Resend recusou o envio do código (status ' + r.status + '): ' + detalhe);
+      return { enviado: false, motivo: 'Resend retornou status ' + r.status };
+    }
+    return { enviado: true };
+  } catch(e) {
+    console.error('Erro ao enviar código de verificação:', e.message);
+    return { enviado: false, motivo: e.message };
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -279,17 +321,23 @@ Acesse o Railway para ver os dados completos.`;
   // Notificação por E-mail via Resend
   if (RESEND_KEY && EMAIL_ADMIN) {
     try {
-      await fetch('https://api.resend.com/emails', {
+      const remetente = process.env.RESEND_FROM_EMAIL || 'Beleza Pro <onboarding@resend.dev>';
+      const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_KEY },
         body: JSON.stringify({
-          from: 'Beleza Pro <noreply@belezaprooficial.com.br>',
+          from: remetente,
           to: [EMAIL_ADMIN],
           subject: '🎉 Novo cadastro: ' + nomeSalao,
           text: msg
         })
       });
-      console.log('Email de notificação enviado para', EMAIL_ADMIN);
+      if (!r.ok) {
+        const detalhe = await r.text().catch(() => '');
+        console.error('Resend recusou a notificação de cadastro (status ' + r.status + '): ' + detalhe);
+      } else {
+        console.log('Email de notificação enviado para', EMAIL_ADMIN);
+      }
     } catch(e) { console.error('Erro ao enviar email:', e.message); }
   }
 
@@ -400,6 +448,86 @@ app.post('/api/auth/reenviar-codigo', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── ESQUECI MINHA SENHA ────────────────────────────────
+function gerarTokenReset() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function expiracaoTokenReset() {
+  return new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+}
+
+async function enviarEmailRedefinicaoSenha(email, nome, token) {
+  const link = 'https://belezaprooficial.com.br/painel.html?redefinir_senha=' + token;
+  const RESEND_KEY = process.env.RESEND_API_KEY || '';
+  if (!RESEND_KEY) {
+    console.log('RESEND_API_KEY não configurado — link de redefinição de senha para ' + email + ': ' + link);
+    return { enviado: false, motivo: 'RESEND_API_KEY não configurado' };
+  }
+  const remetente = process.env.RESEND_FROM_EMAIL || 'Beleza Pro <onboarding@resend.dev>';
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_KEY },
+      body: JSON.stringify({
+        from: remetente,
+        to: [email],
+        subject: 'Redefinir sua senha — Beleza Pro',
+        text: 'Olá ' + nome + '!\n\nClique no link abaixo pra escolher uma nova senha (válido por 1 hora):\n\n' + link + '\n\nSe você não pediu isso, pode ignorar este e-mail — sua senha continua a mesma.'
+      })
+    });
+    if (!r.ok) {
+      const detalhe = await r.text().catch(() => '');
+      console.error('Resend recusou o envio do link de redefinição (status ' + r.status + '): ' + detalhe);
+      return { enviado: false, motivo: 'Resend retornou status ' + r.status };
+    }
+    return { enviado: true };
+  } catch(e) {
+    console.error('Erro ao enviar link de redefinição:', e.message);
+    return { enviado: false, motivo: e.message };
+  }
+}
+
+// Pede o link de redefinição. Por segurança, SEMPRE responde com sucesso —
+// não revela se o e-mail existe ou não no sistema.
+app.post('/api/auth/esqueci-senha', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(422).json({ error: 'E-mail é obrigatório' });
+  try {
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('id, nome, ativo').eq('email', email).single();
+    if (usuario && usuario.ativo) {
+      const token = gerarTokenReset();
+      await supabase.from('usuarios').update({
+        reset_senha_token: token, reset_senha_expira: expiracaoTokenReset()
+      }).eq('id', usuario.id);
+      enviarEmailRedefinicaoSenha(email, usuario.nome, token).catch(() => {});
+    }
+    res.json({ message: 'Se este e-mail estiver cadastrado, você vai receber um link pra redefinir a senha.' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Confirma o token e define a nova senha
+app.post('/api/auth/redefinir-senha', async (req, res) => {
+  const { token, senha } = req.body;
+  if (!token || !senha) return res.status(422).json({ error: 'Token e nova senha são obrigatórios' });
+  if (String(senha).length < 6) return res.status(422).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+  try {
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('id, reset_senha_token, reset_senha_expira')
+      .eq('reset_senha_token', token).maybeSingle();
+    if (!usuario) return res.status(422).json({ error: 'Link inválido ou já utilizado' });
+    if (usuario.reset_senha_expira && new Date(usuario.reset_senha_expira) < new Date()) {
+      return res.status(422).json({ error: 'Link expirado. Solicite um novo.' });
+    }
+    const senha_hash = await bcrypt.hash(senha, 12);
+    await supabase.from('usuarios').update({
+      senha_hash, reset_senha_token: null, reset_senha_expira: null
+    }).eq('id', usuario.id);
+    res.json({ message: 'Senha redefinida com sucesso!' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════
 // PROFISSIONAIS
 // ═══════════════════════════════════════════════════
@@ -411,7 +539,7 @@ app.get('/api/profissionais', auth, async (req, res) => {
   res.json(data || []);
 });
 
-app.post('/api/profissionais', auth, async (req, res) => {
+app.post('/api/profissionais', auth, requirePermissao('profissionais'), async (req, res) => {
   const { data, error } = await supabase
     .from('profissionais')
     .insert({ ...req.body, salao_id: req.salao_id })
@@ -420,7 +548,7 @@ app.post('/api/profissionais', auth, async (req, res) => {
   res.status(201).json(data);
 });
 
-app.put('/api/profissionais/:id', auth, async (req, res) => {
+app.put('/api/profissionais/:id', auth, requirePermissao('profissionais'), async (req, res) => {
   const { data, error } = await supabase
     .from('profissionais').update(req.body)
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
@@ -428,7 +556,7 @@ app.put('/api/profissionais/:id', auth, async (req, res) => {
   res.json(data);
 });
 
-app.delete('/api/profissionais/:id', auth, async (req, res) => {
+app.delete('/api/profissionais/:id', auth, requirePermissao('profissionais'), async (req, res) => {
   await supabase.from('profissionais').update({ ativo: false })
     .eq('id', req.params.id).eq('salao_id', req.salao_id);
   res.json({ message: 'Desativado' });
@@ -534,7 +662,7 @@ app.get('/api/servicos', auth, async (req, res) => {
   res.json(data || []);
 });
 
-app.post('/api/servicos', auth, async (req, res) => {
+app.post('/api/servicos', auth, requirePermissao('servicos'), async (req, res) => {
   const { data, error } = await supabase
     .from('servicos')
     .insert({ ...req.body, salao_id: req.salao_id })
@@ -543,7 +671,7 @@ app.post('/api/servicos', auth, async (req, res) => {
   res.status(201).json(data);
 });
 
-app.put('/api/servicos/:id', auth, async (req, res) => {
+app.put('/api/servicos/:id', auth, requirePermissao('servicos'), async (req, res) => {
   const { data, error } = await supabase
     .from('servicos').update(req.body)
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
@@ -551,7 +679,7 @@ app.put('/api/servicos/:id', auth, async (req, res) => {
   res.json(data);
 });
 
-app.delete('/api/servicos/:id', auth, async (req, res) => {
+app.delete('/api/servicos/:id', auth, requirePermissao('servicos'), async (req, res) => {
   await supabase.from('servicos').update({ ativo: false })
     .eq('id', req.params.id).eq('salao_id', req.salao_id);
   res.json({ message: 'Desativado' });
@@ -618,7 +746,7 @@ app.delete('/api/pacotes/:id', auth, async (req, res) => {
 
 // Vende uma instância de um pacote pra um cliente — cria o saldo de sessões
 // disponível e lança a entrada financeira do valor pago pelo pacote.
-async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago, dataCompra }) {
+async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago, dataCompra, pagoAgora }) {
   const { data: pacote } = await supabase.from('pacotes')
     .select('*').eq('id', pacoteId).eq('salao_id', salaoId).eq('ativo', true).single();
   if (!pacote) { const e = new Error('Pacote não encontrado'); e.status = 404; throw e; }
@@ -632,25 +760,46 @@ async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago
 
   const sessoes = (pacote.servicos || []).map(s => ({ servico_id: s.servico_id, qtd_total: s.qtd_sessoes, qtd_usada: 0 }));
   const valorFinal = (valorPago !== undefined && valorPago !== null && valorPago !== '') ? Number(valorPago) : Number(pacote.preco);
+  // Por padrão o pacote já entra como pago; se pagoAgora=false, fica marcado
+  // como "a receber" (opção de pagar depois).
+  const pago = (pagoAgora === undefined || pagoAgora === null) ? true : !!pagoAgora;
+
+  const { data: lancamento } = await supabase.from('lancamentos').insert({
+    salao_id: salaoId, tipo: 'entrada', categoria: 'Pacote',
+    descricao: 'Pacote: ' + pacote.nome, valor: valorFinal, data: dataCompraFinal, pago
+  }).select().single();
 
   const { data: pacoteCliente, error } = await supabase.from('pacotes_clientes')
     .insert({
       salao_id: salaoId, cliente_id: clienteId, pacote_id: pacote.id, nome_snapshot: pacote.nome,
-      data_compra: dataCompraFinal, valor_pago: valorFinal, validade, sessoes, status: 'ativo'
+      data_compra: dataCompraFinal, valor_pago: valorFinal, validade, sessoes, status: 'ativo',
+      pago, lancamento_id: lancamento ? lancamento.id : null
     }).select().single();
   if (error) throw error;
-
-  await supabase.from('lancamentos').insert({
-    salao_id: salaoId, tipo: 'entrada', categoria: 'Pacote',
-    descricao: 'Pacote: ' + pacote.nome, valor: valorFinal, data: dataCompraFinal, pago: true
-  });
 
   return pacoteCliente;
 }
 
+// Marca um pacote vendido "pra pagar depois" como pago (quita o lançamento junto)
+app.patch('/api/pacotes-clientes/:id/pagar', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode confirmar pagamento de pacotes' });
+  try {
+    const { data: pc } = await supabase.from('pacotes_clientes')
+      .select('id, pago, lancamento_id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!pc) return res.status(404).json({ error: 'Pacote do cliente não encontrado' });
+    if (pc.pago) return res.status(409).json({ error: 'Este pacote já está marcado como pago' });
+
+    await supabase.from('pacotes_clientes').update({ pago: true }).eq('id', req.params.id);
+    if (pc.lancamento_id) {
+      await supabase.from('lancamentos').update({ pago: true }).eq('id', pc.lancamento_id);
+    }
+    res.json({ message: 'Pacote marcado como pago!' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/clientes/:id/pacotes', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode vender pacotes' });
-  const { pacote_id, valor_pago, data_compra } = req.body;
+  const { pacote_id, valor_pago, data_compra, pago } = req.body;
   if (!pacote_id) return res.status(422).json({ error: 'pacote_id é obrigatório' });
   try {
     const { data: cliente } = await supabase.from('clientes')
@@ -659,7 +808,7 @@ app.post('/api/clientes/:id/pacotes', auth, async (req, res) => {
 
     const pc = await venderPacoteParaCliente({
       salaoId: req.salao_id, clienteId: req.params.id, pacoteId: pacote_id,
-      valorPago: valor_pago, dataCompra: data_compra
+      valorPago: valor_pago, dataCompra: data_compra, pagoAgora: pago
     });
     res.status(201).json(pc);
   } catch(e) { res.status(e.status || 500).json({ error: e.message }); }
@@ -912,7 +1061,7 @@ app.post('/api/agendamentos', auth, async (req, res) => {
       if (vender_pacote && vender_pacote.pacote_id) {
         await venderPacoteParaCliente({
           salaoId: req.salao_id, clienteId: cliente_id, pacoteId: vender_pacote.pacote_id,
-          valorPago: vender_pacote.valor_pago, dataCompra: dataBaseISO
+          valorPago: vender_pacote.valor_pago, dataCompra: dataBaseISO, pagoAgora: vender_pacote.pago
         });
       }
 
@@ -1148,7 +1297,7 @@ app.get('/api/dashboard/top-servicos', auth, async (req, res) => {
 // ═══════════════════════════════════════════════════
 // FINANCEIRO
 // ═══════════════════════════════════════════════════
-app.get('/api/financeiro/resumo', auth, async (req, res) => {
+app.get('/api/financeiro/resumo', auth, requirePermissao('financeiro'), async (req, res) => {
   const hoje = new Date();
   const y = hoje.getFullYear(), m = hoje.getMonth() + 1;
   const inicio = `${y}-${String(m).padStart(2,'0')}-01`;
@@ -1161,7 +1310,7 @@ app.get('/api/financeiro/resumo', auth, async (req, res) => {
   res.json({ receita, despesa, lucro: receita - despesa, apagar });
 });
 
-app.get('/api/financeiro/lancamentos', auth, async (req, res) => {
+app.get('/api/financeiro/lancamentos', auth, requirePermissao('financeiro'), async (req, res) => {
   const { tipo, limit = 50, page = 1 } = req.query;
   const offset = (page - 1) * limit;
   let q = supabase.from('lancamentos').select('*', { count: 'exact' })
@@ -1173,7 +1322,7 @@ app.get('/api/financeiro/lancamentos', auth, async (req, res) => {
   res.json({ data: data || [], total: count });
 });
 
-app.post('/api/financeiro/lancamentos', auth, async (req, res) => {
+app.post('/api/financeiro/lancamentos', auth, requirePermissao('financeiro'), async (req, res) => {
   const { data, error } = await supabase
     .from('lancamentos').insert({ ...req.body, salao_id: req.salao_id }).select().single();
   if (error) return res.status(500).json({ error: error.message });
@@ -1181,7 +1330,7 @@ app.post('/api/financeiro/lancamentos', auth, async (req, res) => {
 });
 
 // Marca um lançamento como pago ou não pago
-app.patch('/api/financeiro/lancamentos/:id', auth, async (req, res) => {
+app.patch('/api/financeiro/lancamentos/:id', auth, requirePermissao('financeiro'), async (req, res) => {
   const { pago, forma_pgto } = req.body;
   const updates = {};
   if (typeof pago === 'boolean') updates.pago = pago;
@@ -1197,7 +1346,7 @@ app.patch('/api/financeiro/lancamentos/:id', auth, async (req, res) => {
 // ═══════════════════════════════════════════════════
 // ESTOQUE
 // ═══════════════════════════════════════════════════
-app.get('/api/estoque', auth, async (req, res) => {
+app.get('/api/estoque', auth, requirePermissao('estoque'), async (req, res) => {
   const { q } = req.query;
   let query = supabase.from('produtos').select('*')
     .eq('salao_id', req.salao_id).eq('ativo', true).order('nome');
@@ -1207,21 +1356,21 @@ app.get('/api/estoque', auth, async (req, res) => {
   res.json(data || []);
 });
 
-app.get('/api/estoque/alertas', auth, async (req, res) => {
+app.get('/api/estoque/alertas', auth, requirePermissao('estoque'), async (req, res) => {
   const { data } = await supabase.from('produtos').select('id, nome, qtd_atual, qtd_minima, categoria')
     .eq('salao_id', req.salao_id).eq('ativo', true);
   const alertas = (data || []).filter(p => Number(p.qtd_atual) < Number(p.qtd_minima));
   res.json(alertas);
 });
 
-app.post('/api/estoque', auth, async (req, res) => {
+app.post('/api/estoque', auth, requirePermissao('estoque'), async (req, res) => {
   const { data, error } = await supabase
     .from('produtos').insert({ ...req.body, salao_id: req.salao_id }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
 });
 
-app.put('/api/estoque/:id', auth, async (req, res) => {
+app.put('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, res) => {
   const { data, error } = await supabase.from('produtos').update(req.body)
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
   if (error || !data) return res.status(404).json({ error: 'Não encontrado' });
@@ -1229,7 +1378,7 @@ app.put('/api/estoque/:id', auth, async (req, res) => {
 });
 
 // Movimentar estoque
-app.post('/api/estoque/:id/movimentar', auth, async (req, res) => {
+app.post('/api/estoque/:id/movimentar', auth, requirePermissao('estoque'), async (req, res) => {
   const { tipo, quantidade, motivo } = req.body;
   const { data: prod } = await supabase.from('produtos')
     .select('qtd_atual, nome').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
@@ -1250,7 +1399,7 @@ app.post('/api/estoque/:id/movimentar', auth, async (req, res) => {
 // ═══════════════════════════════════════════════════
 // COMISSÕES
 // ═══════════════════════════════════════════════════
-app.get('/api/comissoes', auth, async (req, res) => {
+app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) => {
   let { data: profissionais } = await supabase.from('profissionais')
     .select('id, nome, comissao_pct, cor_agenda').eq('salao_id', req.salao_id).eq('ativo', true);
   if (!profissionais) return res.json([]);
@@ -1280,9 +1429,22 @@ app.get('/api/comissoes', auth, async (req, res) => {
       .eq('salao_id', req.salao_id)
       .eq('profissional_id', p.id).eq('periodo_inicio', ini).maybeSingle();
 
+    // Soma as parcelas de compras parceladas ainda pendentes desse profissional
+    // (ex: produto que ele comprou parcelado) — pra ficar visível na hora de
+    // fechar a comissão que existe um desconto a combinar.
+    const { data: comprasDoProfissional } = await supabase.from('compras_profissional')
+      .select('parcelas_compra_profissional(valor, status)')
+      .eq('salao_id', req.salao_id).eq('profissional_id', p.id);
+    const compras_pendentes_total = (comprasDoProfissional || []).reduce((soma, compra) => {
+      const pendentesDaCompra = (compra.parcelas_compra_profissional || [])
+        .filter(parcela => parcela.status === 'pendente')
+        .reduce((s, parcela) => s + Number(parcela.valor || 0), 0);
+      return soma + pendentesDaCompra;
+    }, 0);
+
     // Se já está pago, mostra zerado (já foi quitado, não soma de novo)
     if (fechamento && fechamento.status === 'pago') {
-      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, fechamento };
+      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, fechamento, compras_pendentes_total };
     }
 
     // Senão, calcula normalmente a partir dos agendamentos concluídos
@@ -1294,17 +1456,27 @@ app.get('/api/comissoes', auth, async (req, res) => {
       .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
     const total_bruto    = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
     const total_comissao = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
-    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao, fechamento };
+    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao, fechamento, compras_pendentes_total };
   }));
   res.json(resultado);
 });
 
+// Verifica se o usuário pode fechar/reabrir comissões — admin sempre pode;
+// usuário custom só pode se tiver a permissão extra 'fechar_comissao' marcada
+// (é uma ação sensível de dinheiro, separada da simples permissão de ver 'comissoes').
+async function podeFecharComissao(user) {
+  if (user.perfil === 'admin') return true;
+  const { data: perm } = await supabase.from('usuario_permissoes')
+    .select('permissoes').eq('usuario_id', user.id).maybeSingle();
+  const permissoes = (perm && perm.permissoes) || [];
+  return permissoes.includes('fechar_comissao');
+}
+
 app.post('/api/comissoes/fechar', auth, async (req, res) => {
   const { profissional_id, periodo_inicio, periodo_fim } = req.body;
 
-  // Funcionário vinculado não pode fechar comissão de outro profissional (nem a própria)
-  if (req.user.perfil !== 'admin') {
-    return res.status(403).json({ error: 'Apenas o administrador pode fechar comissões' });
+  if (!(await podeFecharComissao(req.user))) {
+    return res.status(403).json({ error: 'Você não tem permissão para fechar comissões' });
   }
 
   const now = new Date();
@@ -1366,8 +1538,8 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 
 // Reabre um fechamento de comissão pago por engano (volta a calcular normalmente)
 app.delete('/api/comissoes/fechamento/:id', auth, async (req, res) => {
-  if (req.user.perfil !== 'admin') {
-    return res.status(403).json({ error: 'Apenas o administrador pode reabrir fechamentos' });
+  if (!(await podeFecharComissao(req.user))) {
+    return res.status(403).json({ error: 'Você não tem permissão para reabrir fechamentos de comissão' });
   }
   try {
     const { error } = await supabase.from('fechamentos_comissao')
@@ -1437,9 +1609,16 @@ app.post('/api/usuarios', auth, async (req, res) => {
 app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   const { data } = await supabase.from('usuarios')
-    .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado, profissionais(nome)')
+    .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado, profissionais(nome), usuario_permissoes(permissoes)')
     .eq('salao_id', req.salao_id).order('nome');
-  res.json(data || []);
+
+  const TODAS_PERMISSOES_ADMIN = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
+  const comPermissoes = (data || []).map(u => {
+    const permissoesSalvas = (u.usuario_permissoes && u.usuario_permissoes.permissoes) || null;
+    const { usuario_permissoes, ...resto } = u;
+    return { ...resto, permissoes: u.perfil === 'admin' ? TODAS_PERMISSOES_ADMIN : (permissoesSalvas || []) };
+  });
+  res.json(comPermissoes);
 });
 
 // Editar permissões (e vínculo com profissional) do usuário
@@ -1483,11 +1662,9 @@ app.delete('/api/usuarios/:id', auth, async (req, res) => {
   res.json({ message: 'Usuário desativado' });
 });
 
-// Proteger rotas financeiras para recepcionista
-app.use(['/api/financeiro', '/api/profissionais', '/api/servicos'], function(req, res, next) {
-  if (req.method !== 'GET') return next(); // só bloqueia escrita
-  next();
-});
+// (proteção real de financeiro/estoque/profissionais/serviços já é feita
+// rota a rota via requirePermissao(), acima)
+
 
 app.get('/api/saloes/meu', auth, async (req, res) => {
   const { data, error } = await supabase.from('saloes')
