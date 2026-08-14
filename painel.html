@@ -573,7 +573,13 @@ select.fc option{background:var(--bg2)}
         <div class="kc c4"><div class="ki c4">⏳</div><div><div class="kv" id="fa">—</div><div class="kl">A receber</div></div></div>
       </div>
       <div class="card" style="margin-bottom:14px">
-        <div class="crow"><span class="ch">Faturamento 2026</span><button class="btn btnp btnsm" onclick="openM('m-lan')">+ Lançamento</button></div>
+        <div class="crow"><span class="ch">Faturamento 2026</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btns btnsm" onclick="openImport('vendas')" id="btn-import-vendas">📥 Importar Vendas</button>
+            <button class="btn btns btnsm" onclick="openImport('despesas')" id="btn-import-despesas">📥 Importar Despesas</button>
+            <button class="btn btnp btnsm" onclick="openM('m-lan')">+ Lançamento</button>
+          </div>
+        </div>
         <div class="bc" id="fin-bc" style="height:140px"></div>
       </div>
       <div class="card">
@@ -588,6 +594,7 @@ select.fc option{background:var(--bg2)}
     <div class="page" id="page-estoque">
       <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
         <input class="fc" style="max-width:240px" placeholder="🔍 Buscar produto..." oninput="deb(()=>loadEst(this.value),400)()"/>
+        <button class="btn btns" onclick="openImport('produtos')" id="btn-import-produtos">📥 Importar</button>
         <button class="btn btnp" style="margin-left:auto" onclick="openM('m-prod')">+ Novo Produto</button>
       </div>
       <div class="card">
@@ -639,7 +646,8 @@ select.fc option{background:var(--bg2)}
 
     <!-- PACOTES -->
     <div class="page" id="page-pacotes">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+      <div style="display:flex;justify-content:flex-end;gap:9px;margin-bottom:14px">
+        <button class="btn btns" onclick="openImport('pacotes')" id="btn-import-pacotes">📥 Importar</button>
         <button class="btn btnp" onclick="abrirNovoPacote()">+ Novo Pacote</button>
       </div>
       <div id="pac-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">
@@ -661,7 +669,7 @@ select.fc option{background:var(--bg2)}
           <label class="fl">Endereço</label><input class="fc fg" id="cfg-end"/>
           <button class="btn btnp" onclick="saveConfig()">Salvar Alterações</button>
         </div>
-        <div class="card">
+        <div class="card" id="card-api-integracao">
           <div class="ct">API & Integração</div>
           <label class="fl">URL da API Backend (Railway)</label>
           <input class="fc fg" type="url" id="cfg-api" placeholder="https://sua-api.up.railway.app"/>
@@ -1116,6 +1124,7 @@ function loadAll() {
   loadCom(); loadPros(); loadSvcs(); loadPacotes();
   renderCal(); renderDashChart();
   fillSelects();
+  carregarHorarioFuncionamento(); // busca cedo o horário de funcionamento (usado no filtro de horários livres do Novo Agendamento)
 }
 
 // ── ATUALIZAÇÃO AUTOMÁTICA ──────────────────────────────
@@ -1419,6 +1428,8 @@ function renderCal() {
 
 // ── AGENDA ──────────────────────────────────────────────
 var AGENDA_MODO = 'grade'; // 'grade' ou 'lista'
+var CFG_HORARIO_ABRE = '08:00';  // preenchido de verdade por carregarHorarioFuncionamento()
+var CFG_HORARIO_FECHA = '19:00';
 var AGENDA_ULTIMA_LISTA = [];
 var AGENDA_ULTIMA_AGRUPADA = false;
 
@@ -2057,17 +2068,23 @@ function renderPacotes(list) {
       var svc = SVCS.find(function(sv){ return sv.id === s.servico_id; });
       return (svc ? svc.nome : 'Serviço') + ' × ' + s.qtd_sessoes;
     }).join(', ');
+    var avisoIncompleto = p.precisa_configurar
+      ? '<div style="font-size:.68rem;color:var(--warn);margin-top:2px">⚠️ Sem serviços configurados</div>'
+      : '';
     return '<div class="pro-card">' +
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">' +
       '<div class="pro-av" style="background:var(--ac)">🎁</div>' +
-      '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + servicosTxt + '</div></div>' +
+      '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + (servicosTxt || 'Nenhum serviço ainda') + '</div>' + avisoIncompleto + '</div>' +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs);margin-bottom:11px">' +
       '<div><div style="font-size:1rem;font-weight:800;color:var(--ac)">' + brl(p.preco) + '</div><div style="font-size:.62rem;color:var(--t3)">Preço</div></div>' +
       '<div><div style="font-size:1rem;font-weight:800">' + (p.validade_dias ? p.validade_dias + ' dias' : 'Sem validade') + '</div><div style="font-size:.62rem;color:var(--t3)">Validade</div></div>' +
       '</div>' +
       '<div style="display:flex;gap:7px">' +
-      '<button class="btn btnp btnsm" style="flex:1" onclick="abrirVenderPacote(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.preco + ')">💰 Vender</button>' +
+      (p.precisa_configurar
+        ? '<button class="btn btnp btnsm" style="flex:1" onclick="abrirEditarPacote(\'' + p.id + '\')">⚙️ Configurar serviços</button>'
+        : '<button class="btn btnp btnsm" style="flex:1" onclick="abrirVenderPacote(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.preco + ')">💰 Vender</button>') +
+      '<button class="btnic btn btnsm" onclick="abrirEditarPacote(\'' + p.id + '\')" title="Editar">✏️</button>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="desativarPacote(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')" title="Desativar">🗑</button>' +
       '</div></div>';
   }).join('');
@@ -2076,10 +2093,31 @@ function renderPacotes(list) {
 var PAC_SERVICOS_SELECIONADOS = []; // [{servico_id, qtd_sessoes}]
 
 function abrirNovoPacote() {
+  document.getElementById('pac-edit-id').value = '';
+  document.getElementById('pac-modal-titulo').textContent = '🎁 Novo Pacote';
   document.getElementById('pac-nome').value = '';
   document.getElementById('pac-preco').value = '';
   document.getElementById('pac-validade').value = '';
   PAC_SERVICOS_SELECIONADOS = [];
+  renderPacServicosSelecionados();
+  var sel = document.getElementById('pac-add-servico');
+  sel.innerHTML = '<option value="">Adicionar serviço...</option>' +
+    SVCS.map(function(s){ return '<option value="' + s.id + '">' + s.nome + '</option>'; }).join('');
+  openM('m-pacote');
+}
+
+// Reaproveita o mesmo modal de "Novo Pacote" pra editar — usado tanto pra
+// ajustes normais quanto pra completar pacotes que vieram de uma importação
+// sem o detalhamento de serviços.
+function abrirEditarPacote(id) {
+  var p = PACOTES_CACHE.find(function(pp){ return pp.id === id; });
+  if (!p) { toast('Pacote não encontrado','er'); return; }
+  document.getElementById('pac-edit-id').value = p.id;
+  document.getElementById('pac-modal-titulo').textContent = '🎁 Editar Pacote';
+  document.getElementById('pac-nome').value = p.nome;
+  document.getElementById('pac-preco').value = p.preco;
+  document.getElementById('pac-validade').value = p.validade_dias || '';
+  PAC_SERVICOS_SELECIONADOS = (p.servicos || []).map(function(s){ return { servico_id: s.servico_id, qtd_sessoes: s.qtd_sessoes }; });
   renderPacServicosSelecionados();
   var sel = document.getElementById('pac-add-servico');
   sel.innerHTML = '<option value="">Adicionar serviço...</option>' +
@@ -2124,19 +2162,24 @@ function renderPacServicosSelecionados() {
 }
 
 function salvarPacote() {
+  var editId = document.getElementById('pac-edit-id').value;
   var nome = document.getElementById('pac-nome').value.trim();
   var preco = parseFloat(document.getElementById('pac-preco').value);
   var validade = document.getElementById('pac-validade').value;
   if (!nome) { toast('Nome do pacote é obrigatório','er'); return; }
   if (!preco || preco <= 0) { toast('Informe um preço válido','er'); return; }
-  if (!PAC_SERVICOS_SELECIONADOS.length) { toast('Adicione pelo menos um serviço ao pacote','er'); return; }
+  if (!PAC_SERVICOS_SELECIONADOS.length) {
+    if (!confirm('Você não adicionou nenhum serviço a este pacote ainda. Pode salvar assim e completar depois — continuar mesmo assim?')) return;
+  }
 
   var btn = document.querySelector('#m-pacote .btnp');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  apiFetch('/api/pacotes', { method: 'POST', body: {
-    nome: nome, preco: preco, validade_dias: validade ? parseInt(validade) : null, servicos: PAC_SERVICOS_SELECIONADOS
-  }})
-  .then(function(){ toast('Pacote criado! ✅','ok'); closeM('m-pacote'); loadPacotes(); })
+  var body = { nome: nome, preco: preco, validade_dias: validade ? parseInt(validade) : null, servicos: PAC_SERVICOS_SELECIONADOS };
+  var chamada = editId
+    ? apiFetch('/api/pacotes/' + editId, { method: 'PUT', body: body })
+    : apiFetch('/api/pacotes', { method: 'POST', body: body });
+  chamada
+  .then(function(){ toast(editId ? 'Pacote atualizado! ✅' : 'Pacote criado! ✅','ok'); closeM('m-pacote'); loadPacotes(); })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Pacote'; });
 }
@@ -2203,7 +2246,7 @@ function fillSelects() {
 
     var sw = document.getElementById('ag-svcs');
     if (sw) sw.innerHTML = svcs.map(function(s){
-      return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');atualizarPacotesDisponiveis()">' + s.nome + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
+      return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');onSelecaoAgendamentoMudou()">' + s.nome + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
     }).join('');
   });
 }
@@ -2224,11 +2267,12 @@ function abrirNovoAgendamento() {
   var buscaServico = document.getElementById('ag-svc-busca');
   if (buscaServico) { buscaServico.value = ''; filtrarServicosAgendamento(''); }
   openM('m-ag');
-  // Sempre recalcula as sessões de pacote disponíveis ao abrir o modal —
-  // não depende só do evento onchange do cliente/serviço, porque se o
-  // cliente já estava selecionado de uma vez anterior (valor não muda),
-  // o onchange não dispara e a seção ficaria vazia mesmo tendo sessão sobrando.
+  // Sempre recalcula as sessões de pacote disponíveis E os horários livres ao
+  // abrir o modal — não depende só do evento onchange do cliente/serviço,
+  // porque se algo já estava selecionado de uma vez anterior (valor não
+  // muda), o onchange não dispara e a seção ficaria desatualizada.
   atualizarPacotesDisponiveis();
+  atualizarHorariosDisponiveis();
 }
 
 // Filtra os "pills" de serviço já renderizados pelo texto digitado, sem
@@ -2254,6 +2298,103 @@ function toggleVenderPacoteAgendamento() {
 
 // Busca os pacotes ativos do cliente selecionado e mostra, pra cada serviço
 // já escolhido no agendamento, se há sessão disponível pra usar em vez de cobrar de novo.
+// Chamado toda vez que profissional, data ou serviços selecionados mudam no
+// modal de Novo Agendamento — atualiza tanto a disponibilidade de pacotes
+// quanto os horários livres (que dependem da duração total dos serviços
+// escolhidos e dos agendamentos já existentes daquele profissional no dia).
+function onSelecaoAgendamentoMudou() {
+  atualizarPacotesDisponiveis();
+  atualizarHorariosDisponiveis();
+}
+
+function horaParaMinutos(hstr) {
+  var partes = String(hstr || '00:00').split(':');
+  return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
+}
+
+function minutosParaHora(min) {
+  var hh = String(Math.floor(min / 60)).padStart(2, '0');
+  var mm = String(min % 60).padStart(2, '0');
+  return hh + ':' + mm;
+}
+
+var HORARIOS_PADRAO_FALLBACK = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30'];
+
+function preencherHorariosPadrao() {
+  var selHora = document.getElementById('ag-h');
+  selHora.innerHTML = HORARIOS_PADRAO_FALLBACK.map(function(h){ return '<option>' + h + '</option>'; }).join('');
+  document.getElementById('ag-h-aviso').textContent = '';
+}
+
+// Recalcula quais horários aparecem no select — remove automaticamente os
+// que colidem com agendamentos já existentes do profissional escolhido,
+// considerando a duração TOTAL dos serviços marcados (não só um horário fixo).
+function atualizarHorariosDisponiveis() {
+  var selHora = document.getElementById('ag-h');
+  var avisoEl = document.getElementById('ag-h-aviso');
+  var profId = document.getElementById('ag-pro').value;
+  var dataStr = document.getElementById('ag-d').value;
+  var svcsSelecionados = Array.from(document.querySelectorAll('#ag-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
+
+  if (!profId || !dataStr || !svcsSelecionados.length) {
+    preencherHorariosPadrao();
+    return;
+  }
+
+  var duracaoTotal = svcsSelecionados.reduce(function(soma, id){
+    var s = (SVCS || []).find(function(sv){ return sv.id === id; });
+    return soma + (s && s.duracao_min ? s.duracao_min : 30);
+  }, 0);
+
+  var valorAnterior = selHora.value;
+  selHora.innerHTML = '<option value="">Carregando horários...</option>';
+  avisoEl.textContent = '';
+
+  var params = new URLSearchParams();
+  params.set('data', dataStr);
+  params.set('profissional_id', profId);
+
+  apiFetch('/api/agendamentos?' + params).then(function(lista){
+    var ocupados = (lista || [])
+      .filter(function(a){ return a.status !== 'cancelado'; })
+      .map(function(a){
+        var inicio = minutosDoDiaBrasil(a.data_hora);
+        return { inicio: inicio, fim: inicio + (a.duracao_min || 30) };
+      });
+
+    var minInicio = horaParaMinutos(CFG_HORARIO_ABRE || '08:00');
+    var minFim = horaParaMinutos(CFG_HORARIO_FECHA || '19:00');
+
+    var opcoes = [];
+    for (var m = minInicio; m + duracaoTotal <= minFim; m += 30) {
+      var fimSlot = m + duracaoTotal;
+      var conflita = ocupados.some(function(o){ return m < o.fim && fimSlot > o.inicio; });
+      if (!conflita) opcoes.push(m);
+    }
+
+    if (!opcoes.length) {
+      selHora.innerHTML = '<option value="">Nenhum horário livre neste dia</option>';
+      avisoEl.textContent = '⚠️ A agenda desse profissional está cheia nesse dia pra essa duração de serviço.';
+      return;
+    }
+
+    selHora.innerHTML = opcoes.map(function(m){
+      var v = minutosParaHora(m);
+      return '<option value="' + v + '">' + v + '</option>';
+    }).join('');
+    avisoEl.textContent = '✅ Mostrando só horários livres (' + opcoes.length + ' disponível' + (opcoes.length>1?'is':'') + ')';
+
+    // Mantém a seleção anterior se ainda estiver disponível
+    if (valorAnterior && Array.from(selHora.options).some(function(o){ return o.value === valorAnterior; })) {
+      selHora.value = valorAnterior;
+    }
+  }).catch(function(){
+    preencherHorariosPadrao();
+    avisoEl.textContent = 'Não foi possível checar disponibilidade — mostrando horário padrão.';
+  });
+}
+
+
 function atualizarPacotesDisponiveis() {
   var cliId = document.getElementById('ag-cli').value;
   var wrap = document.getElementById('ag-pacotes-disponiveis');
@@ -2477,8 +2618,8 @@ function carregarHorarioFuncionamento() {
   apiFetch('/api/saloes/meu').then(function(r){
     if (!r || !r.configuracoes) return;
     var cfg = r.configuracoes;
-    if (cfg.horario_abre)  document.getElementById('cfg-h-abre').value  = cfg.horario_abre;
-    if (cfg.horario_fecha) document.getElementById('cfg-h-fecha').value = cfg.horario_fecha;
+    if (cfg.horario_abre)  { document.getElementById('cfg-h-abre').value  = cfg.horario_abre;  CFG_HORARIO_ABRE  = cfg.horario_abre; }
+    if (cfg.horario_fecha) { document.getElementById('cfg-h-fecha').value = cfg.horario_fecha; CFG_HORARIO_FECHA = cfg.horario_fecha; }
     var diasFechado = cfg.dias_fechado || [];
     document.querySelectorAll('#cfg-dias-fechado .dia-toggle').forEach(function(btn){
       var dia = parseInt(btn.dataset.dia);
@@ -2772,6 +2913,14 @@ var MODELOS = {
     titulo: 'Importar Clientes',
     colunas: ['nome','telefone','email','data_nascimento','observacoes'],
     labels:  ['Nome','Telefone','Email','Nascimento','Observacoes'],
+    endpoint: '/api/clientes', modo: 'individual',
+    transformarLinha: function(row) {
+      return {
+        nome: row.nome, telefone: row.telefone || undefined, email: row.email || undefined,
+        data_nascimento: row.data_nascimento ? converterDataBR(row.data_nascimento) : undefined,
+        observacoes: row.observacoes || undefined
+      };
+    },
     exemplo: [['Ana Paula Silva','(11) 98765-4321','ana@email.com','1990-05-15','Cliente VIP'],
               ['Beatriz Santos','(11) 91234-5678','bea@email.com','','']]
   },
@@ -2779,6 +2928,7 @@ var MODELOS = {
     titulo: 'Importar Profissionais',
     colunas: ['nome','especialidade','telefone','comissao_pct'],
     labels:  ['Nome','Especialidade','Telefone','Comissao'],
+    endpoint: '/api/profissionais', modo: 'individual',
     exemplo: [['Juliana Alves','Cabeleireira','(11) 99999-0000','40'],
               ['Marcos Souza','Colorista','(11) 88888-0000','45']]
   },
@@ -2786,8 +2936,49 @@ var MODELOS = {
     titulo: 'Importar Servicos',
     colunas: ['nome','categoria','duracao_min','preco','comissao_pct'],
     labels:  ['Nome','Categoria','Duracao','Preco','Comissao'],
+    endpoint: '/api/servicos', modo: 'individual',
     exemplo: [['Corte Feminino','Cabelo','60','70','40'],
               ['Coloracao','Cabelo','120','150','40']]
+  },
+  produtos: {
+    titulo: 'Importar Produtos (Estoque)',
+    colunas: ['nome','categoria','fornecedor','qtd_minima','preco_custo','qtd_atual'],
+    labels:  ['Nome','Categoria','Fornecedor','Qtd. Mínima','Preço Custo','Qtd. Atual'],
+    endpoint: '/api/estoque', modo: 'individual',
+    exemplo: [['Shampoo 500ml','Cabelo','Distribuidora XYZ','5','25.90','12']]
+  },
+  pacotes: {
+    titulo: 'Importar Pacotes',
+    colunas: ['nome','preco'],
+    labels:  ['Nome','Preço'],
+    endpoint: '/api/pacotes', modo: 'individual',
+    aviso: '⚠️ Pacotes importados chegam sem os serviços configurados (a planilha de origem só traz nome e preço, sem o detalhamento). Depois de importar, abre cada pacote e adiciona os serviços manualmente.',
+    transformarLinha: function(row) { return { nome: row.nome, preco: parseValorBR(row.preco), servicos: [] }; },
+    exemplo: [['Pacote 4 Cortes','280']]
+  },
+  despesas: {
+    titulo: 'Importar Despesas (Financeiro)',
+    colunas: ['data','categoria','descricao','valor','pago'],
+    labels:  ['Data','Categoria','Descrição','Valor','Pago'],
+    endpoint: '/api/financeiro/lancamentos/lote', modo: 'lote',
+    transformarLinha: function(row) {
+      return { tipo: 'saida', data: converterDataBR(row.data), categoria: row.categoria || 'Outros',
+        descricao: row.descricao || '', valor: parseValorBR(row.valor), pago: normalizarPago(row.pago) };
+    },
+    exemplo: [['20/05/2026','Manutenção','Água','28,44','Pago']]
+  },
+  vendas: {
+    titulo: 'Importar Vendas (histórico financeiro)',
+    colunas: ['data','cliente','descricao','valor'],
+    labels:  ['Data','Cliente','Descrição','Valor'],
+    endpoint: '/api/financeiro/lancamentos/lote', modo: 'lote',
+    aviso: 'ℹ️ Vendas viram lançamentos de entrada no Financeiro (histórico de faturamento) — não recriamos agendamentos antigos automaticamente, pra não arriscar conflito de horário retroativo.',
+    transformarLinha: function(row) {
+      return { tipo: 'entrada', data: converterDataBR(row.data), categoria: 'Serviço',
+        descricao: (row.descricao || 'Venda') + (row.cliente ? ' — ' + row.cliente : ''),
+        valor: parseValorBR(row.valor), pago: true };
+    },
+    exemplo: [['21/05/2026','Ramon Silva','01-Corte Masculino','55']]
   }
 };
 
@@ -2799,7 +2990,7 @@ var MODELOS = {
 var SINONIMOS_CAMPOS = {
   clientes: {
     nome: ['nome','cliente','nome completo','nome do cliente','name','nome cliente'],
-    telefone: ['telefone','celular','whatsapp','fone','telefone whatsapp','contato','phone','telefone celular'],
+    telefone: ['telefone','celular','whatsapp','fone','telefone whatsapp','contato','phone','telefone celular','telefone 1'],
     email: ['email','e-mail','mail'],
     data_nascimento: ['nascimento','data de nascimento','data_nascimento','aniversario','aniversário','birthday','dob','data nasc'],
     observacoes: ['observacoes','observações','obs','notas','anotacoes','anotações','comentarios','comentários']
@@ -2807,7 +2998,7 @@ var SINONIMOS_CAMPOS = {
   profissionais: {
     nome: ['nome','profissional','funcionario','funcionário','colaborador','name','nome profissional'],
     especialidade: ['especialidade','funcao','função','cargo','role','area','área','categoria profissional'],
-    telefone: ['telefone','celular','whatsapp','fone','contato','telefone whatsapp'],
+    telefone: ['telefone','celular','whatsapp','fone','contato','telefone whatsapp','telefone 1'],
     comissao_pct: ['comissao','comissão','comissao_pct','porcentagem','percentual','comissao %','% comissao']
   },
   servicos: {
@@ -2816,8 +3007,39 @@ var SINONIMOS_CAMPOS = {
     duracao_min: ['duracao','duração','duracao_min','tempo','minutos','duration','tempo estimado','duracao minutos'],
     preco: ['preco','preço','valor','price','valor unitario','valor do servico'],
     comissao_pct: ['comissao','comissão','comissao_pct','porcentagem','percentual','comissao %','% comissao']
+  },
+  produtos: {
+    nome: ['nome','produto','nome do produto','name'],
+    categoria: ['categoria','tipo','grupo'],
+    fornecedor: ['fornecedor','marca','supplier'],
+    qtd_minima: ['estoque minimo','estoque mínimo','qtd minima','quantidade minima','minimo'],
+    preco_custo: ['preco compra','preço compra','custo','preco custo','valor compra'],
+    qtd_atual: ['estoque unidades','estoque atual','quantidade','qtd atual','estoque']
+  },
+  pacotes: {
+    nome: ['nome','pacote','nome do pacote'],
+    preco: ['preco','preço','valor']
+  },
+  despesas: {
+    data: ['data','data despesa','data da despesa'],
+    categoria: ['categoria','tipo'],
+    descricao: ['descricao','descrição','desc'],
+    valor: ['valor','preco','preço'],
+    pago: ['pago','status','situacao','situação']
+  },
+  vendas: {
+    data: ['data','data venda','data da venda'],
+    cliente: ['cliente','nome do cliente'],
+    descricao: ['descricao','descrição','servico','serviço'],
+    valor: ['valor','valor r$','preco','preço','total']
   }
 };
+
+// Campos que podem vir espalhados em VÁRIAS colunas no arquivo importado
+// (ex.: Trinks exporta "Telefone 1", "Telefone 2" ... "Telefone 5") — pra
+// esses, pegamos o primeiro que vier preenchido em cada linha, em vez de
+// depender de uma única coluna fixa.
+var CAMPOS_MULTI_COLUNA = { telefone: true };
 
 // Remove acentos, deixa minúsculo e troca _/- por espaço, pra comparar
 // cabeçalhos de formas bem diferentes de escrever a mesma coisa.
@@ -2846,6 +3068,74 @@ function encontrarIndiceColuna(headerRow, sinonimos) {
     }
   }
   return -1;
+}
+
+// Igual encontrarIndiceColuna, mas devolve TODOS os índices que combinam
+// (usado pra campos tipo "Telefone 1", "Telefone 2"...).
+function encontrarTodosIndicesColuna(headerRow, sinonimosBase) {
+  var headersNorm = headerRow.map(normalizarTextoColuna);
+  var achados = [];
+  sinonimosBase.forEach(function(sin) {
+    var raiz = normalizarTextoColuna(sin).replace(/\s*\d+$/, ''); // "telefone 1" -> "telefone"
+    headersNorm.forEach(function(h, idx) {
+      if (achados.indexOf(idx) >= 0) return;
+      if (h === raiz || h.indexOf(raiz + ' ') === 0 || h === raiz) achados.push(idx);
+    });
+  });
+  return achados;
+}
+
+// A maioria dos exports de outros sistemas tem 1-3 linhas de título/período
+// ANTES do cabeçalho de verdade (ex.: "Lista de Despesas" / "Período: ...").
+// Em vez de assumir que a primeira linha é sempre o cabeçalho, testamos as
+// primeiras linhas e escolhemos a que mais combina com os campos esperados.
+function detectarLinhaCabecalho(rows, sinonimosDoTipo, colunasAlvo) {
+  var melhorIndice = 0;
+  var melhorPontuacao = -1;
+  var limite = Math.min(rows.length, 10);
+  for (var i = 0; i < limite; i++) {
+    var linha = rows[i];
+    if (!linha || !linha.length) continue;
+    var pontuacao = 0;
+    colunasAlvo.forEach(function(campo) {
+      if (encontrarIndiceColuna(linha, sinonimosDoTipo[campo] || [campo]) >= 0) pontuacao++;
+    });
+    if (pontuacao > melhorPontuacao) { melhorPontuacao = pontuacao; melhorIndice = i; }
+  }
+  return melhorIndice;
+}
+
+// Converte "20/05/2026" (ou uma Date real vinda do Excel) pra "2026-05-20"
+function converterDataBR(valor) {
+  if (!valor) return '';
+  if (valor instanceof Date) {
+    return valor.getFullYear() + '-' + String(valor.getMonth()+1).padStart(2,'0') + '-' + String(valor.getDate()).padStart(2,'0');
+  }
+  var str = String(valor).trim();
+  var m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0'); // DD/MM/YYYY -> YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0,10);
+  return str;
+}
+
+// Converte valores em formato brasileiro ("1.234,56" ou "28,44") ou já numéricos
+function parseValorBR(valor) {
+  if (valor === null || valor === undefined || valor === '') return 0;
+  if (typeof valor === 'number') return valor;
+  var str = String(valor).trim().replace(/[R$\s]/g, '');
+  if (str.indexOf(',') >= 0 && str.indexOf('.') >= 0) {
+    str = str.replace(/\./g, '').replace(',', '.');
+  } else if (str.indexOf(',') >= 0) {
+    str = str.replace(',', '.');
+  }
+  var n = parseFloat(str);
+  return isNaN(n) ? 0 : n;
+}
+
+// Interpreta "Pago"/"Sim"/"true" como true, o resto como pendente
+function normalizarPago(valor) {
+  var s = normalizarTextoColuna(valor);
+  return s === 'pago' || s === 'sim' || s === 'true' || s === 'yes' || s === 'quitado';
 }
 
 function openImport(tipo) {
@@ -2942,27 +3232,46 @@ function parseRows(rows) {
   if (!rows || rows.length < 2) { toast('Planilha vazia ou sem dados','er'); return; }
   var m = MODELOS[IMPORT_TIPO];
   var sinonimosDoTipo = SINONIMOS_CAMPOS[IMPORT_TIPO] || {};
-  var headerRow = rows[0];
-  var dataRows = rows.slice(1);
+
+  // Descobre em qual linha está o cabeçalho de verdade — muitos exports de
+  // outros sistemas têm 1-3 linhas de título/período antes da tabela real
+  var indiceCabecalho = detectarLinhaCabecalho(rows, sinonimosDoTipo, m.colunas);
+  var headerRow = rows[indiceCabecalho];
+  var dataRows = rows.slice(indiceCabecalho + 1);
 
   // Descobre em qual coluna do arquivo importado está cada campo do nosso
   // sistema — não depende mais da ordem das colunas bater com o nosso modelo
-  var mapaColunas = {}; // { nossoCampo: índice no arquivo importado (ou -1) }
+  var mapaColunas = {}; // { nossoCampo: índice (ou lista de índices, pra telefone) }
   m.colunas.forEach(function(campo) {
-    mapaColunas[campo] = encontrarIndiceColuna(headerRow, sinonimosDoTipo[campo] || [campo]);
+    var sinonimos = sinonimosDoTipo[campo] || [campo];
+    if (CAMPOS_MULTI_COLUNA[campo]) {
+      mapaColunas[campo] = encontrarTodosIndicesColuna(headerRow, sinonimos);
+    } else {
+      mapaColunas[campo] = encontrarIndiceColuna(headerRow, sinonimos);
+    }
   });
 
   IMPORT_DATA = dataRows.map(function(row) {
     var obj = {};
     m.colunas.forEach(function(campo) {
-      var idx = mapaColunas[campo];
-      obj[campo] = idx >= 0 ? String(row[idx] || '').trim() : '';
+      if (CAMPOS_MULTI_COLUNA[campo]) {
+        var indices = mapaColunas[campo] || [];
+        var valor = '';
+        for (var i = 0; i < indices.length; i++) {
+          var candidato = String(row[indices[i]] || '').trim();
+          if (candidato) { valor = candidato; break; }
+        }
+        obj[campo] = valor;
+      } else {
+        var idx = mapaColunas[campo];
+        obj[campo] = idx >= 0 ? String(row[idx] === undefined || row[idx] === null ? '' : row[idx]).trim() : '';
+      }
     });
     return obj;
   }).filter(function(obj) { return obj[m.colunas[0]]; });
 
   if (!IMPORT_DATA.length) {
-    toast('Nenhum dado válido encontrado — confira se a primeira linha do arquivo é o cabeçalho com os nomes das colunas','er');
+    toast('Nenhum dado válido encontrado — confira se o arquivo tem uma linha de cabeçalho com os nomes das colunas','er');
     return;
   }
 
@@ -2971,13 +3280,20 @@ function parseRows(rows) {
   var elMapeamento = document.getElementById('import-mapeamento');
   if (elMapeamento) {
     var linhasMapeamento = m.colunas.map(function(campo, i) {
+      if (CAMPOS_MULTI_COLUNA[campo]) {
+        var indices = mapaColunas[campo] || [];
+        if (!indices.length) return '<div style="font-size:.74rem;padding:2px 0;color:var(--warn)">⚠️ <strong>' + m.labels[i] + '</strong> — não encontrei nenhuma coluna correspondente</div>';
+        var nomes = indices.map(function(idx){ return headerRow[idx]; }).join(', ');
+        return '<div style="font-size:.74rem;padding:2px 0">✅ <strong>' + m.labels[i] + '</strong> ← ' + indices.length + ' coluna(s): "' + nomes + '" (usa a primeira preenchida)</div>';
+      }
       var idx = mapaColunas[campo];
       var nomeColunaOriginal = idx >= 0 ? headerRow[idx] : null;
       return nomeColunaOriginal
         ? '<div style="font-size:.74rem;padding:2px 0">✅ <strong>' + m.labels[i] + '</strong> ← coluna "' + nomeColunaOriginal + '" do seu arquivo</div>'
         : '<div style="font-size:.74rem;padding:2px 0;color:var(--warn)">⚠️ <strong>' + m.labels[i] + '</strong> — não encontrei essa coluna no arquivo, vai ficar em branco</div>';
     });
-    elMapeamento.innerHTML = '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:6px">🔀 Como identifiquei as colunas do seu arquivo</div>' + linhasMapeamento.join('');
+    var avisoExtra = m.aviso ? '<div style="font-size:.74rem;padding:6px 0 0;color:var(--warn);border-top:1px solid var(--bd);margin-top:6px">' + m.aviso + '</div>' : '';
+    elMapeamento.innerHTML = '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:6px">🔀 Como identifiquei as colunas do seu arquivo (cabeçalho encontrado na linha ' + (indiceCabecalho+1) + ')</div>' + linhasMapeamento.join('') + avisoExtra;
     elMapeamento.style.display = 'block';
   }
 
@@ -3002,43 +3318,66 @@ function parseRows(rows) {
 function executarImport() {
   if (!IMPORT_DATA.length) { toast('Nenhum dado para importar','er'); return; }
   var tipo = IMPORT_TIPO;
+  var m = MODELOS[tipo];
   var btn = document.getElementById('import-btn');
   var result = document.getElementById('import-result');
   btn.disabled = true; btn.textContent = 'Importando...';
-  var endpoints = { clientes: '/api/clientes', profissionais: '/api/profissionais', servicos: '/api/servicos' };
-  var endpoint = endpoints[tipo];
-  var ok = 0; var err = 0; var total = IMPORT_DATA.length; var done = 0;
-  function processNext(i) {
-    if (i >= total) {
-      result.style.display = 'block';
-      if (err === 0) {
-        result.style.background = '#DCFCE7'; result.style.color = '#16A34A';
-        result.textContent = ok + ' registro(s) importado(s) com sucesso!';
-      } else {
-        result.style.background = '#FEF3C7'; result.style.color = '#B45309';
-        result.textContent = ok + ' importado(s), ' + err + ' com erro.';
-      }
-      btn.disabled = false; btn.textContent = 'Importar dados';
-      if (tipo === 'clientes') { loadClientes(); loadKPIs(); }
-      if (tipo === 'profissionais') { loadPros(); fillSelects(); }
-      if (tipo === 'servicos') { loadSvcs(); fillSelects(); }
-      toast(ok + ' ' + tipo + ' importados!','ok');
-      return;
+
+  function finalizar(ok, err, total) {
+    result.style.display = 'block';
+    if (err === 0) {
+      result.style.background = '#DCFCE7'; result.style.color = '#16A34A';
+      result.textContent = ok + ' registro(s) importado(s) com sucesso!';
+    } else {
+      result.style.background = '#FEF3C7'; result.style.color = '#B45309';
+      result.textContent = ok + ' importado(s), ' + err + ' com erro.';
     }
-    var body = {};
-    var m = MODELOS[tipo];
-    m.colunas.forEach(function(col) { body[col] = IMPORT_DATA[i][col]; });
-    if (body.comissao_pct) body.comissao_pct = parseFloat(body.comissao_pct) || 40;
-    if (body.duracao_min)  body.duracao_min  = parseInt(body.duracao_min)    || 60;
-    if (body.preco)        body.preco        = parseFloat(body.preco)        || 0;
+    btn.disabled = false; btn.textContent = 'Importar dados';
+    if (tipo === 'clientes')      { loadClientes(); loadKPIs(); }
+    if (tipo === 'profissionais') { loadPros(); fillSelects(); }
+    if (tipo === 'servicos')      { loadSvcs(); fillSelects(); }
+    if (tipo === 'produtos')      { loadEst(); }
+    if (tipo === 'pacotes')       { loadPacotes(); }
+    if (tipo === 'despesas' || tipo === 'vendas') { loadFin(); loadKPIs(); }
+    toast(ok + ' registro(s) importado(s)!','ok');
+  }
+
+  // Modo "lote" — manda tudo numa requisição só (usado por Despesas/Vendas,
+  // que podem ter milhares de linhas; uma requisição por linha travaria)
+  if (m.modo === 'lote') {
+    var lancamentos = IMPORT_DATA.map(function(row) { return m.transformarLinha(row); });
+    apiFetch(m.endpoint, { method: 'POST', body: { lancamentos: lancamentos } })
+      .then(function(r) { finalizar(r && r.total ? r.total : lancamentos.length, 0, lancamentos.length); })
+      .catch(function(e) {
+        result.style.display = 'block';
+        result.style.background = '#FEE2E2'; result.style.color = '#DC2626';
+        result.textContent = 'Erro: ' + (e.message || 'não foi possível importar');
+        btn.disabled = false; btn.textContent = 'Importar dados';
+      });
+    return;
+  }
+
+  // Modo "individual" — uma requisição por linha (clientes, profissionais,
+  // serviços, produtos, pacotes)
+  var ok = 0; var err = 0; var total = IMPORT_DATA.length;
+  function processNext(i) {
+    if (i >= total) { finalizar(ok, err, total); return; }
+    var body = m.transformarLinha ? m.transformarLinha(IMPORT_DATA[i]) : Object.assign({}, IMPORT_DATA[i]);
+    if (body.comissao_pct !== undefined) body.comissao_pct = parseFloat(body.comissao_pct) || 40;
+    if (body.duracao_min  !== undefined) body.duracao_min  = parseInt(body.duracao_min)    || 60;
+    if (body.preco        !== undefined) body.preco        = parseValorBR(body.preco);
+    if (body.preco_custo  !== undefined) body.preco_custo  = parseValorBR(body.preco_custo);
+    if (body.qtd_minima   !== undefined) body.qtd_minima   = parseInt(body.qtd_minima)     || 0;
+    if (body.qtd_atual    !== undefined) body.qtd_atual    = parseInt(body.qtd_atual)      || 0;
     if (body.data_nascimento === '') delete body.data_nascimento;
     btn.textContent = 'Importando ' + (i+1) + '/' + total + '...';
-    apiFetch(endpoint, {method:'POST', body:body})
+    apiFetch(m.endpoint, {method:'POST', body:body})
       .then(function() { ok++; processNext(i+1); })
       .catch(function() { err++; processNext(i+1); });
   }
   processNext(0);
 }
+
 
 // ── LINK AGENDAMENTO ────────────────────────────────
 function preencherLinkAgendamento() {
@@ -3236,6 +3575,12 @@ function aplicarPermissoes() {
   if (USER_PERFIL !== 'admin') {
     document.querySelectorAll('[onclick*="openImport"]').forEach(function(b){ b.style.display='none'; });
   }
+
+  // "API & Integração" mostra URL do backend e diagnóstico técnico — é
+  // informação de infraestrutura, não faz sentido pra um funcionário comum
+  // ver isso mesmo que ele tenha acesso à página de Config.
+  var cardApi = document.getElementById('card-api-integracao');
+  if (cardApi) cardApi.style.display = USER_PERFIL === 'admin' ? '' : 'none';
 
   // Badge de perfil no topbar
   var perfBadge = document.getElementById('perfil-badge');
@@ -3735,7 +4080,7 @@ function dispensarBannerPWA() {
     <div class="mb">
       <div class="fr">
         <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli" onchange="atualizarPacotesDisponiveis()"><option value="">Selecionar...</option></select></div>
-        <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro"><option value="">Selecionar...</option></select></div>
+        <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro" onchange="onSelecaoAgendamentoMudou()"><option value="">Selecionar...</option></select></div>
       </div>
       <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label>
         <input class="fc" id="ag-svc-busca" placeholder="🔍 Buscar serviço..." oninput="filtrarServicosAgendamento(this.value)" style="margin-bottom:8px"/>
@@ -3743,7 +4088,7 @@ function dispensarBannerPWA() {
         <div id="ag-svc-vazio" class="empty" style="display:none;padding:14px">Nenhum serviço encontrado.</div>
       </div>
       <div class="fr">
-        <div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="ag-d"/></div>
+        <div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="ag-d" onchange="onSelecaoAgendamentoMudou()"/></div>
         <div class="fg"><label class="fl">Horário*</label>
           <select class="fc" id="ag-h">
             <option>08:00</option><option>08:30</option><option>09:00</option><option>09:30</option>
@@ -3752,6 +4097,7 @@ function dispensarBannerPWA() {
             <option>15:00</option><option>15:30</option><option>16:00</option><option>16:30</option>
             <option>17:00</option><option>17:30</option>
           </select>
+          <div style="font-size:.66rem;color:var(--t3);margin-top:4px" id="ag-h-aviso"></div>
         </div>
       </div>
       <div class="fg"><label class="fl">Origem</label>
@@ -4227,15 +4573,16 @@ function dispensarBannerPWA() {
 <!-- Modal Novo Pacote -->
 <div class="mov" id="m-pacote">
   <div class="mbox md">
-    <div class="mh"><span class="mt">🎁 Novo Pacote</span><button class="mx" onclick="closeM('m-pacote')">✕</button></div>
+    <div class="mh"><span class="mt" id="pac-modal-titulo">🎁 Novo Pacote</span><button class="mx" onclick="closeM('m-pacote')">✕</button></div>
     <div class="mb">
+      <input type="hidden" id="pac-edit-id" value=""/>
       <div class="fg"><label class="fl">Nome do pacote*</label><input class="fc" id="pac-nome" placeholder="Ex.: Pacote 5 Massagens"/></div>
       <div class="fr">
         <div class="fg"><label class="fl">Preço total (R$)*</label><input type="number" class="fc" id="pac-preco" step="0.01" placeholder="0,00"/></div>
         <div class="fg"><label class="fl">Validade (dias, opcional)</label><input type="number" class="fc" id="pac-validade" placeholder="Ex.: 90"/></div>
       </div>
       <div class="fg">
-        <label class="fl">Serviços incluídos*</label>
+        <label class="fl">Serviços incluídos</label>
         <select class="fc" id="pac-add-servico" onchange="adicionarServicoPacote()"><option value="">Adicionar serviço...</option></select>
         <div id="pac-servicos-lista" style="margin-top:6px"></div>
       </div>
