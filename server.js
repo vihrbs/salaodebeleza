@@ -194,7 +194,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.8.0-limite-requisicao-grande' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.9.0-importacao-em-lote-rapida' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -674,6 +674,28 @@ app.post('/api/profissionais', auth, requirePermissao('profissionais'), async (r
   res.status(201).json(data);
 });
 
+// Importa vários profissionais de uma vez (importação de outro sistema)
+app.post('/api/profissionais/lote', auth, requirePermissao('profissionais'), async (req, res) => {
+  const { profissionais } = req.body;
+  if (!Array.isArray(profissionais) || !profissionais.length) {
+    return res.status(422).json({ error: 'Envie uma lista de profissionais em "profissionais"' });
+  }
+  if (profissionais.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+  const TAMANHO_BLOCO = 500;
+  let totalInseridos = 0;
+  try {
+    for (let i = 0; i < profissionais.length; i += TAMANHO_BLOCO) {
+      const bloco = profissionais.slice(i, i + TAMANHO_BLOCO).map(p => ({ ...p, salao_id: req.salao_id }));
+      const { error } = await supabase.from('profissionais').insert(bloco);
+      if (error) throw error;
+      totalInseridos += bloco.length;
+    }
+    res.status(201).json({ message: totalInseridos + ' profissional(is) importado(s)!', total: totalInseridos });
+  } catch(e) {
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + profissionais.length + '): ' + e.message });
+  }
+});
+
 app.put('/api/profissionais/:id', auth, requirePermissao('profissionais'), async (req, res) => {
   const { data, error } = await supabase
     .from('profissionais').update(req.body)
@@ -795,6 +817,28 @@ app.post('/api/servicos', auth, requirePermissao('servicos'), async (req, res) =
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// Importa vários serviços de uma vez (importação de outro sistema)
+app.post('/api/servicos/lote', auth, requirePermissao('servicos'), async (req, res) => {
+  const { servicos } = req.body;
+  if (!Array.isArray(servicos) || !servicos.length) {
+    return res.status(422).json({ error: 'Envie uma lista de serviços em "servicos"' });
+  }
+  if (servicos.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+  const TAMANHO_BLOCO = 500;
+  let totalInseridos = 0;
+  try {
+    for (let i = 0; i < servicos.length; i += TAMANHO_BLOCO) {
+      const bloco = servicos.slice(i, i + TAMANHO_BLOCO).map(s => ({ ...s, salao_id: req.salao_id }));
+      const { error } = await supabase.from('servicos').insert(bloco);
+      if (error) throw error;
+      totalInseridos += bloco.length;
+    }
+    res.status(201).json({ message: totalInseridos + ' serviço(s) importado(s)!', total: totalInseridos });
+  } catch(e) {
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + servicos.length + '): ' + e.message });
+  }
 });
 
 app.put('/api/servicos/:id', auth, requirePermissao('servicos'), async (req, res) => {
@@ -1006,6 +1050,30 @@ app.post('/api/clientes', auth, async (req, res) => {
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// Importa vários clientes de uma vez (usado pela importação de outro sistema
+// — ex.: histórico do Trinks). Uma requisição só, em blocos de 500 no banco,
+// em vez de uma requisição por cliente (que seria lento pra centenas deles).
+app.post('/api/clientes/lote', auth, async (req, res) => {
+  const { clientes } = req.body;
+  if (!Array.isArray(clientes) || !clientes.length) {
+    return res.status(422).json({ error: 'Envie uma lista de clientes em "clientes"' });
+  }
+  if (clientes.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+  const TAMANHO_BLOCO = 500;
+  let totalInseridos = 0;
+  try {
+    for (let i = 0; i < clientes.length; i += TAMANHO_BLOCO) {
+      const bloco = clientes.slice(i, i + TAMANHO_BLOCO).map(c => ({ ...c, salao_id: req.salao_id }));
+      const { error } = await supabase.from('clientes').insert(bloco);
+      if (error) throw error;
+      totalInseridos += bloco.length;
+    }
+    res.status(201).json({ message: totalInseridos + ' cliente(s) importado(s)!', total: totalInseridos });
+  } catch(e) {
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + clientes.length + '): ' + e.message });
+  }
 });
 
 app.put('/api/clientes/:id', auth, async (req, res) => {
@@ -1564,6 +1632,28 @@ app.post('/api/estoque', auth, requirePermissao('estoque'), async (req, res) => 
     .from('produtos').insert({ ...req.body, salao_id: req.salao_id }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// Importa vários produtos de uma vez (importação de outro sistema)
+app.post('/api/estoque/lote', auth, requirePermissao('estoque'), async (req, res) => {
+  const { produtos } = req.body;
+  if (!Array.isArray(produtos) || !produtos.length) {
+    return res.status(422).json({ error: 'Envie uma lista de produtos em "produtos"' });
+  }
+  if (produtos.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+  const TAMANHO_BLOCO = 500;
+  let totalInseridos = 0;
+  try {
+    for (let i = 0; i < produtos.length; i += TAMANHO_BLOCO) {
+      const bloco = produtos.slice(i, i + TAMANHO_BLOCO).map(p => ({ ...p, salao_id: req.salao_id }));
+      const { error } = await supabase.from('produtos').insert(bloco);
+      if (error) throw error;
+      totalInseridos += bloco.length;
+    }
+    res.status(201).json({ message: totalInseridos + ' produto(s) importado(s)!', total: totalInseridos });
+  } catch(e) {
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + produtos.length + '): ' + e.message });
+  }
 });
 
 app.put('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, res) => {
