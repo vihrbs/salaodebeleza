@@ -159,15 +159,29 @@ input,select,textarea{font-family:inherit}
 .kd{font-size:.67rem;font-weight:600;padding:2px 8px;border-radius:50px;background:rgba(74,222,128,.1);color:#4ADE80;border:1px solid rgba(74,222,128,.15)}
 
 .card{background:var(--wh);border-radius:var(--r);border:1px solid var(--bd);padding:18px}
-.crow{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.crow{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .ch{font-size:.88rem;font-weight:700;color:var(--tx)}
 .ct{font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:13px}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .g31{display:grid;grid-template-columns:2fr 1fr;gap:14px}
 
 /* ── TABLE ───────────────────────────────── */
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse}
+/* Sombra sutil nas bordas quando a tabela tem mais conteúdo pra rolar —
+   sem isso, muita gente não percebe que dá pra arrastar pro lado no
+   celular e acha que o conteúdo simplesmente sumiu/foi cortado. */
+.tw{
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  background:
+    linear-gradient(to right, var(--wh) 30%, rgba(30,28,24,0)) 0 0,
+    linear-gradient(to right, rgba(30,28,24,0), var(--wh) 70%) 100% 0,
+    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.45), rgba(0,0,0,0)) 0 0,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.45), rgba(0,0,0,0)) 100% 0;
+  background-repeat:no-repeat;
+  background-color:var(--wh);
+  background-size:24px 100%,24px 100%,10px 100%,10px 100%;
+  background-attachment:local,local,scroll,scroll;
+}
+table{width:100%;min-width:max-content;border-collapse:collapse}
 th{text-align:left;font-size:.63rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);padding:9px 12px;border-bottom:1px solid var(--bd);white-space:nowrap}
 td{padding:11px 12px;border-bottom:1px solid var(--bd);font-size:.78rem;vertical-align:middle;color:var(--tx)}
 tr:last-child td{border-bottom:none}
@@ -588,7 +602,7 @@ select.fc option{background:var(--bg2)}
       </div>
       <div class="card" style="margin-bottom:14px">
         <div class="crow"><span class="ch">Faturamento 2026</span>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btns btnsm" onclick="openImport('vendas')" id="btn-import-vendas">📥 Importar Vendas</button>
             <button class="btn btns btnsm" onclick="openImport('despesas')" id="btn-import-despesas">📥 Importar Despesas</button>
             <button class="btn btnp btnsm" onclick="openM('m-lan')">+ Lançamento</button>
@@ -754,7 +768,7 @@ select.fc option{background:var(--bg2)}
             <span class="ch">👥 Usuários do Salão</span>
             <button class="btn btnp btnsm" onclick="abrirNovoUsuario()">+ Novo Usuário</button>
           </div>
-          <div id="usuarios-list"><div class="lc"><div class="spin"></div></div></div>
+          <div class="tw" id="usuarios-list"><div class="lc"><div class="spin"></div></div></div>
         </div>
 
         <div class="card">
@@ -3000,7 +3014,7 @@ var MODELOS = {
     titulo: 'Importar Clientes',
     colunas: ['nome','telefone','email','data_nascimento','observacoes'],
     labels:  ['Nome','Telefone','Email','Nascimento','Observacoes'],
-    endpoint: '/api/clientes', modo: 'individual',
+    endpoint: '/api/clientes/lote', modo: 'lote', chaveLote: 'clientes',
     transformarLinha: function(row) {
       return {
         nome: row.nome, telefone: row.telefone || undefined, email: row.email || undefined,
@@ -3015,7 +3029,7 @@ var MODELOS = {
     titulo: 'Importar Profissionais',
     colunas: ['nome','especialidade','telefone','comissao_pct'],
     labels:  ['Nome','Especialidade','Telefone','Comissao'],
-    endpoint: '/api/profissionais', modo: 'individual',
+    endpoint: '/api/profissionais/lote', modo: 'lote', chaveLote: 'profissionais',
     exemplo: [['Juliana Alves','Cabeleireira','(11) 99999-0000','40'],
               ['Marcos Souza','Colorista','(11) 88888-0000','45']]
   },
@@ -3023,7 +3037,7 @@ var MODELOS = {
     titulo: 'Importar Servicos',
     colunas: ['nome','categoria','duracao_min','preco','comissao_pct'],
     labels:  ['Nome','Categoria','Duracao','Preco','Comissao'],
-    endpoint: '/api/servicos', modo: 'individual',
+    endpoint: '/api/servicos/lote', modo: 'lote', chaveLote: 'servicos',
     exemplo: [['Corte Feminino','Cabelo','60','70','40'],
               ['Coloracao','Cabelo','120','150','40']]
   },
@@ -3031,7 +3045,7 @@ var MODELOS = {
     titulo: 'Importar Produtos (Estoque)',
     colunas: ['nome','categoria','fornecedor','qtd_minima','preco_custo','qtd_atual'],
     labels:  ['Nome','Categoria','Fornecedor','Qtd. Mínima','Preço Custo','Qtd. Atual'],
-    endpoint: '/api/estoque', modo: 'individual',
+    endpoint: '/api/estoque/lote', modo: 'lote', chaveLote: 'produtos',
     exemplo: [['Shampoo 500ml','Cabelo','Distribuidora XYZ','5','25.90','12']]
   },
   pacotes: {
@@ -3047,7 +3061,7 @@ var MODELOS = {
     titulo: 'Importar Despesas (Financeiro)',
     colunas: ['data','categoria','descricao','valor','pago'],
     labels:  ['Data','Categoria','Descrição','Valor','Pago'],
-    endpoint: '/api/financeiro/lancamentos/lote', modo: 'lote',
+    endpoint: '/api/financeiro/lancamentos/lote', modo: 'lote', chaveLote: 'lancamentos',
     transformarLinha: function(row) {
       return { tipo: 'saida', data: converterDataBR(row.data), categoria: row.categoria || 'Outros',
         descricao: row.descricao || '', valor: parseValorBR(row.valor), pago: normalizarPago(row.pago) };
@@ -3058,7 +3072,7 @@ var MODELOS = {
     titulo: 'Importar Vendas (histórico financeiro)',
     colunas: ['data','cliente','descricao','valor'],
     labels:  ['Data','Cliente','Descrição','Valor'],
-    endpoint: '/api/financeiro/lancamentos/lote', modo: 'lote',
+    endpoint: '/api/financeiro/lancamentos/lote', modo: 'lote', chaveLote: 'lancamentos',
     aviso: 'ℹ️ Vendas viram lançamentos de entrada no Financeiro (histórico de faturamento) — não recriamos agendamentos antigos automaticamente, pra não arriscar conflito de horário retroativo.',
     transformarLinha: function(row) {
       return { tipo: 'entrada', data: converterDataBR(row.data), categoria: 'Serviço',
@@ -3402,6 +3416,22 @@ function parseRows(rows) {
   toast(IMPORT_DATA.length + ' registros prontos para importar','ok');
 }
 
+// Monta o payload final de uma linha importada — aplica a transformação
+// específica do modelo (se houver) e depois converte os tipos numéricos
+// (a planilha sempre chega como texto). Usado tanto no modo lote quanto
+// no modo individual, pra não duplicar essa lógica.
+function construirPayloadLinha(m, row) {
+  var body = m.transformarLinha ? m.transformarLinha(row) : Object.assign({}, row);
+  if (body.comissao_pct !== undefined) body.comissao_pct = parseFloat(body.comissao_pct) || 40;
+  if (body.duracao_min  !== undefined) body.duracao_min  = parseInt(body.duracao_min)    || 60;
+  if (body.preco        !== undefined) body.preco        = parseValorBR(body.preco);
+  if (body.preco_custo  !== undefined) body.preco_custo  = parseValorBR(body.preco_custo);
+  if (body.qtd_minima   !== undefined) body.qtd_minima   = parseInt(body.qtd_minima)     || 0;
+  if (body.qtd_atual    !== undefined) body.qtd_atual    = parseInt(body.qtd_atual)      || 0;
+  if (body.data_nascimento === '') delete body.data_nascimento;
+  return body;
+}
+
 function executarImport() {
   if (!IMPORT_DATA.length) { toast('Nenhum dado para importar','er'); return; }
   var tipo = IMPORT_TIPO;
@@ -3429,12 +3459,15 @@ function executarImport() {
     toast(ok + ' registro(s) importado(s)!','ok');
   }
 
-  // Modo "lote" — manda tudo numa requisição só (usado por Despesas/Vendas,
-  // que podem ter milhares de linhas; uma requisição por linha travaria)
+  // Modo "lote" — manda tudo numa requisição só, em vez de uma por linha
+  // (importante pra centenas/milhares de registros — clientes, profissionais,
+  // serviços, produtos, despesas e vendas usam esse caminho)
   if (m.modo === 'lote') {
-    var lancamentos = IMPORT_DATA.map(function(row) { return m.transformarLinha(row); });
-    apiFetch(m.endpoint, { method: 'POST', body: { lancamentos: lancamentos } })
-      .then(function(r) { finalizar(r && r.total ? r.total : lancamentos.length, 0, lancamentos.length); })
+    var itens = IMPORT_DATA.map(function(row) { return construirPayloadLinha(m, row); });
+    var payload = {};
+    payload[m.chaveLote] = itens;
+    apiFetch(m.endpoint, { method: 'POST', body: payload })
+      .then(function(r) { finalizar(r && r.total ? r.total : itens.length, 0, itens.length); })
       .catch(function(e) {
         result.style.display = 'block';
         result.style.background = '#FEE2E2'; result.style.color = '#DC2626';
@@ -3444,19 +3477,13 @@ function executarImport() {
     return;
   }
 
-  // Modo "individual" — uma requisição por linha (clientes, profissionais,
-  // serviços, produtos, pacotes)
+  // Modo "individual" — uma requisição por linha (hoje só Pacotes usa isso,
+  // já que geralmente são poucos e cada um precisa ser criado como um
+  // registro isolado)
   var ok = 0; var err = 0; var total = IMPORT_DATA.length;
   function processNext(i) {
     if (i >= total) { finalizar(ok, err, total); return; }
-    var body = m.transformarLinha ? m.transformarLinha(IMPORT_DATA[i]) : Object.assign({}, IMPORT_DATA[i]);
-    if (body.comissao_pct !== undefined) body.comissao_pct = parseFloat(body.comissao_pct) || 40;
-    if (body.duracao_min  !== undefined) body.duracao_min  = parseInt(body.duracao_min)    || 60;
-    if (body.preco        !== undefined) body.preco        = parseValorBR(body.preco);
-    if (body.preco_custo  !== undefined) body.preco_custo  = parseValorBR(body.preco_custo);
-    if (body.qtd_minima   !== undefined) body.qtd_minima   = parseInt(body.qtd_minima)     || 0;
-    if (body.qtd_atual    !== undefined) body.qtd_atual    = parseInt(body.qtd_atual)      || 0;
-    if (body.data_nascimento === '') delete body.data_nascimento;
+    var body = construirPayloadLinha(m, IMPORT_DATA[i]);
     btn.textContent = 'Importando ' + (i+1) + '/' + total + '...';
     apiFetch(m.endpoint, {method:'POST', body:body})
       .then(function() { ok++; processNext(i+1); })
