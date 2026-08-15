@@ -6,7 +6,11 @@ const crypto   = require('crypto');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Limite bem generoso — necessário pra importações em lote (ex.: histórico
+// de vendas de outro sistema, que pode ter milhares de linhas numa única
+// requisição). O padrão do Express (100kb) é pequeno demais pra isso e
+// rejeita a requisição antes mesmo de chegar nas rotas.
+app.use(express.json({ limit: '15mb' }));
 
 // ── Supabase ─────────────────────────────────────────
 const { createClient } = require('@supabase/supabase-js');
@@ -190,7 +194,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.7.0-excluir-e-alterar-senha' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.8.0-limite-requisicao-grande' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
