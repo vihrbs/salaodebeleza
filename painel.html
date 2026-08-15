@@ -860,7 +860,14 @@ function apiFetch(path, opts) {
   if (opts.body && typeof opts.body === 'object') opts.body = JSON.stringify(opts.body);
   return fetch(API + path, opts).then(function(r){
     if (r.status === 401) { doLogout(); throw new Error('Sessão expirada'); }
-    if (!r.ok) return r.json().then(function(e){ throw new Error(e.error || 'Erro ' + r.status); });
+    if (!r.ok) {
+      // Se o servidor devolver algo que não é JSON (ex.: página de erro de
+      // um proxy por causa de requisição grande demais, ou timeout), não
+      // deixa o erro cru do navegador vazar pro usuário — cai num aviso legível.
+      return r.json().catch(function(){ return {}; }).then(function(e){
+        throw new Error(e.error || ('Erro ' + r.status + ' — tente novamente. Se estiver importando muitos registros de uma vez, tente separar em partes menores.'));
+      });
+    }
     return r.json();
   });
 }
