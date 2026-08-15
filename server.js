@@ -194,7 +194,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.9.0-importacao-em-lote-rapida' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.0.0-log-notificacao-agendamento' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1325,12 +1325,19 @@ app.post('/api/agendamentos', auth, async (req, res) => {
       }
 
       // Notificação por e-mail pro profissional — best-effort (não atrasa nem
-      // quebra a resposta se o envio falhar)
+      // quebra a resposta se o envio falhar). A função nunca rejeita a
+      // Promise (sempre resolve com {enviado,motivo}), então checamos o
+      // resultado explicitamente pra deixar rastro no log se falhar —
+      // um .catch() sozinho aqui nunca pegaria nada.
       if (prof && prof.email) {
         notificarProfissionalNovoAgendamento(
           prof.email, prof.nome, clienteInfo?.nome || 'Cliente',
           data_hora, nomesServicos, resultado.agendamento.valor_total
-        ).catch(() => {});
+        ).then(r => {
+          if (!r.enviado) console.error('Notificação de agendamento NÃO enviada pro profissional ' + prof.email + ': ' + r.motivo);
+        }).catch(e => console.error('Erro inesperado ao notificar profissional:', e.message));
+      } else {
+        console.log('Profissional ' + profissional_id + ' sem e-mail cadastrado — notificação de agendamento não enviada.');
       }
 
       return res.status(201).json(resultado.agendamento);
@@ -1359,7 +1366,11 @@ app.post('/api/agendamentos', auth, async (req, res) => {
     // resumindo a série inteira (evita spam de vários e-mails separados)
     if (prof && prof.email) {
       notificarProfissionalRecorrencia(prof.email, prof.nome, clienteInfo?.nome || 'Cliente', criados, nomesServicos)
-        .catch(() => {});
+        .then(r => {
+          if (!r.enviado) console.error('Notificação de recorrência NÃO enviada pro profissional ' + prof.email + ': ' + r.motivo);
+        }).catch(e => console.error('Erro inesperado ao notificar profissional (recorrência):', e.message));
+    } else {
+      console.log('Profissional ' + profissional_id + ' sem e-mail cadastrado — notificação de recorrência não enviada.');
     }
 
     res.status(201).json({
@@ -2361,7 +2372,11 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
     // precisa da própria chamada (não reaproveita a lógica de /api/agendamentos)
     if (prof && prof.email) {
       notificarProfissionalNovoAgendamento(prof.email, prof.nome, nome, data_hora, [servico.nome], servico.preco)
-        .catch(() => {});
+        .then(r => {
+          if (!r.enviado) console.error('Notificação de agendamento (link público) NÃO enviada pro profissional ' + prof.email + ': ' + r.motivo);
+        }).catch(e => console.error('Erro inesperado ao notificar profissional (link público):', e.message));
+    } else {
+      console.log('Profissional ' + profissional_id + ' sem e-mail cadastrado — notificação (link público) não enviada.');
     }
 
     res.status(201).json({
