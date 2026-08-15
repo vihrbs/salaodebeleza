@@ -422,6 +422,19 @@ select.fc option{background:var(--bg2)}
   </div>
 </div>
 
+<!-- Modal Alterar Senha (logado, pede a senha atual) -->
+<div class="mov" id="m-alterar-senha">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">🔑 Alterar Senha</span><button class="mx" onclick="closeM('m-alterar-senha')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Senha atual</label><input class="fc" type="password" id="alt-senha-atual" placeholder="••••••"/></div>
+      <div class="fg"><label class="fl">Nova senha (mín. 6 caracteres)</label><input class="fc" type="password" id="alt-senha-nova" placeholder="••••••"/></div>
+      <div class="fg"><label class="fl">Confirmar nova senha</label><input class="fc" type="password" id="alt-senha-nova2" placeholder="••••••"/></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-alterar-senha')">Cancelar</button><button class="btn btnp" onclick="confirmarAlterarSenha()">Salvar Nova Senha</button></div>
+  </div>
+</div>
+
 <!-- APP -->
 <div id="app">
   <div class="app-inner">
@@ -459,6 +472,7 @@ select.fc option{background:var(--bg2)}
             <div class="sb-uname" id="uname">Admin</div>
             <div class="sb-urole" id="sb-urole">Administrador</div>
           </div>
+          <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
       </div>
@@ -937,6 +951,34 @@ function confirmarRedefinicaoSenha() {
     window.history.replaceState({}, '', window.location.pathname);
   })
   .catch(function(e){ toast('Erro: '+(e.message||'link inválido ou expirado'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Nova Senha'; });
+}
+
+// ── ALTERAR SENHA (já logado, pede a senha atual) ─────
+function abrirAlterarSenha() {
+  document.getElementById('alt-senha-atual').value = '';
+  document.getElementById('alt-senha-nova').value = '';
+  document.getElementById('alt-senha-nova2').value = '';
+  openM('m-alterar-senha');
+}
+
+function confirmarAlterarSenha() {
+  var senhaAtual = document.getElementById('alt-senha-atual').value;
+  var senhaNova = document.getElementById('alt-senha-nova').value;
+  var senhaNova2 = document.getElementById('alt-senha-nova2').value;
+  if (!senhaAtual) { toast('Informe sua senha atual','er'); return; }
+  if (!senhaNova || senhaNova.length < 6) { toast('A nova senha precisa ter pelo menos 6 caracteres','er'); return; }
+  if (senhaNova !== senhaNova2) { toast('As senhas novas não coincidem','er'); return; }
+  if (senhaAtual === senhaNova) { toast('A nova senha precisa ser diferente da atual','er'); return; }
+
+  var btn = document.querySelector('#m-alterar-senha .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/auth/alterar-senha', { method: 'POST', body: { senha_atual: senhaAtual, senha_nova: senhaNova } })
+  .then(function(){
+    toast('Senha alterada com sucesso! ✅', 'ok');
+    closeM('m-alterar-senha');
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Nova Senha'; });
 }
 
@@ -1679,8 +1721,18 @@ function renderCli(list) {
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'WhatsApp...\',\'ok\')" title="WhatsApp">💬</button>' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();abrirNovoAgendamento()" title="Agendar">📅</button>' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();editCli(this)" data-cli="' + JSON.stringify(c).replace(/"/g,"&quot;") + '" title="Editar">✏️</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="event.stopPropagation();deletarCliente(this)" data-cli-id="' + c.id + '" data-cli-nome="' + c.nome.replace(/"/g,'') + '" title="Excluir">🗑</button>' +
       '</div></td></tr>';
   }).join('');
+}
+
+function deletarCliente(btn) {
+  var id = btn.dataset.cliId;
+  var nome = btn.dataset.cliNome;
+  if (!confirm('Desativar o cliente "' + nome + '"?\n\nEle some da lista, mas o histórico de agendamentos e financeiro dele continua preservado.')) return;
+  apiFetch('/api/clientes/' + id, { method: 'DELETE' })
+    .then(function(){ toast('Cliente desativado', 'ok'); loadClientes(); })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // ── FINANCEIRO ──────────────────────────────────────────
@@ -1788,9 +1840,16 @@ function renderEst(list) {
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
       '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" title="Repor" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'entrada\')">+</button><button class="btnic btn btnsm" title="Usar" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'saida\')">−</button></div></td>' +
+      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" title="Repor" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'entrada\')">+</button><button class="btnic btn btnsm" title="Usar" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'saida\')">−</button><button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🗑</button></div></td>' +
       '</tr>';
   }).join('');
+}
+
+function deletarProduto(id, nome) {
+  if (!confirm('Desativar o produto "' + nome + '"?\n\nEle some da lista de estoque, mas o histórico de movimentação continua preservado.')) return;
+  apiFetch('/api/estoque/' + id, { method: 'DELETE' })
+    .then(function(){ toast('Produto desativado', 'ok'); loadEst(); })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // ── COMISSÕES ───────────────────────────────────────────
@@ -1915,7 +1974,8 @@ function renderPros(list) {
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">' +
       '<div class="pro-av" style="background:' + (p.cor_agenda||COLS[0]) + '">' + p.nome[0] + '</div>' +
       '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + (p.especialidade||'—') + '</div></div>' +
-      '<button class="btnic btn btnsm" onclick="editPro(this)" data-pro="' + JSON.stringify(p).replace(/"/g,"&quot;") + '" title="Editar">✏️</button></div>' +
+      '<button class="btnic btn btnsm" onclick="editPro(this)" data-pro="' + JSON.stringify(p).replace(/"/g,"&quot;") + '" title="Editar">✏️</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarProfissional(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')" title="Excluir">🗑</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs)">' +
       '<div><div style="font-size:.9rem;font-weight:800">' + (p.total_servicos||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.9rem;font-weight:800;color:var(--ac)">' + (p.comissao_pct||40) + '%</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
@@ -1927,6 +1987,13 @@ function renderPros(list) {
       '<button class="btn btns btnsm" style="flex:1" onclick="abrirVendaParcelada(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🛒 Vender parcelado</button>' +
       '<button class="btn btns btnsm" style="flex:1" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">📋 Parcelas</button></div></div>';
   }).join('');
+}
+
+function deletarProfissional(id, nome) {
+  if (!confirm('Desativar o profissional "' + nome + '"?\n\nEle some da lista e das novas agendas, mas o histórico de atendimentos e comissões dele continua preservado.')) return;
+  apiFetch('/api/profissionais/' + id, { method: 'DELETE' })
+    .then(function(){ toast('Profissional desativado', 'ok'); loadPros(); fillSelects(); })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // ── VENDA PARCELADA PRO PROFISSIONAL ─────────────────
@@ -2044,9 +2111,22 @@ function renderSvcs(list) {
       '<td>' + s.duracao_min + ' min</td>' +
       '<td><strong>' + brl(s.preco) + '</strong></td>' +
       '<td><span class="badge bp">' + (s.comissao_pct||40) + '%</span></td>' +
-      '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toast(this.checked?\'Ativo\':\'Desativado\',this.checked?\'ok\':\'er\')"/></td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="toast(\'Removido\',\'er\')" title="Remover">🗑</button></div></td></tr>';
+      '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toggleServicoAtivo(\'' + s.id + '\',this.checked)"/></td>' +
+      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarServico(\'' + s.id + '\',\'' + s.nome.replace(/'/g,"\\'") + '\')" title="Remover">🗑</button></div></td></tr>';
   }).join('');
+}
+
+function toggleServicoAtivo(id, ativo) {
+  apiFetch('/api/servicos/' + id, { method: 'PUT', body: { ativo: ativo } })
+    .then(function(){ toast(ativo ? 'Serviço ativado' : 'Serviço desativado', ativo ? 'ok' : 'er'); })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); loadSvcs(); });
+}
+
+function deletarServico(id, nome) {
+  if (!confirm('Excluir o serviço "' + nome + '"?\n\nEle some da lista de serviços e não pode mais ser escolhido em novos agendamentos, mas o histórico continua preservado.')) return;
+  apiFetch('/api/servicos/' + id, { method: 'DELETE' })
+    .then(function(){ toast('Serviço removido', 'ok'); loadSvcs(); fillSelects(); })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // ── PACOTES ──────────────────────────────────────────────
