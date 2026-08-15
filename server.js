@@ -194,7 +194,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.0.0-log-notificacao-agendamento' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.1.0-autofill-email-profissional' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1890,9 +1890,17 @@ app.post('/api/usuarios', auth, async (req, res) => {
     let profissional_id_final = null;
     if (perfil_final === 'custom' && profissional_id) {
       const { data: prof } = await supabase.from('profissionais')
-        .select('id').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
+        .select('id, email').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
       if (!prof) return res.status(422).json({ error: 'Profissional inválido para este salão' });
       profissional_id_final = prof.id;
+
+      // Preenche automaticamente o e-mail do profissional com o e-mail de
+      // login, se ele ainda não tiver um e-mail próprio — evita a confusão
+      // de "vinculei o usuário mas o profissional continua sem e-mail" (são
+      // dois campos separados: o de login e o de notificação).
+      if (!prof.email) {
+        await supabase.from('profissionais').update({ email }).eq('id', prof.id);
+      }
     }
 
     const senha_hash = await bcrypt.hash(senha, 12);
@@ -1977,15 +1985,21 @@ app.put('/api/usuarios/:id/permissoes', auth, async (req, res) => {
   try {
     // Valida que o usuário-alvo pertence a este salão
     const { data: alvo } = await supabase.from('usuarios')
-      .select('id, perfil').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+      .select('id, perfil, email').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
     if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado' });
 
     let profissional_id_final = null;
     if (alvo.perfil !== 'admin' && profissional_id) {
       const { data: prof } = await supabase.from('profissionais')
-        .select('id').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
+        .select('id, email').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
       if (!prof) return res.status(422).json({ error: 'Profissional inválido para este salão' });
       profissional_id_final = prof.id;
+
+      // Mesmo preenchimento automático do e-mail do profissional, agora pro
+      // caso de vincular um usuário já existente (não só na criação)
+      if (!prof.email) {
+        await supabase.from('profissionais').update({ email: alvo.email }).eq('id', prof.id);
+      }
     }
 
     const { error } = await supabase.from('usuario_permissoes').upsert({
