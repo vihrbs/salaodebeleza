@@ -190,7 +190,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.6.0-import-trinks-horarios-livres' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.7.0-excluir-e-alterar-senha' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -626,6 +626,30 @@ app.post('/api/auth/redefinir-senha', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Troca a própria senha já logado, exigindo a senha atual (diferente do
+// "esqueci minha senha", que não precisa da senha antiga)
+app.post('/api/auth/alterar-senha', auth, async (req, res) => {
+  const { senha_atual, senha_nova } = req.body;
+  if (!senha_atual || !senha_nova) return res.status(422).json({ error: 'Informe a senha atual e a nova senha' });
+  if (String(senha_nova).length < 6) return res.status(422).json({ error: 'A nova senha deve ter pelo menos 6 caracteres' });
+  try {
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('id, senha_hash').eq('id', req.user.id).single();
+    if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const confere = await bcrypt.compare(senha_atual, usuario.senha_hash);
+    // Usa 403 (não 401) de propósito — 401 é interceptado globalmente no
+    // frontend como "sessão expirada" e desloga o usuário, o que aqui seria
+    // errado: a sessão continua válida, só a senha atual digitada é que
+    // está incorreta.
+    if (!confere) return res.status(403).json({ error: 'Senha atual incorreta' });
+
+    const senha_hash = await bcrypt.hash(senha_nova, 12);
+    await supabase.from('usuarios').update({ senha_hash }).eq('id', usuario.id);
+    res.json({ message: 'Senha alterada com sucesso!' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════
 // PROFISSIONAIS
 // ═══════════════════════════════════════════════════
@@ -937,11 +961,19 @@ app.get('/api/clientes', auth, async (req, res) => {
   const { q, limit = 100, page = 1 } = req.query;
   const offset = (page - 1) * limit;
   let query = supabase.from('clientes').select('*', { count: 'exact' })
-    .eq('salao_id', req.salao_id).order('nome').range(offset, offset + Number(limit) - 1);
+    .eq('salao_id', req.salao_id).eq('ativo', true).order('nome').range(offset, offset + Number(limit) - 1);
   if (q) query = query.ilike('nome', `%${q}%`);
   const { data, count, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data: data || [], total: count });
+});
+
+// Desativa um cliente (soft delete — preserva o histórico de agendamentos e
+// financeiro já existente, só some da lista e não pode mais ser selecionado)
+app.delete('/api/clientes/:id', auth, requirePermissao('clientes'), async (req, res) => {
+  await supabase.from('clientes').update({ ativo: false })
+    .eq('id', req.params.id).eq('salao_id', req.salao_id);
+  res.json({ message: 'Cliente desativado' });
 });
 
 // Lista clientes inativos (sem agendamento há 60+ dias, ou nunca agendaram)
@@ -1535,6 +1567,14 @@ app.put('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, res) 
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
   if (error || !data) return res.status(404).json({ error: 'Não encontrado' });
   res.json(data);
+});
+
+// Desativa um produto (soft delete — mantém o histórico de movimentação e
+// de compras parceladas antigas que apontam pra ele)
+app.delete('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, res) => {
+  await supabase.from('produtos').update({ ativo: false })
+    .eq('id', req.params.id).eq('salao_id', req.salao_id);
+  res.json({ message: 'Produto desativado' });
 });
 
 // Movimentar estoque
