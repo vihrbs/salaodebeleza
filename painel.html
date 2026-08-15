@@ -158,29 +158,23 @@ input,select,textarea{font-family:inherit}
 .kl{font-size:.7rem;color:var(--t3)}
 .kd{font-size:.67rem;font-weight:600;padding:2px 8px;border-radius:50px;background:rgba(74,222,128,.1);color:#4ADE80;border:1px solid rgba(74,222,128,.15)}
 
-.card{background:var(--wh);border-radius:var(--r);border:1px solid var(--bd);padding:18px}
+.card{background:var(--wh);border-radius:var(--r);border:1px solid var(--bd);padding:18px;min-width:0}
 .crow{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .ch{font-size:.88rem;font-weight:700;color:var(--tx)}
 .ct{font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:13px}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.g31{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.g31{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px}
 
 /* ── TABLE ───────────────────────────────── */
-/* Sombra sutil nas bordas quando a tabela tem mais conteúdo pra rolar —
-   sem isso, muita gente não percebe que dá pra arrastar pro lado no
-   celular e acha que o conteúdo simplesmente sumiu/foi cortado. */
-.tw{
-  overflow-x:auto;-webkit-overflow-scrolling:touch;
-  background:
-    linear-gradient(to right, var(--wh) 30%, rgba(30,28,24,0)) 0 0,
-    linear-gradient(to right, rgba(30,28,24,0), var(--wh) 70%) 100% 0,
-    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.45), rgba(0,0,0,0)) 0 0,
-    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.45), rgba(0,0,0,0)) 100% 0;
-  background-repeat:no-repeat;
-  background-color:var(--wh);
-  background-size:24px 100%,24px 100%,10px 100%,10px 100%;
-  background-attachment:local,local,scroll,scroll;
-}
+/* Sombra nas bordas quando a tabela tem mais conteúdo pra rolar. Feita via
+   JS (função atualizarSombraScroll) em vez do truque de CSS puro
+   background-attachment:local — esse truque não renderiza direito em
+   algumas versões do Safari/iOS, deixando uma sombra "fantasma" que nunca
+   some de verdade mesmo com a rolagem no fim. */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;position:relative}
+.tw.tw-shadow-l::before,.tw.tw-shadow-r::after{content:'';position:absolute;top:0;bottom:0;width:22px;pointer-events:none;z-index:2}
+.tw.tw-shadow-l::before{left:0;background:linear-gradient(to left, transparent, rgba(0,0,0,.4))}
+.tw.tw-shadow-r::after{right:0;background:linear-gradient(to right, transparent, rgba(0,0,0,.4))}
 table{width:100%;min-width:max-content;border-collapse:collapse}
 th{text-align:left;font-size:.63rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);padding:9px 12px;border-bottom:1px solid var(--bd);white-space:nowrap}
 td{padding:11px 12px;border-bottom:1px solid var(--bd);font-size:.78rem;vertical-align:middle;color:var(--tx)}
@@ -333,7 +327,7 @@ select.fc option{background:var(--bg2)}
   #mob-ham{display:flex;align-items:center;justify-content:center}
   #content{padding:16px 14px 24px}
   .kpis{grid-template-columns:1fr 1fr;gap:10px}
-  .g2,.g31{grid-template-columns:1fr}
+  .g2,.g31{grid-template-columns:minmax(0,1fr)}
   .kv{font-size:1.2rem}
   table{font-size:.72rem}
   th,td{padding:8px 9px}
@@ -1116,7 +1110,30 @@ function nav(page, el) {
 
   // Ações especiais por página
   if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
+
+  // Reavalia as sombras de rolagem das tabelas da página que acabou de abrir
+  // (pega o caso de conteúdo já carregado antes, em cache)
+  setTimeout(iniciarSombrasScroll, 60);
 }
+
+// ── SOMBRA DE ROLAGEM NAS TABELAS ────────────────────────
+// Mostra uma sombra na borda esquerda/direita de uma tabela quando tem mais
+// conteúdo pra rolar naquela direção — feito via JS (não via truque de CSS
+// puro) porque background-attachment:local não é confiável no Safari/iOS.
+function atualizarSombraScroll(el) {
+  var maxScroll = el.scrollWidth - el.clientWidth;
+  el.classList.toggle('tw-shadow-r', maxScroll > 1 && el.scrollLeft < maxScroll - 1);
+  el.classList.toggle('tw-shadow-l', el.scrollLeft > 1);
+}
+function onScrollTw(e) { atualizarSombraScroll(e.currentTarget); }
+function iniciarSombrasScroll() {
+  document.querySelectorAll('.tw').forEach(function(el) {
+    atualizarSombraScroll(el);
+    el.removeEventListener('scroll', onScrollTw);
+    el.addEventListener('scroll', onScrollTw, { passive: true });
+  });
+}
+window.addEventListener('resize', function(){ setTimeout(iniciarSombrasScroll, 60); }, { passive: true });
 
 // ── MODALS ──────────────────────────────────────────────
 function openM(id){ document.getElementById(id).classList.add('on'); document.body.style.overflow='hidden'; }
@@ -1653,6 +1670,7 @@ function renderAgenda(list, agrupado) {
 
   if (!agrupado) {
     tb.innerHTML = list.map(linhaAgendamento).join('');
+    setTimeout(iniciarSombrasScroll, 30);
     return;
   }
 
@@ -1677,6 +1695,7 @@ function renderAgenda(list, agrupado) {
     html += grupos[dia].map(linhaAgendamento).join('');
   });
   tb.innerHTML = html;
+  setTimeout(iniciarSombrasScroll, 30);
 }
 
 // ── CLIENTES ────────────────────────────────────────────
@@ -1745,6 +1764,7 @@ function renderCli(list) {
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="event.stopPropagation();deletarCliente(this)" data-cli-id="' + c.id + '" data-cli-nome="' + c.nome.replace(/"/g,'') + '" title="Excluir">🗑</button>' +
       '</div></td></tr>';
   }).join('');
+  setTimeout(iniciarSombrasScroll, 30);
 }
 
 function deletarCliente(btn) {
@@ -1864,6 +1884,7 @@ function renderEst(list) {
       '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" title="Repor" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'entrada\')">+</button><button class="btnic btn btnsm" title="Usar" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'saida\')">−</button><button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🗑</button></div></td>' +
       '</tr>';
   }).join('');
+  setTimeout(iniciarSombrasScroll, 30);
 }
 
 function deletarProduto(id, nome) {
@@ -2135,6 +2156,7 @@ function renderSvcs(list) {
       '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toggleServicoAtivo(\'' + s.id + '\',this.checked)"/></td>' +
       '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarServico(\'' + s.id + '\',\'' + s.nome.replace(/'/g,"\\'") + '\')" title="Remover">🗑</button></div></td></tr>';
   }).join('');
+  setTimeout(iniciarSombrasScroll, 30);
 }
 
 function toggleServicoAtivo(id, ativo) {
@@ -3550,6 +3572,7 @@ function loadUsuarios() {
           '</div>';
         return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + emailStatus + '</td><td>' + acoes + '</td></tr>';
       }).join('') + '</tbody></table>';
+    setTimeout(iniciarSombrasScroll, 30);
   }).catch(function(e) {
     // Mostra o erro REAL vindo do backend (não uma mensagem genérica) —
     // isso é essencial pra diagnosticar problemas sem precisar adivinhar.
