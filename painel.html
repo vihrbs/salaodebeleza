@@ -3076,7 +3076,7 @@ var MODELOS = {
     labels:  ['Nome','Preço'],
     endpoint: '/api/pacotes', modo: 'individual',
     aviso: '⚠️ Pacotes importados chegam sem os serviços configurados (a planilha de origem só traz nome e preço, sem o detalhamento). Depois de importar, abre cada pacote e adiciona os serviços manualmente.',
-    transformarLinha: function(row) { return { nome: row.nome, preco: parseValorBR(row.preco), servicos: [] }; },
+    transformarLinha: function(row) { return { nome: row.nome, preco: parseValorBR(row.preco), servicos: [], verificar_duplicidade: true }; },
     exemplo: [['Pacote 4 Cortes','280']]
   },
   despesas: {
@@ -3462,15 +3462,20 @@ function executarImport() {
   var result = document.getElementById('import-result');
   btn.disabled = true; btn.textContent = 'Importando...';
 
-  function finalizar(ok, err, total) {
+  function finalizar(ok, err, duplicados) {
     result.style.display = 'block';
-    if (err === 0) {
-      result.style.background = '#DCFCE7'; result.style.color = '#16A34A';
-      result.textContent = ok + ' registro(s) importado(s) com sucesso!';
-    } else {
-      result.style.background = '#FEF3C7'; result.style.color = '#B45309';
-      result.textContent = ok + ' importado(s), ' + err + ' com erro.';
-    }
+    var partes = [];
+    if (ok > 0) partes.push(ok + ' importado(s)');
+    if (duplicados > 0) partes.push(duplicados + ' duplicado(s) ignorado(s)');
+    if (err > 0) partes.push(err + ' com erro');
+    if (!partes.length) partes.push('Nenhum registro processado');
+    var textoFinal = partes.join(', ') + '.';
+
+    if (err > 0) { result.style.background = '#FEF3C7'; result.style.color = '#B45309'; }
+    else if (ok === 0 && duplicados > 0) { result.style.background = '#FEF3C7'; result.style.color = '#B45309'; }
+    else { result.style.background = '#DCFCE7'; result.style.color = '#16A34A'; }
+    result.textContent = textoFinal;
+
     btn.disabled = false; btn.textContent = 'Importar dados';
     if (tipo === 'clientes')      { loadClientes(); loadKPIs(); }
     if (tipo === 'profissionais') { loadPros(); fillSelects(); }
@@ -3478,7 +3483,7 @@ function executarImport() {
     if (tipo === 'produtos')      { loadEst(); }
     if (tipo === 'pacotes')       { loadPacotes(); }
     if (tipo === 'despesas' || tipo === 'vendas') { loadFin(); loadKPIs(); }
-    toast(ok + ' registro(s) importado(s)!','ok');
+    toast(textoFinal, ok > 0 ? 'ok' : 'inf');
   }
 
   // Modo "lote" — manda tudo numa requisição só, em vez de uma por linha
@@ -3489,7 +3494,13 @@ function executarImport() {
     var payload = {};
     payload[m.chaveLote] = itens;
     apiFetch(m.endpoint, { method: 'POST', body: payload })
-      .then(function(r) { finalizar(r && r.total ? r.total : itens.length, 0, itens.length); })
+      .then(function(r) {
+        // Cuidado: total pode ser 0 de propósito (tudo duplicado) — não
+        // pode cair no "|| itens.length" nesse caso, senão mostra errado
+        var totalOk  = (r && typeof r.total === 'number') ? r.total : itens.length;
+        var totalDup = (r && typeof r.duplicados === 'number') ? r.duplicados : 0;
+        finalizar(totalOk, 0, totalDup);
+      })
       .catch(function(e) {
         result.style.display = 'block';
         result.style.background = '#FEE2E2'; result.style.color = '#DC2626';
@@ -3502,13 +3513,16 @@ function executarImport() {
   // Modo "individual" — uma requisição por linha (hoje só Pacotes usa isso,
   // já que geralmente são poucos e cada um precisa ser criado como um
   // registro isolado)
-  var ok = 0; var err = 0; var total = IMPORT_DATA.length;
+  var ok = 0; var err = 0; var duplicados = 0; var total = IMPORT_DATA.length;
   function processNext(i) {
-    if (i >= total) { finalizar(ok, err, total); return; }
+    if (i >= total) { finalizar(ok, err, duplicados); return; }
     var body = construirPayloadLinha(m, IMPORT_DATA[i]);
     btn.textContent = 'Importando ' + (i+1) + '/' + total + '...';
     apiFetch(m.endpoint, {method:'POST', body:body})
-      .then(function() { ok++; processNext(i+1); })
+      .then(function(r) {
+        if (r && r.duplicado) duplicados++; else ok++;
+        processNext(i+1);
+      })
       .catch(function() { err++; processNext(i+1); });
   }
   processNext(0);
