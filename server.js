@@ -115,6 +115,33 @@ function requirePermissao(modulo) {
   };
 }
 
+// ── DEDUPLICAÇÃO NA IMPORTAÇÃO EM LOTE ────────────────
+// Usado pelas rotas /lote pra não criar registro repetido quando a pessoa
+// importa a mesma planilha duas vezes, ou quando a própria planilha já
+// vem com linhas duplicadas.
+function normalizarTexto(v) {
+  return String(v || '').trim().toLowerCase();
+}
+function normalizarTelefone(v) {
+  return String(v || '').replace(/\D/g, '');
+}
+
+// Separa um array em { paraInserir, duplicados } com base numa função que
+// calcula a "chave" de cada item — compara tanto contra o que já existe no
+// banco (chavesExistentes) quanto duplicidade dentro da própria planilha.
+function separarDuplicados(itens, chavesExistentes, calcularChave) {
+  const chavesVistas = new Set();
+  const paraInserir = [];
+  let duplicados = 0;
+  for (const item of itens) {
+    const chave = calcularChave(item);
+    if (!chave || chavesExistentes.has(chave) || chavesVistas.has(chave)) { duplicados++; continue; }
+    chavesVistas.add(chave);
+    paraInserir.push(item);
+  }
+  return { paraInserir, duplicados };
+}
+
 // ── MAQUININHA DE CARTÃO ─────────────────────────────
 // Formas de pagamento que sofrem desconto de taxa de maquininha.
 // Precisa bater exatamente com os valores enviados pelo frontend (botões fpg-btn).
@@ -194,7 +221,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.1.0-autofill-email-profissional' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.2.0-deduplicacao-importacao' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -681,18 +708,33 @@ app.post('/api/profissionais/lote', auth, requirePermissao('profissionais'), asy
     return res.status(422).json({ error: 'Envie uma lista de profissionais em "profissionais"' });
   }
   if (profissionais.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+
+  function chaveProfissional(p) { return p.nome ? 'nome:' + normalizarTexto(p.nome) : null; }
+
+  const { data: existentes } = await supabase.from('profissionais')
+    .select('nome').eq('salao_id', req.salao_id).eq('ativo', true);
+  const chavesExistentes = new Set((existentes || []).map(chaveProfissional).filter(Boolean));
+  const { paraInserir, duplicados } = separarDuplicados(profissionais, chavesExistentes, chaveProfissional);
+
+  if (!paraInserir.length) {
+    return res.status(200).json({ message: 'Nenhum profissional novo — todos já existiam ou estavam duplicados na planilha.', total: 0, duplicados });
+  }
+
   const TAMANHO_BLOCO = 500;
   let totalInseridos = 0;
   try {
-    for (let i = 0; i < profissionais.length; i += TAMANHO_BLOCO) {
-      const bloco = profissionais.slice(i, i + TAMANHO_BLOCO).map(p => ({ ...p, salao_id: req.salao_id }));
+    for (let i = 0; i < paraInserir.length; i += TAMANHO_BLOCO) {
+      const bloco = paraInserir.slice(i, i + TAMANHO_BLOCO).map(p => ({ ...p, salao_id: req.salao_id }));
       const { error } = await supabase.from('profissionais').insert(bloco);
       if (error) throw error;
       totalInseridos += bloco.length;
     }
-    res.status(201).json({ message: totalInseridos + ' profissional(is) importado(s)!', total: totalInseridos });
+    res.status(201).json({
+      message: totalInseridos + ' profissional(is) importado(s)' + (duplicados ? ', ' + duplicados + ' duplicado(s) ignorado(s)' : '') + '!',
+      total: totalInseridos, duplicados
+    });
   } catch(e) {
-    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + profissionais.length + '): ' + e.message });
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + paraInserir.length + '): ' + e.message });
   }
 });
 
@@ -826,18 +868,33 @@ app.post('/api/servicos/lote', auth, requirePermissao('servicos'), async (req, r
     return res.status(422).json({ error: 'Envie uma lista de serviços em "servicos"' });
   }
   if (servicos.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+
+  function chaveServico(s) { return s.nome ? 'nome:' + normalizarTexto(s.nome) : null; }
+
+  const { data: existentes } = await supabase.from('servicos')
+    .select('nome').eq('salao_id', req.salao_id).eq('ativo', true);
+  const chavesExistentes = new Set((existentes || []).map(chaveServico).filter(Boolean));
+  const { paraInserir, duplicados } = separarDuplicados(servicos, chavesExistentes, chaveServico);
+
+  if (!paraInserir.length) {
+    return res.status(200).json({ message: 'Nenhum serviço novo — todos já existiam ou estavam duplicados na planilha.', total: 0, duplicados });
+  }
+
   const TAMANHO_BLOCO = 500;
   let totalInseridos = 0;
   try {
-    for (let i = 0; i < servicos.length; i += TAMANHO_BLOCO) {
-      const bloco = servicos.slice(i, i + TAMANHO_BLOCO).map(s => ({ ...s, salao_id: req.salao_id }));
+    for (let i = 0; i < paraInserir.length; i += TAMANHO_BLOCO) {
+      const bloco = paraInserir.slice(i, i + TAMANHO_BLOCO).map(s => ({ ...s, salao_id: req.salao_id }));
       const { error } = await supabase.from('servicos').insert(bloco);
       if (error) throw error;
       totalInseridos += bloco.length;
     }
-    res.status(201).json({ message: totalInseridos + ' serviço(s) importado(s)!', total: totalInseridos });
+    res.status(201).json({
+      message: totalInseridos + ' serviço(s) importado(s)' + (duplicados ? ', ' + duplicados + ' duplicado(s) ignorado(s)' : '') + '!',
+      total: totalInseridos, duplicados
+    });
   } catch(e) {
-    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + servicos.length + '): ' + e.message });
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + paraInserir.length + '): ' + e.message });
   }
 });
 
@@ -875,10 +932,23 @@ app.get('/api/pacotes', auth, async (req, res) => {
 
 app.post('/api/pacotes', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode criar pacotes' });
-  const { nome, descricao, preco, validade_dias, servicos } = req.body;
+  const { nome, descricao, preco, validade_dias, servicos, verificar_duplicidade } = req.body;
   if (!nome || !preco) {
     return res.status(422).json({ error: 'Nome e preço são obrigatórios' });
   }
+
+  // Só checa duplicidade quando pedido explicitamente (usado pela
+  // importação) — não muda o comportamento de quem cria um pacote manual
+  // pelo botão "Novo Pacote", que sempre funcionou sem essa checagem.
+  if (verificar_duplicidade) {
+    const { data: existente } = await supabase.from('pacotes')
+      .select('id').eq('salao_id', req.salao_id).eq('ativo', true)
+      .ilike('nome', String(nome).trim()).maybeSingle();
+    if (existente) {
+      return res.status(200).json({ duplicado: true, message: 'Pacote "' + nome + '" já existe — ignorado na importação.' });
+    }
+  }
+
   // Serviços são opcionais na criação — permite importar pacotes de outro
   // sistema que só trazem nome+preço, sem o detalhamento de sessões. Quando
   // informados, cada um precisa ter estrutura válida.
@@ -1061,18 +1131,40 @@ app.post('/api/clientes/lote', auth, async (req, res) => {
     return res.status(422).json({ error: 'Envie uma lista de clientes em "clientes"' });
   }
   if (clientes.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+
+  // Chave de duplicidade: telefone é o identificador mais confiável (nem
+  // todo cliente tem e-mail, mas quase todo tem telefone). Cai pra e-mail,
+  // depois pro nome, se não tiver telefone.
+  function chaveCliente(c) {
+    if (c.telefone) return 'tel:' + normalizarTelefone(c.telefone);
+    if (c.email) return 'email:' + normalizarTexto(c.email);
+    return c.nome ? 'nome:' + normalizarTexto(c.nome) : null;
+  }
+
+  const { data: existentes } = await supabase.from('clientes')
+    .select('nome, telefone, email').eq('salao_id', req.salao_id);
+  const chavesExistentes = new Set((existentes || []).map(chaveCliente).filter(Boolean));
+  const { paraInserir, duplicados } = separarDuplicados(clientes, chavesExistentes, chaveCliente);
+
+  if (!paraInserir.length) {
+    return res.status(200).json({ message: 'Nenhum cliente novo — todos já existiam ou estavam duplicados na planilha.', total: 0, duplicados });
+  }
+
   const TAMANHO_BLOCO = 500;
   let totalInseridos = 0;
   try {
-    for (let i = 0; i < clientes.length; i += TAMANHO_BLOCO) {
-      const bloco = clientes.slice(i, i + TAMANHO_BLOCO).map(c => ({ ...c, salao_id: req.salao_id }));
+    for (let i = 0; i < paraInserir.length; i += TAMANHO_BLOCO) {
+      const bloco = paraInserir.slice(i, i + TAMANHO_BLOCO).map(c => ({ ...c, salao_id: req.salao_id }));
       const { error } = await supabase.from('clientes').insert(bloco);
       if (error) throw error;
       totalInseridos += bloco.length;
     }
-    res.status(201).json({ message: totalInseridos + ' cliente(s) importado(s)!', total: totalInseridos });
+    res.status(201).json({
+      message: totalInseridos + ' cliente(s) importado(s)' + (duplicados ? ', ' + duplicados + ' duplicado(s) ignorado(s)' : '') + '!',
+      total: totalInseridos, duplicados
+    });
   } catch(e) {
-    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + clientes.length + '): ' + e.message });
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + paraInserir.length + '): ' + e.message });
   }
 });
 
@@ -1581,26 +1673,49 @@ app.post('/api/financeiro/lancamentos/lote', auth, requirePermissao('financeiro'
   if (lancamentos.length > 20000) {
     return res.status(422).json({ error: 'Máximo de 20.000 lançamentos por importação' });
   }
+
+  // Normaliza cada linha primeiro (mesma transformação que ia direto pro
+  // insert antes), pra calcular a chave de duplicidade sobre os valores
+  // finais — evita "R$ 55,00" e "55" contarem como coisas diferentes.
+  const normalizados = lancamentos.map(l => ({
+    tipo: l.tipo === 'saida' ? 'saida' : 'entrada',
+    categoria: l.categoria || 'Outros',
+    descricao: l.descricao || '',
+    valor: Number(l.valor) || 0,
+    data: l.data,
+    pago: l.pago !== false
+  }));
+
+  // Chave: mesma data + categoria + descrição + valor = provavelmente o
+  // mesmo lançamento (protege contra importar a mesma planilha 2 vezes)
+  function chaveLancamento(l) {
+    return [l.tipo, normalizarTexto(l.categoria), normalizarTexto(l.descricao), l.valor, l.data].join('|');
+  }
+
+  const { data: existentes } = await supabase.from('lancamentos')
+    .select('tipo, categoria, descricao, valor, data').eq('salao_id', req.salao_id);
+  const chavesExistentes = new Set((existentes || []).map(chaveLancamento));
+  const { paraInserir, duplicados } = separarDuplicados(normalizados, chavesExistentes, chaveLancamento);
+
+  if (!paraInserir.length) {
+    return res.status(200).json({ message: 'Nenhum lançamento novo — todos já existiam ou estavam duplicados na planilha.', total: 0, duplicados });
+  }
+
   const TAMANHO_BLOCO = 500;
   let totalInseridos = 0;
   try {
-    for (let i = 0; i < lancamentos.length; i += TAMANHO_BLOCO) {
-      const bloco = lancamentos.slice(i, i + TAMANHO_BLOCO).map(l => ({
-        tipo: l.tipo === 'saida' ? 'saida' : 'entrada',
-        categoria: l.categoria || 'Outros',
-        descricao: l.descricao || '',
-        valor: Number(l.valor) || 0,
-        data: l.data,
-        pago: l.pago !== false,
-        salao_id: req.salao_id
-      }));
+    for (let i = 0; i < paraInserir.length; i += TAMANHO_BLOCO) {
+      const bloco = paraInserir.slice(i, i + TAMANHO_BLOCO).map(l => ({ ...l, salao_id: req.salao_id }));
       const { error } = await supabase.from('lancamentos').insert(bloco);
       if (error) throw error;
       totalInseridos += bloco.length;
     }
-    res.status(201).json({ message: totalInseridos + ' lançamento(s) importado(s) com sucesso!', total: totalInseridos });
+    res.status(201).json({
+      message: totalInseridos + ' lançamento(s) importado(s)' + (duplicados ? ', ' + duplicados + ' duplicado(s) ignorado(s)' : '') + '!',
+      total: totalInseridos, duplicados
+    });
   } catch(e) {
-    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + lancamentos.length + '): ' + e.message });
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + paraInserir.length + '): ' + e.message });
   }
 });
 
@@ -1652,18 +1767,33 @@ app.post('/api/estoque/lote', auth, requirePermissao('estoque'), async (req, res
     return res.status(422).json({ error: 'Envie uma lista de produtos em "produtos"' });
   }
   if (produtos.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+
+  function chaveProduto(p) { return p.nome ? 'nome:' + normalizarTexto(p.nome) : null; }
+
+  const { data: existentes } = await supabase.from('produtos')
+    .select('nome').eq('salao_id', req.salao_id).eq('ativo', true);
+  const chavesExistentes = new Set((existentes || []).map(chaveProduto).filter(Boolean));
+  const { paraInserir, duplicados } = separarDuplicados(produtos, chavesExistentes, chaveProduto);
+
+  if (!paraInserir.length) {
+    return res.status(200).json({ message: 'Nenhum produto novo — todos já existiam ou estavam duplicados na planilha.', total: 0, duplicados });
+  }
+
   const TAMANHO_BLOCO = 500;
   let totalInseridos = 0;
   try {
-    for (let i = 0; i < produtos.length; i += TAMANHO_BLOCO) {
-      const bloco = produtos.slice(i, i + TAMANHO_BLOCO).map(p => ({ ...p, salao_id: req.salao_id }));
+    for (let i = 0; i < paraInserir.length; i += TAMANHO_BLOCO) {
+      const bloco = paraInserir.slice(i, i + TAMANHO_BLOCO).map(p => ({ ...p, salao_id: req.salao_id }));
       const { error } = await supabase.from('produtos').insert(bloco);
       if (error) throw error;
       totalInseridos += bloco.length;
     }
-    res.status(201).json({ message: totalInseridos + ' produto(s) importado(s)!', total: totalInseridos });
+    res.status(201).json({
+      message: totalInseridos + ' produto(s) importado(s)' + (duplicados ? ', ' + duplicados + ' duplicado(s) ignorado(s)' : '') + '!',
+      total: totalInseridos, duplicados
+    });
   } catch(e) {
-    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + produtos.length + '): ' + e.message });
+    res.status(500).json({ error: 'Erro ao importar em lote (parou em ' + totalInseridos + ' de ' + paraInserir.length + '): ' + e.message });
   }
 });
 
