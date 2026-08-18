@@ -599,7 +599,7 @@ select.fc option{background:var(--bg2)}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btns btnsm" onclick="openImport('vendas')" id="btn-import-vendas">📥 Importar Vendas</button>
             <button class="btn btns btnsm" onclick="openImport('despesas')" id="btn-import-despesas">📥 Importar Despesas</button>
-            <button class="btn btnp btnsm" onclick="openM('m-lan')">+ Lançamento</button>
+            <button class="btn btnp btnsm" onclick="abrirNovoLancamento()">+ Lançamento</button>
           </div>
         </div>
         <div class="bc" id="fin-bc" style="height:140px"></div>
@@ -630,9 +630,17 @@ select.fc option{background:var(--bg2)}
         <button class="btn btns" onclick="openImport('produtos')" id="btn-import-produtos">📥 Importar</button>
         <button class="btn btnp" style="margin-left:auto" onclick="openM('m-prod')">+ Novo Produto</button>
       </div>
-      <div class="card">
+      <div class="card" style="margin-bottom:14px">
         <div class="tw"><table><thead><tr><th>Produto</th><th>Categoria</th><th>Qtd.</th><th>Mínimo</th><th>Nível</th><th>Preço</th><th>Ações</th></tr></thead>
         <tbody id="est-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
+      </div>
+      <div class="card">
+        <div class="crow">
+          <span class="ch">📋 Histórico de Movimentação</span>
+          <select class="fc" style="width:auto;font-size:.72rem" id="mov-hist-filtro-prof" onchange="loadMovimentacoesEstoque(this.value)"><option value="">Todos os profissionais</option></select>
+        </div>
+        <div style="font-size:.74rem;color:var(--t3);margin-bottom:10px">Quem deu baixa em quê e quando — reposição, ajuste, consumo em atendimento e venda pro cliente.</div>
+        <div id="mov-hist-lst"><div class="lc"><div class="spin"></div></div></div>
       </div>
     </div>
 
@@ -1216,6 +1224,7 @@ function loadAll() {
   renderCal(); renderDashChart();
   fillSelects();
   carregarHorarioFuncionamento(); // busca cedo o horário de funcionamento (usado no filtro de horários livres do Novo Agendamento)
+  loadMovimentacoesEstoque();
 }
 
 // ── ATUALIZAÇÃO AUTOMÁTICA ──────────────────────────────
@@ -1341,35 +1350,49 @@ function abrirModalConcluir(id) {
   });
   // Limpa seleção anterior
   document.querySelectorAll('.fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+  document.getElementById('fiado-aviso').textContent = '';
+  document.getElementById('btn-concluir-ok').textContent = 'Confirmar pagamento ✅';
   openM('m-concluir');
 }
 
 function selecionarFpg(btn) {
   document.querySelectorAll('.fpg-btn').forEach(function(b){ b.classList.remove('on'); });
   btn.classList.add('on');
+  var aviso = document.getElementById('fiado-aviso');
+  var okBtn = document.getElementById('btn-concluir-ok');
+  if (btn.dataset.val === 'fiado') {
+    aviso.textContent = '⏳ O atendimento é concluído normalmente, mas fica marcado como pendente no Financeiro → Fiado até você registrar o pagamento.';
+    okBtn.textContent = 'Concluir como fiado 🧾';
+  } else {
+    aviso.textContent = '';
+    okBtn.textContent = 'Confirmar pagamento ✅';
+  }
 }
 
 function confirmarConclusao() {
   var id = document.getElementById('concluir-id').value;
   var fpgBtn = document.querySelector('.fpg-btn.on');
-  if (!fpgBtn) { toast('Selecione a forma de pagamento','er'); return; }
+  if (!fpgBtn) { toast('Selecione a forma de pagamento (ou fiado)','er'); return; }
   var fpg = fpgBtn.dataset.val;
+  var ehFiado = fpg === 'fiado';
 
   var btn = document.getElementById('btn-concluir-ok');
   btn.disabled = true; btn.textContent = 'Salvando...';
 
-  apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{status:'concluido', forma_pgto: fpg}})
+  apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{
+    status:'concluido', forma_pgto: ehFiado ? undefined : fpg, pago: !ehFiado
+  }})
     .then(function(r){
       closeM('m-concluir');
-      toast('Atendimento concluído! ✅', 'ok');
+      toast(ehFiado ? 'Atendimento concluído — marcado como fiado 🧾' : 'Atendimento concluído! ✅', 'ok');
       if (r && r.taxa_maquininha && r.taxa_maquininha.taxa_profissional > 0) {
         toast('Taxa da maquininha: ' + brl(r.taxa_maquininha.taxa_total) + ' (profissional absorveu ' + brl(r.taxa_maquininha.taxa_profissional) + ')', 'inf');
       }
-      loadDashTl(); loadAgenda(); loadKPIs(); loadCom();
+      loadDashTl(); loadAgenda(); loadKPIs(); loadCom(); loadFiado();
       if (r && r.whatsapp_link) mostrarToastWhatsapp(r.whatsapp_link);
     })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-    .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar pagamento ✅'; });
+    .finally(function(){ btn.disabled = false; });
 }
 
 function mostrarToastWhatsapp(link) {
@@ -1937,7 +1960,13 @@ function renderEst(list) {
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
       '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" title="Repor" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'entrada\')">+</button><button class="btnic btn btnsm" title="Usar" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'saida\')">−</button><button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🗑</button></div></td>' +
+      '<td><div style="display:flex;gap:3px;flex-wrap:wrap">' +
+        '<button class="btnic btn btnsm" title="Repor estoque" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'entrada\')">+</button>' +
+        '<button class="btnic btn btnsm" title="Ajustar/perda" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'saida\')">−</button>' +
+        '<button class="btnic btn btnsm" title="Registrar consumo (usado em atendimento)" onclick="event.stopPropagation();abrirConsumoProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">💧</button>' +
+        '<button class="btnic btn btnsm" title="Vender pro cliente" onclick="event.stopPropagation();abrirVenderProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + (p.preco_venda||0) + ')">💰</button>' +
+        '<button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🗑</button>' +
+      '</div></td>' +
       '</tr>';
   }).join('');
   setTimeout(iniciarSombrasScroll, 30);
@@ -2063,6 +2092,11 @@ function fecharCom(){ closeM('m-fcom'); toast('Comissões fechadas!','ok'); load
 function loadPros() {
   apiFetch('/api/profissionais').then(function(r){
     PROS = r || []; renderPros(PROS);
+    var selFiltro = document.getElementById('mov-hist-filtro-prof');
+    if (selFiltro) {
+      selFiltro.innerHTML = '<option value="">Todos os profissionais</option>' +
+        PROS.map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    }
   }).catch(function(){ PROS = DEMO ? D.pros : []; renderPros(PROS); });
 }
 
@@ -2699,18 +2733,45 @@ function saveCli() {
   }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
+var LAN_PAGO_SELECIONADO = true; // default: já pago (comportamento de antes, continua igual pra quem não mexer)
+
+function abrirNovoLancamento() {
+  document.getElementById('lan-d').value = '';
+  document.getElementById('lan-v').value = '';
+  document.getElementById('lan-dt').value = new Date().toISOString().split('T')[0];
+  var sel = document.getElementById('lan-cli');
+  sel.innerHTML = '<option value="">Sem cliente vinculado</option>' +
+    (CLIS || []).map(function(c){ return '<option value="' + c.id + '">' + c.nome + '</option>'; }).join('');
+  selecionarStatusLancamento(true);
+  openM('m-lan');
+}
+
+function selecionarStatusLancamento(pago) {
+  LAN_PAGO_SELECIONADO = pago;
+  var btnSim = document.getElementById('lan-pago-sim');
+  var btnNao = document.getElementById('lan-pago-nao');
+  btnSim.className = 'btn btnsm ' + (pago ? 'btnp' : 'btns');
+  btnNao.className = 'btn btnsm ' + (!pago ? 'btnp' : 'btns');
+  btnSim.style.flex = '1'; btnNao.style.flex = '1';
+}
+
 function saveLan() {
   var desc = document.getElementById('lan-d').value.trim();
   var val  = parseFloat(document.getElementById('lan-v').value);
   if (!desc || !val) { toast('Preencha descrição e valor','er'); return; }
-  apiFetch('/api/financeiro/lancamentos',{method:'POST',body:{tipo:document.getElementById('lan-t').value,descricao:desc,valor:val,data:document.getElementById('lan-dt').value,forma_pgto:document.getElementById('lan-p').value,categoria:document.getElementById('lan-c').value}}).catch(function(){});
+  var clienteId = document.getElementById('lan-cli').value || undefined;
+  apiFetch('/api/financeiro/lancamentos',{method:'POST',body:{
+    tipo:document.getElementById('lan-t').value, descricao:desc, valor:val,
+    data:document.getElementById('lan-dt').value, forma_pgto:document.getElementById('lan-p').value,
+    categoria:document.getElementById('lan-c').value, cliente_id: clienteId, pago: LAN_PAGO_SELECIONADO
+  }}).catch(function(){});
   toast('Lançamento registrado! ✅','ok'); closeM('m-lan'); loadFin();
 }
 function saveProd() {
   var nome = document.getElementById('p-n').value.trim();
   if (!nome) { toast('Nome obrigatório','er'); return; }
-  apiFetch('/api/estoque',{method:'POST',body:{nome:nome,categoria:document.getElementById('p-c').value,fornecedor:document.getElementById('p-f').value,qtd_atual:parseFloat(document.getElementById('p-q').value)||0,qtd_minima:parseFloat(document.getElementById('p-m').value)||5,preco_custo:parseFloat(document.getElementById('p-p').value)||null}}).catch(function(){});
-  toast('Produto cadastrado! ✅','ok'); closeM('m-prod'); loadEst(); document.getElementById('p-n').value='';
+  apiFetch('/api/estoque',{method:'POST',body:{nome:nome,categoria:document.getElementById('p-c').value,fornecedor:document.getElementById('p-f').value,qtd_atual:parseFloat(document.getElementById('p-q').value)||0,qtd_minima:parseFloat(document.getElementById('p-m').value)||5,preco_custo:parseFloat(document.getElementById('p-p').value)||null,preco_venda:parseFloat(document.getElementById('p-pv').value)||null}}).catch(function(){});
+  toast('Produto cadastrado! ✅','ok'); closeM('m-prod'); loadEst(); document.getElementById('p-n').value=''; document.getElementById('p-pv').value='';
 }
 function savePro() {
   var nome = document.getElementById('pr-n').value.trim();
@@ -2946,6 +3007,127 @@ function salvarMov() {
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled=false; });
+}
+
+// ── CONSUMO DE PRODUTO (usado em atendimento) ─────────
+function abrirConsumoProduto(id, nome) {
+  document.getElementById('consumo-prod-id').value = id;
+  document.getElementById('consumo-prod-nome').textContent = nome;
+  document.getElementById('consumo-qtd').value = '1';
+  document.getElementById('consumo-motivo').value = '';
+  var sel = document.getElementById('consumo-prof');
+  sel.innerHTML = '<option value="">Selecionar profissional...</option>' +
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+  openM('m-consumo');
+}
+
+function salvarConsumo() {
+  var id = document.getElementById('consumo-prod-id').value;
+  var profId = document.getElementById('consumo-prof').value;
+  var qtd = parseFloat(document.getElementById('consumo-qtd').value);
+  var motivo = document.getElementById('consumo-motivo').value.trim();
+  if (!profId) { toast('Selecione o profissional que usou o produto','er'); return; }
+  if (!qtd || qtd <= 0) { toast('Informe uma quantidade válida','er'); return; }
+  var btn = document.getElementById('consumo-btn');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/estoque/' + id + '/consumir', { method: 'POST', body: { profissional_id: profId, quantidade: qtd, motivo: motivo || undefined } })
+    .then(function(){ toast('Consumo registrado! ✅', 'ok'); closeM('m-consumo'); loadEst(); })
+    .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Registrar Consumo'; });
+}
+
+// ── VENDER PRODUTO PRO CLIENTE ────────────────────────
+var VENDER_PROD_PAGO = true;
+function selecionarStatusVendaProduto(pago) {
+  VENDER_PROD_PAGO = pago;
+  var btnSim = document.getElementById('venda-pago-sim');
+  var btnNao = document.getElementById('venda-pago-nao');
+  btnSim.className = 'btn btnsm ' + (pago ? 'btnp' : 'btns');
+  btnNao.className = 'btn btnsm ' + (!pago ? 'btnp' : 'btns');
+  btnSim.style.flex = '1'; btnNao.style.flex = '1';
+}
+
+function abrirVenderProduto(id, nome, precoVenda) {
+  document.getElementById('venda-prod-id').value = id;
+  document.getElementById('venda-prod-nome').textContent = nome;
+  document.getElementById('venda-qtd').value = '1';
+  document.getElementById('venda-valor').value = precoVenda || '';
+  if (!precoVenda) {
+    document.getElementById('venda-valor-aviso').textContent = '⚠️ Esse produto não tem preço de venda cadastrado — edite o produto ou preencha o valor manualmente aqui.';
+  } else {
+    document.getElementById('venda-valor-aviso').textContent = '';
+  }
+  var selCli = document.getElementById('venda-cli');
+  selCli.innerHTML = '<option value="">Selecionar cliente...</option>' +
+    (CLIS || []).map(function(c){ return '<option value="' + c.id + '">' + c.nome + '</option>'; }).join('');
+  var selProf = document.getElementById('venda-prof');
+  selProf.innerHTML = '<option value="">Sem profissional vinculado</option>' +
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+  selecionarStatusVendaProduto(true);
+  openM('m-venda-produto');
+}
+
+function salvarVendaProduto() {
+  var id = document.getElementById('venda-prod-id').value;
+  var cliId = document.getElementById('venda-cli').value;
+  var profId = document.getElementById('venda-prof').value || undefined;
+  var qtd = parseFloat(document.getElementById('venda-qtd').value);
+  var valor = parseFloat(document.getElementById('venda-valor').value);
+  var fpg = document.getElementById('venda-fpg').value;
+  if (!cliId) { toast('Selecione o cliente','er'); return; }
+  if (!qtd || qtd <= 0) { toast('Informe uma quantidade válida','er'); return; }
+  if (!valor || valor <= 0) { toast('Informe o valor da venda','er'); return; }
+  var btn = document.getElementById('venda-btn');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/estoque/' + id + '/vender', { method: 'POST', body: {
+    cliente_id: cliId, profissional_id: profId, quantidade: qtd, valor: valor,
+    forma_pgto: fpg, pago: VENDER_PROD_PAGO
+  }})
+    .then(function(){
+      toast(VENDER_PROD_PAGO ? 'Venda registrada! ✅' : 'Venda registrada como fiado 🧾', 'ok');
+      closeM('m-venda-produto'); loadEst(); loadFiado();
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda'; });
+}
+
+// ── HISTÓRICO DE MOVIMENTAÇÃO DE ESTOQUE ──────────────
+function loadMovimentacoesEstoque(filtroProfissional) {
+  var el = document.getElementById('mov-hist-lst');
+  if (!el) return;
+  el.innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  var qs = filtroProfissional ? '?profissional_id=' + filtroProfissional : '';
+  apiFetch('/api/estoque/movimentacoes' + qs).then(function(lista){
+    renderMovimentacoesEstoque(lista || []);
+  }).catch(function(){
+    el.innerHTML = '<div class="empty">Não foi possível carregar o histórico.</div>';
+  });
+}
+
+var ICONE_TIPO_MOV = { entrada: '📦', saida: '📤', consumo: '💧', venda: '💰' };
+var LABEL_TIPO_MOV = { entrada: 'Reposição', saida: 'Ajuste/Perda', consumo: 'Consumo', venda: 'Venda' };
+
+function renderMovimentacoesEstoque(lista) {
+  var el = document.getElementById('mov-hist-lst');
+  if (!lista.length) { el.innerHTML = '<div class="empty">Nenhuma movimentação registrada ainda.</div>'; return; }
+  el.innerHTML = lista.map(function(m){
+    var detalhe = [];
+    if (m.profissional_nome) detalhe.push('👤 ' + m.profissional_nome);
+    if (m.cliente_nome) detalhe.push('🙋 ' + m.cliente_nome);
+    if (m.valor) detalhe.push(brl(m.valor));
+    if (m.motivo) detalhe.push(m.motivo);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd2)">' +
+      '<div style="font-size:1.1rem">' + (ICONE_TIPO_MOV[m.tipo] || '•') + '</div>' +
+      '<div style="flex:1">' +
+        '<div style="font-weight:700;font-size:.82rem">' + m.produto_nome + ' <span style="font-weight:400;color:var(--t3)">(' + LABEL_TIPO_MOV[m.tipo] + ')</span></div>' +
+        '<div style="font-size:.7rem;color:var(--t3)">' + detalhe.join(' · ') + '</div>' +
+      '</div>' +
+      '<div style="text-align:right">' +
+        '<div style="font-weight:700">' + (m.tipo === 'entrada' ? '+' : '−') + m.quantidade + '</div>' +
+        '<div style="font-size:.65rem;color:var(--t3)">' + fdt(m.created_at) + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 // ── FUNÇÕES DE EDIÇÃO ───────────────────────────────
@@ -4384,7 +4566,9 @@ function dispensarBannerPWA() {
           <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpg(this)">💵 Dinheiro</button>
           <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpg(this)">💳 Débito</button>
           <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpg(this)">💳 Crédito</button>
+          <button type="button" class="fpg-btn" data-val="fiado" style="grid-column:1/-1" onclick="selecionarFpg(this)">🧾 Fiado (vai pagar depois)</button>
         </div>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:6px" id="fiado-aviso"></div>
       </div>
     </div>
     <div class="mf">
@@ -4425,6 +4609,15 @@ function dispensarBannerPWA() {
       <div class="fg"><label class="fl">Descrição*</label><input class="fc" id="lan-d" placeholder="Descrição do lançamento"/></div>
       <div class="fr"><div class="fg"><label class="fl">Valor (R$)*</label><input type="number" class="fc" id="lan-v" step="0.01" placeholder="0,00"/></div><div class="fg"><label class="fl">Data*</label><input type="date" class="fc" id="lan-dt"/></div></div>
       <div class="fr"><div class="fg"><label class="fl">Pagamento</label><select class="fc" id="lan-p"><option>PIX</option><option>Dinheiro</option><option>Cartão</option><option>Boleto</option></select></div><div class="fg"><label class="fl">Categoria</label><select class="fc" id="lan-c"><option>Serviço</option><option>Produto</option><option>Aluguel</option><option>Comissão</option><option>Material</option><option>Outros</option></select></div></div>
+      <div class="fg"><label class="fl">Cliente (opcional)</label><select class="fc" id="lan-cli"><option value="">Sem cliente vinculado</option></select></div>
+      <div class="fg">
+        <label class="fl">Status</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btnsm" id="lan-pago-sim" style="flex:1" onclick="selecionarStatusLancamento(true)">✅ Já foi pago</button>
+          <button type="button" class="btn btnsm" id="lan-pago-nao" style="flex:1" onclick="selecionarStatusLancamento(false)">⏳ Pendente (fiado)</button>
+        </div>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Marcando como pendente e escolhendo um cliente, ele aparece no Fiado / Contas a Receber.</div>
+      </div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-lan')">Cancelar</button><button class="btn btnp" onclick="saveLan()">Lançar</button></div>
   </div>
@@ -4436,7 +4629,8 @@ function dispensarBannerPWA() {
     <div class="mb">
       <div class="fg"><label class="fl">Nome*</label><input class="fc" id="p-n" placeholder="Ex.: Tintura L'Oréal 6.0"/></div>
       <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="p-c"><option>Tintura</option><option>Shampoo</option><option>Tratamento</option><option>Acessório</option><option>Outro</option></select></div><div class="fg"><label class="fl">Fornecedor</label><input class="fc" id="p-f" placeholder="Fornecedor"/></div></div>
-      <div class="fr3"><div class="fg"><label class="fl">Qtd. Atual</label><input type="number" class="fc" id="p-q" value="0"/></div><div class="fg"><label class="fl">Qtd. Mínima</label><input type="number" class="fc" id="p-m" value="5"/></div><div class="fg"><label class="fl">Preço (R$)</label><input type="number" class="fc" id="p-p" step="0.01"/></div></div>
+      <div class="fr3"><div class="fg"><label class="fl">Qtd. Atual</label><input type="number" class="fc" id="p-q" value="0"/></div><div class="fg"><label class="fl">Qtd. Mínima</label><input type="number" class="fc" id="p-m" value="5"/></div><div class="fg"><label class="fl">Preço Custo (R$)</label><input type="number" class="fc" id="p-p" step="0.01"/></div></div>
+      <div class="fg"><label class="fl">Preço de Venda (R$)</label><input type="number" class="fc" id="p-pv" step="0.01" placeholder="Preço quando vendido pro cliente"/></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-prod')">Cancelar</button><button class="btn btnp" onclick="saveProd()">Salvar</button></div>
   </div>
@@ -4792,6 +4986,55 @@ function dispensarBannerPWA() {
     <div class="mf">
       <button class="btn btns" onclick="closeM('m-mov')">Cancelar</button>
       <button class="btn btnp" id="mov-btn" onclick="salvarMov()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Registrar Consumo (produto usado num atendimento) -->
+<div class="mov" id="m-consumo">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">💧 Registrar Consumo</span><button class="mx" onclick="closeM('m-consumo')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="consumo-prod-id"/>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:16px" id="consumo-prod-nome">—</div>
+      <div class="fg"><label class="fl">Profissional que usou*</label><select class="fc" id="consumo-prof"><option value="">Selecionar profissional...</option></select></div>
+      <div class="fg"><label class="fl">Quantidade</label><input type="number" class="fc" id="consumo-qtd" min="0" step="1" value="1"/></div>
+      <div class="fg"><label class="fl">Observação (opcional)</label><input class="fc" id="consumo-motivo" placeholder="Ex.: usado no cliente Fulano"/></div>
+      <div style="font-size:.68rem;color:var(--t3)">Isso só desconta do estoque — não gera cobrança nenhuma pro cliente. Use "💰 Vender" se o produto foi vendido pro cliente levar pra casa.</div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-consumo')">Cancelar</button>
+      <button class="btn btnp" id="consumo-btn" onclick="salvarConsumo()">Registrar Consumo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Vender Produto pro Cliente -->
+<div class="mov" id="m-venda-produto">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">💰 Vender Produto</span><button class="mx" onclick="closeM('m-venda-produto')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="venda-prod-id"/>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:16px" id="venda-prod-nome">—</div>
+      <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="venda-cli"><option value="">Selecionar cliente...</option></select></div>
+      <div class="fg"><label class="fl">Profissional (opcional)</label><select class="fc" id="venda-prof"><option value="">Sem profissional vinculado</option></select></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Quantidade</label><input type="number" class="fc" id="venda-qtd" min="0" step="1" value="1"/></div>
+        <div class="fg"><label class="fl">Valor total (R$)*</label><input type="number" class="fc" id="venda-valor" step="0.01"/></div>
+      </div>
+      <div style="font-size:.66rem;color:var(--warn);margin-top:-8px;margin-bottom:8px" id="venda-valor-aviso"></div>
+      <div class="fg"><label class="fl">Forma de pagamento</label><select class="fc" id="venda-fpg"><option>PIX</option><option>Dinheiro</option><option>Cartão Débito</option><option>Cartão Crédito</option></select></div>
+      <div class="fg">
+        <label class="fl">Status</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btnsm" id="venda-pago-sim" style="flex:1" onclick="selecionarStatusVendaProduto(true)">✅ Já foi pago</button>
+          <button type="button" class="btn btnsm" id="venda-pago-nao" style="flex:1" onclick="selecionarStatusVendaProduto(false)">⏳ Pendente (fiado)</button>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btns" onclick="closeM('m-venda-produto')">Cancelar</button>
+      <button class="btn btnp" id="venda-btn" onclick="salvarVendaProduto()">Confirmar Venda</button>
     </div>
   </div>
 </div>
