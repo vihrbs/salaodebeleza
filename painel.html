@@ -864,6 +864,36 @@ function today(){
 }
 function deb(fn,ms){ var t; return function(){ clearTimeout(t); t = setTimeout(fn, ms); }; }
 
+// Escapa texto vindo de qualquer fonte de dado do usuário (nome de cliente,
+// produto, observação, etc.) antes de colocar no innerHTML — sem isso,
+// alguém poderia cadastrar um nome com uma tag de script embutida (inclusive
+// pelo link público de agendamento, sem precisar de login nenhum) e esse
+// código rodaria no navegador de quem visualizasse a lista depois.
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Igual ao esc(), mas pensado pra texto que vai dentro de um onclick="..."
+// tipo onclick="funcao('TEXTO')" — precisa escapar a barra invertida e a
+// aspa simples (pro JavaScript não quebrar) E a aspa dupla/sinais de menor
+// (pro atributo HTML não quebrar), já que um nome com aspas dupla sozinho
+// já bastaria pra escapar do atributo e injetar HTML livre.
+function escAttr(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function toast(msg, type) {
   var c = document.getElementById('toasts');
   var el = document.createElement('div');
@@ -1285,11 +1315,11 @@ function renderTl(list) {
 
   function itemAgendamento(a) {
     var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos && s.servicos.nome; }).join(', ') || '—';
-    return '<div class="tli" onclick="toast(\'' + (a.clientes&&a.clientes.nome||'').replace(/'/g,"\\'") + '\',\'inf\')">' +
+    return '<div class="tli" onclick="toast(\'' + escAttr(a.clientes&&a.clientes.nome||'') + '\',\'inf\')">' +
       '<div style="font-size:.73rem;font-weight:700;min-width:38px">' + fhr(a.data_hora) + '</div>' +
       '<div class="tdot" style="background:' + (a.profissionais&&a.profissionais.cor_agenda||'#999') + '"></div>' +
-      '<div style="flex:1"><div style="font-size:.8rem;font-weight:600">' + (a.clientes&&a.clientes.nome||'—') + '</div>' +
-      '<div style="font-size:.7rem;color:var(--t2)">' + sv + ' · ' + (a.profissionais&&a.profissionais.nome||'') + '</div></div>' +
+      '<div style="flex:1"><div style="font-size:.8rem;font-weight:600">' + esc(a.clientes&&a.clientes.nome||'—') + '</div>' +
+      '<div style="font-size:.7rem;color:var(--t2)">' + esc(sv) + ' · ' + esc(a.profissionais&&a.profissionais.nome||'') + '</div></div>' +
       '<span class="badge ' + (SC[a.status]||'bg2') + '">' + (SL[a.status]||a.status) + '</span>' +
       '<strong style="font-size:.78rem;min-width:58px;text-align:right">' + brl(a.valor_total) + '</strong>' +
       '<button class="btnic btn" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'concluido\')" title="Concluir">✅</button>' +
@@ -1417,7 +1447,7 @@ function loadTopSvc() {
 function renderTop(d) {
   var max = Math.max.apply(null, d.map(function(x){ return x.total; })) || 1;
   document.getElementById('top-svc').innerHTML = d.map(function(s){
-    return '<div class="sbw"><div class="sbh"><span style="font-weight:600">' + s.nome + '</span><span>' + s.count + 'x · <strong>' + brl(s.total) + '</strong></span></div>' +
+    return '<div class="sbw"><div class="sbh"><span style="font-weight:600">' + esc(s.nome) + '</span><span>' + s.count + 'x · <strong>' + brl(s.total) + '</strong></span></div>' +
       '<div class="sbt"><div class="sbf sfok" style="width:' + Math.round(s.total/max*100) + '%;background:var(--ac)"></div></div></div>';
   }).join('');
 }
@@ -1428,7 +1458,7 @@ function loadAlertas() {
     var el = document.getElementById('dash-al');
     if (!d || !d.length) { el.innerHTML='<div style="padding:10px;font-size:.76rem;color:var(--t3)">✅ Tudo em ordem</div>'; return; }
     el.innerHTML = d.slice(0,4).map(function(p){
-      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:.76rem"><span style="font-weight:600">' + p.nome + '</span><span class="badge bd2">' + p.qtd_atual + ' restante' + (p.qtd_atual!==1?'s':'') + '</span></div>';
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:.76rem"><span style="font-weight:600">' + esc(p.nome) + '</span><span class="badge bd2">' + p.qtd_atual + ' restante' + (p.qtd_atual!==1?'s':'') + '</span></div>';
     }).join('');
   }).catch(function(){});
 }
@@ -1661,10 +1691,10 @@ function renderAgendaGrid(list) {
       var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).filter(Boolean).join(', ') || '';
       var statusClasse = 'ag-block-' + (a.status||'agendado');
       var nomeCliente = (a.clientes&&a.clientes.nome)||'—';
-      return '<div class="ag-block ' + statusClasse + '" style="top:' + top + 'px;height:' + altura + 'px" onclick="toast(\'' + nomeCliente.replace(/'/g,"\\'") + '\',\'inf\')" title="' + nomeCliente.replace(/"/g,'') + (sv?' · '+sv.replace(/"/g,''):'') + '">' +
+      return '<div class="ag-block ' + statusClasse + '" style="top:' + top + 'px;height:' + altura + 'px" onclick="toast(\'' + escAttr(nomeCliente) + '\',\'inf\')" title="' + escAttr(nomeCliente) + (sv?' · '+escAttr(sv):'') + '">' +
         '<div class="ag-block-hora">' + fhr(a.data_hora) + '</div>' +
-        '<div class="ag-block-cliente">' + nomeCliente + '</div>' +
-        (sv ? '<div class="ag-block-servico">' + sv + '</div>' : '') +
+        '<div class="ag-block-cliente">' + esc(nomeCliente) + '</div>' +
+        (sv ? '<div class="ag-block-servico">' + esc(sv) + '</div>' : '') +
         '</div>';
     }).join('');
     return '<div class="ag-col" style="height:' + alturaGrade + 'px">' + blocosHtml + '</div>';
@@ -1688,11 +1718,11 @@ function renderAgenda(list, agrupado) {
 
   function linhaAgendamento(a) {
     var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).join(', ') || '—';
-    return '<tr onclick="toast(\'' + (a.clientes&&a.clientes.nome||'').replace(/'/g,"\\'") + '\',\'inf\')">' +
+    return '<tr onclick="toast(\'' + escAttr(a.clientes&&a.clientes.nome||'') + '\',\'inf\')">' +
       '<td><strong>' + fhr(a.data_hora) + '</strong></td>' +
-      '<td><strong>' + (a.clientes&&a.clientes.nome||'—') + '</strong></td>' +
-      '<td style="color:var(--t2)">' + sv + '</td>' +
-      '<td><div style="display:flex;align-items:center;gap:6px"><div style="width:9px;height:9px;border-radius:50%;background:' + (a.profissionais&&a.profissionais.cor_agenda||'#999') + '"></div>' + (a.profissionais&&a.profissionais.nome||'—') + '</div></td>' +
+      '<td><strong>' + esc(a.clientes&&a.clientes.nome||'—') + '</strong></td>' +
+      '<td style="color:var(--t2)">' + esc(sv) + '</td>' +
+      '<td><div style="display:flex;align-items:center;gap:6px"><div style="width:9px;height:9px;border-radius:50%;background:' + (a.profissionais&&a.profissionais.cor_agenda||'#999') + '"></div>' + esc(a.profissionais&&a.profissionais.nome||'—') + '</div></td>' +
       '<td><strong>' + brl(a.valor_total) + '</strong></td>' +
       '<td><span class="badge ' + (SC[a.status]||'bg2') + '">' + (SL[a.status]||a.status) + '</span></td>' +
       '<td><div style="display:flex;gap:3px">' +
@@ -1756,8 +1786,8 @@ function renderInativos(list) {
     var telComPais = telLimpo.length === 11 ? '55'+telLimpo : telLimpo;
     var linkWpp = telLimpo ? 'https://wa.me/' + telComPais + '?text=' + encodeURIComponent(msg) : null;
     return '<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:8px">' +
-      '<div style="width:36px;height:36px;border-radius:50%;background:' + (c.cor||COLS[0]) + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.82rem;flex-shrink:0">' + c.nome[0] + '</div>' +
-      '<div style="flex:1"><div style="font-weight:600;font-size:.85rem">' + c.nome + '</div>' +
+      '<div style="width:36px;height:36px;border-radius:50%;background:' + (c.cor||COLS[0]) + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.82rem;flex-shrink:0">' + esc(c.nome[0]) + '</div>' +
+      '<div style="flex:1"><div style="font-weight:600;font-size:.85rem">' + esc(c.nome) + '</div>' +
       '<div style="font-size:.7rem;color:var(--t3)">Última visita: ' + ultimaVisita + ' · ' + (c.historico_count||0) + ' visitas no total</div></div>' +
       (linkWpp
         ? '<a href="'+linkWpp+'" target="_blank" style="background:#25D366;color:#fff;border-radius:50px;padding:7px 14px;font-size:.74rem;font-weight:700;text-decoration:none;white-space:nowrap">💬 Chamar</a>'
@@ -1784,9 +1814,9 @@ function renderCli(list) {
   document.getElementById('cli-tb').innerHTML = list.map(function(c){
     return '<tr onclick="openClientModal(this)" data-cli="' + JSON.stringify(c).replace(/"/g,"&quot;") + '">' +
       '<td><div style="display:flex;align-items:center;gap:9px">' +
-      '<div style="width:30px;height:30px;border-radius:50%;background:' + (c.cor||COLS[0]) + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.78rem;flex-shrink:0">' + c.nome[0] + '</div>' +
-      '<div><div style="font-weight:600">' + c.nome + '</div><div style="font-size:.68rem;color:var(--t3)">' + (c.email||'') + '</div></div></div></td>' +
-      '<td>' + (c.telefone||'—') + '</td>' +
+      '<div style="width:30px;height:30px;border-radius:50%;background:' + (c.cor||COLS[0]) + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.78rem;flex-shrink:0">' + esc(c.nome[0]) + '</div>' +
+      '<div><div style="font-weight:600">' + esc(c.nome) + '</div><div style="font-size:.68rem;color:var(--t3)">' + esc(c.email||'') + '</div></div></div></td>' +
+      '<td>' + esc(c.telefone||'—') + '</td>' +
       '<td><strong>' + (c.historico_count||0) + '</strong></td>' +
       '<td>' + (c.ultimo_agendamento ? fdt(c.ultimo_agendamento+'T12:00') : '—') + '</td>' +
       '<td><strong>' + brl(c.total_gasto) + '</strong></td>' +
@@ -1795,7 +1825,7 @@ function renderCli(list) {
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();toast(\'WhatsApp...\',\'ok\')" title="WhatsApp">💬</button>' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();abrirNovoAgendamento()" title="Agendar">📅</button>' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();editCli(this)" data-cli="' + JSON.stringify(c).replace(/"/g,"&quot;") + '" title="Editar">✏️</button>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="event.stopPropagation();deletarCliente(this)" data-cli-id="' + c.id + '" data-cli-nome="' + c.nome.replace(/"/g,'') + '" title="Excluir">🗑</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="event.stopPropagation();deletarCliente(this)" data-cli-id="' + c.id + '" data-cli-nome="' + escAttr(c.nome) + '" title="Excluir">🗑</button>' +
       '</div></td></tr>';
   }).join('');
   setTimeout(iniciarSombrasScroll, 30);
@@ -1849,12 +1879,48 @@ function renderFiado(lista) {
   el.innerHTML = lista.map(function(c){
     return '<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--bd2)">' +
       '<div style="flex:1">' +
-        '<div style="font-weight:700">' + c.nome + '</div>' +
-        '<div style="font-size:.7rem;color:var(--t3)">' + (c.telefone || 'sem telefone') + ' · pendente desde ' + fdt(c.data_mais_antiga) + ' · ' + c.quantidade_lancamentos + ' cobrança(s)</div>' +
+        '<div style="font-weight:700">' + esc(c.nome) + '</div>' +
+        '<div style="font-size:.7rem;color:var(--t3)">' + esc(c.telefone || 'sem telefone') + ' · pendente desde ' + fdt(c.data_mais_antiga) + ' · ' + c.quantidade_lancamentos + ' cobrança(s)</div>' +
       '</div>' +
-      '<div style="font-weight:800;color:var(--er)">' + brl(c.total_devido) + '</div>' +
+      '<div style="text-align:right">' +
+        '<div style="font-weight:800;color:var(--er)">' + brl(c.total_devido) + '</div>' +
+        '<button class="btn btnp btnsm" style="margin-top:4px" onclick=\'abrirPagarFiado(' + JSON.stringify(c).replace(/'/g,"&apos;") + ')\'>💳 Pagar</button>' +
+      '</div>' +
     '</div>';
   }).join('');
+}
+
+// ── PAGAR FIADO (total ou parcial) ────────────────────
+function abrirPagarFiado(cliente) {
+  document.getElementById('pagar-fiado-cliente-nome').textContent = cliente.nome;
+  var el = document.getElementById('pagar-fiado-itens');
+  el.innerHTML = (cliente.itens || []).map(function(item){
+    var itemId = 'pgf-' + item.id;
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--bd2)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+        '<div><div style="font-size:.78rem;font-weight:600">' + esc(item.descricao||item.categoria||'Cobrança') + '</div><div style="font-size:.66rem;color:var(--t3)">' + fdt(item.data) + '</div></div>' +
+        '<div style="font-weight:700">' + brl(item.valor) + '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px">' +
+        '<input type="number" class="fc" style="font-size:.78rem" id="' + itemId + '-valor" value="' + item.valor + '" step="0.01" min="0.01" max="' + item.valor + '"/>' +
+        '<button class="btn btnp btnsm" onclick="pagarItemFiado(\'' + item.id + '\')">Pagar</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  openM('m-pagar-fiado');
+}
+
+function pagarItemFiado(lancamentoId) {
+  var inputValor = document.getElementById('pgf-' + lancamentoId + '-valor');
+  var valor = parseFloat(inputValor.value);
+  if (!valor || valor <= 0) { toast('Informe um valor válido','er'); return; }
+  apiFetch('/api/financeiro/lancamentos/' + lancamentoId + '/pagar', { method: 'POST', body: { valor: valor } })
+    .then(function(r){
+      toast(r && r.pago_total ? 'Pago totalmente! ✅' : 'Pagamento parcial registrado! Restante: ' + brl(r.restante), 'ok');
+      closeM('m-pagar-fiado');
+      loadFiado(); loadFin();
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); });
 }
 
 function exportarFiado() {
@@ -1922,7 +1988,7 @@ function renderLan(list) {
       : '<span class="badge bw" style="font-size:.62rem;cursor:pointer" onclick="event.stopPropagation();marcarPago(\'' + l.id + '\',true)" title="Clique para marcar como pago">Pendente</span>';
     return '<div style="display:flex;align-items:center;gap:11px;padding:8px 9px;border-radius:var(--rs);transition:background .1s;cursor:pointer" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
       '<div style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.85rem;background:' + (l.tipo==='entrada'?'#D6FAF0':'#FEE2E2') + ';flex-shrink:0">' + (l.tipo==='entrada'?'💰':'📤') + '</div>' +
-      '<div style="flex:1"><div style="font-size:.78rem;font-weight:600">' + l.descricao + '</div><div style="font-size:.68rem;color:var(--t3)">' + fdt(l.data+'T12:00') + ' · ' + (l.forma_pgto||'') + '</div></div>' +
+      '<div style="flex:1"><div style="font-size:.78rem;font-weight:600">' + esc(l.descricao) + '</div><div style="font-size:.68rem;color:var(--t3)">' + fdt(l.data+'T12:00') + ' · ' + esc(l.forma_pgto||'') + '</div></div>' +
       statusBadge +
       '<div style="font-size:.82rem;font-weight:700;color:' + (l.tipo==='entrada'?'var(--ok)':'var(--er)') + '">' + (l.tipo==='entrada'?'+':'-') + brl(l.valor) + '</div></div>';
   }).join('');
@@ -1953,19 +2019,19 @@ function renderEst(list) {
   document.getElementById('est-tb').innerHTML = list.map(function(p){
     var pct = Math.min(Math.round((p.qtd_atual/Math.max(p.qtd_minima,1))*100), 100);
     var lvl = p.qtd_atual<=0 ? 'crit' : p.qtd_atual<p.qtd_minima ? 'low' : 'ok';
-    return '<tr onclick="toast(\'' + p.nome.replace(/'/g,"\\'") + '\',\'inf\')">' +
-      '<td><strong>' + p.nome + '</strong></td>' +
-      '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + p.categoria + '</span></td>' +
+    return '<tr onclick="toast(\'' + escAttr(p.nome) + '\',\'inf\')">' +
+      '<td><strong>' + esc(p.nome) + '</strong></td>' +
+      '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + esc(p.categoria) + '</span></td>' +
       '<td><strong style="color:' + (lvl==='crit'?'var(--er)':lvl==='low'?'var(--warn)':'inherit') + '">' + p.qtd_atual + '</strong></td>' +
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
       '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
       '<td><div style="display:flex;gap:3px;flex-wrap:wrap">' +
-        '<button class="btnic btn btnsm" title="Repor estoque" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'entrada\')">+</button>' +
-        '<button class="btnic btn btnsm" title="Ajustar/perda" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + p.nome + '\',\'saida\')">−</button>' +
-        '<button class="btnic btn btnsm" title="Registrar consumo (usado em atendimento)" onclick="event.stopPropagation();abrirConsumoProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">💧</button>' +
-        '<button class="btnic btn btnsm" title="Vender pro cliente" onclick="event.stopPropagation();abrirVenderProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + (p.preco_venda||0) + ')">💰</button>' +
-        '<button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🗑</button>' +
+        '<button class="btnic btn btnsm" title="Repor estoque" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'entrada\')">+</button>' +
+        '<button class="btnic btn btnsm" title="Ajustar/perda" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'saida\')">−</button>' +
+        '<button class="btnic btn btnsm" title="Registrar consumo (usado em atendimento)" onclick="event.stopPropagation();abrirConsumoProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">💧</button>' +
+        '<button class="btnic btn btnsm" title="Vender pro cliente" onclick="event.stopPropagation();abrirVenderProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',' + (p.preco_venda||0) + ')">💰</button>' +
+        '<button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">🗑</button>' +
       '</div></td>' +
       '</tr>';
   }).join('');
@@ -2047,15 +2113,15 @@ function renderCom(list) {
   document.getElementById('com-lst').innerHTML = list.map(function(p){
     var v = valoresExibir(p);
     var acaoBtn = v.foiPago
-      ? '<button class="btnic btn btnsm" style="color:var(--t3)" data-fid="'+p.fechamento.id+'" data-nome="'+p.nome.replace(/"/g,'')+'" onclick="reabrirFechamento(this.dataset.fid,this.dataset.nome)" title="Reabrir caso tenha pago por engano">↩️</button>'
-      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.total_comissao + ')">Pagar ' + brl(p.total_comissao) + '</button>';
+      ? '<button class="btnic btn btnsm" style="color:var(--t3)" data-fid="'+p.fechamento.id+'" data-nome="'+escAttr(p.nome)+'" onclick="reabrirFechamento(this.dataset.fid,this.dataset.nome)" title="Reabrir caso tenha pago por engano">↩️</button>'
+      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + escAttr(p.nome) + '\',' + p.total_comissao + ')">Pagar ' + brl(p.total_comissao) + '</button>';
     var comprasPendentes = p.compras_pendentes_total || 0;
     var avisoCompras = comprasPendentes > 0
-      ? '<div style="font-size:.68rem;color:var(--warn);margin-top:2px;cursor:pointer" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')" title="Ver e quitar parcelas">🛒 ' + brl(comprasPendentes) + ' em compras pendentes — clique pra descontar</div>'
+      ? '<div style="font-size:.68rem;color:var(--warn);margin-top:2px;cursor:pointer" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')" title="Ver e quitar parcelas">🛒 ' + brl(comprasPendentes) + ' em compras pendentes — clique pra descontar</div>'
       : '';
     return '<div style="display:flex;align-items:center;gap:13px;padding:13px;background:var(--wh);border-radius:var(--r);border:1.5px solid var(--bd);margin-bottom:7px">' +
-      '<div class="pro-av" style="background:' + (p.cor||COLS[0]) + '">' + p.nome[0] + '</div>' +
-      '<div><div style="font-weight:700;font-size:.85rem">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div>' + avisoCompras + '</div>' +
+      '<div class="pro-av" style="background:' + (p.cor||COLS[0]) + '">' + esc(p.nome[0]) + '</div>' +
+      '<div><div style="font-weight:700;font-size:.85rem">' + esc(p.nome) + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div>' + avisoCompras + '</div>' +
       '<div style="display:flex;gap:18px;margin-left:auto;text-align:center">' +
       '<div><div style="font-size:.88rem;font-weight:800">' + v.servicos + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.88rem;font-weight:800">' + brl(v.bruto) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div>' +
@@ -2069,7 +2135,7 @@ function renderCom(list) {
   document.getElementById('fcom-t').innerHTML = '<table><thead><tr><th>Profissional</th><th>Serviços</th><th>Comissão</th><th>Status</th></tr></thead><tbody>' +
     list.map(function(p){
       var v = valoresExibir(p);
-      return '<tr><td>' + p.nome + '</td><td>' + v.servicos + '</td><td><strong>' + brl(v.comissao) + '</strong></td><td><span class="badge ' + (v.foiPago?'bs':'bw') + '">' + (v.foiPago?'Pago':'A pagar') + '</span></td></tr>';
+      return '<tr><td>' + esc(p.nome) + '</td><td>' + v.servicos + '</td><td><strong>' + brl(v.comissao) + '</strong></td><td><span class="badge ' + (v.foiPago?'bs':'bw') + '">' + (v.foiPago?'Pago':'A pagar') + '</span></td></tr>';
     }).join('') +
     '</tbody></table>';
 }
@@ -2095,7 +2161,7 @@ function loadPros() {
     var selFiltro = document.getElementById('mov-hist-filtro-prof');
     if (selFiltro) {
       selFiltro.innerHTML = '<option value="">Todos os profissionais</option>' +
-        PROS.map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+        PROS.map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
     }
   }).catch(function(){ PROS = DEMO ? D.pros : []; renderPros(PROS); });
 }
@@ -2104,10 +2170,10 @@ function renderPros(list) {
   document.getElementById('pro-grid').innerHTML = list.map(function(p){
     return '<div class="pro-card">' +
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">' +
-      '<div class="pro-av" style="background:' + (p.cor_agenda||COLS[0]) + '">' + p.nome[0] + '</div>' +
-      '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + (p.especialidade||'—') + '</div></div>' +
+      '<div class="pro-av" style="background:' + (p.cor_agenda||COLS[0]) + '">' + esc(p.nome[0]) + '</div>' +
+      '<div style="flex:1"><div style="font-weight:700">' + esc(p.nome) + '</div><div style="font-size:.7rem;color:var(--t3)">' + esc(p.especialidade||'—') + '</div></div>' +
       '<button class="btnic btn btnsm" onclick="editPro(this)" data-pro="' + JSON.stringify(p).replace(/"/g,"&quot;") + '" title="Editar">✏️</button>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarProfissional(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')" title="Excluir">🗑</button></div>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')" title="Excluir">🗑</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs)">' +
       '<div><div style="font-size:.9rem;font-weight:800">' + (p.total_servicos||0) + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.9rem;font-weight:800;color:var(--ac)">' + (p.comissao_pct||40) + '%</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
@@ -2116,8 +2182,8 @@ function renderPros(list) {
       '<button class="btn btns btnsm" style="flex:1" onclick="abrirNovoAgendamento()">📅 Agendar</button>' +
       '<button class="btn btns btnsm" style="flex:1" onclick="toast(\'WhatsApp...\',\'ok\')">💬 WhatsApp</button></div>' +
       '<div style="display:flex;gap:7px;margin-top:7px">' +
-      '<button class="btn btns btnsm" style="flex:1" onclick="abrirVendaParcelada(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">🛒 Vender parcelado</button>' +
-      '<button class="btn btns btnsm" style="flex:1" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')">📋 Parcelas</button></div></div>';
+      '<button class="btn btns btnsm" style="flex:1" onclick="abrirVendaParcelada(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">🛒 Vender parcelado</button>' +
+      '<button class="btn btns btnsm" style="flex:1" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">📋 Parcelas</button></div></div>';
   }).join('');
 }
 
@@ -2134,7 +2200,7 @@ function abrirVendaParcelada(profId, profNome) {
   document.getElementById('vp-prof-nome').textContent = profNome;
   var sel = document.getElementById('vp-produto');
   sel.innerHTML = '<option value="">Item avulso (sem produto do estoque)</option>' +
-    (window._estoqueCache || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+    (window._estoqueCache || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
   document.getElementById('vp-descricao').value = '';
   document.getElementById('vp-descricao-wrap').style.display = 'block';
   document.getElementById('vp-valor').value = '';
@@ -2144,7 +2210,7 @@ function abrirVendaParcelada(profId, profNome) {
   apiFetch('/api/estoque').then(function(r){
     window._estoqueCache = r || [];
     sel.innerHTML = '<option value="">Item avulso (sem produto do estoque)</option>' +
-      window._estoqueCache.map(function(p){ return '<option value="' + p.id + '">' + p.nome + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+      window._estoqueCache.map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
   }).catch(function(){});
 }
 
@@ -2238,13 +2304,13 @@ function loadSvcs() {
 
 function renderSvcs(list) {
   document.getElementById('svc-tb').innerHTML = list.map(function(s){
-    return '<tr><td><strong>' + s.nome + '</strong></td>' +
-      '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + s.categoria + '</span></td>' +
+    return '<tr><td><strong>' + esc(s.nome) + '</strong></td>' +
+      '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + esc(s.categoria) + '</span></td>' +
       '<td>' + s.duracao_min + ' min</td>' +
       '<td><strong>' + brl(s.preco) + '</strong></td>' +
       '<td><span class="badge bp">' + (s.comissao_pct||40) + '%</span></td>' +
       '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toggleServicoAtivo(\'' + s.id + '\',this.checked)"/></td>' +
-      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarServico(\'' + s.id + '\',\'' + s.nome.replace(/'/g,"\\'") + '\')" title="Remover">🗑</button></div></td></tr>';
+      '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarServico(\'' + s.id + '\',\'' + escAttr(s.nome) + '\')" title="Remover">🗑</button></div></td></tr>';
   }).join('');
   setTimeout(iniciarSombrasScroll, 30);
 }
@@ -2287,7 +2353,7 @@ function renderPacotes(list) {
     return '<div class="pro-card">' +
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">' +
       '<div class="pro-av" style="background:var(--ac)">🎁</div>' +
-      '<div style="flex:1"><div style="font-weight:700">' + p.nome + '</div><div style="font-size:.7rem;color:var(--t3)">' + (servicosTxt || 'Nenhum serviço ainda') + '</div>' + avisoIncompleto + '</div>' +
+      '<div style="flex:1"><div style="font-weight:700">' + esc(p.nome) + '</div><div style="font-size:.7rem;color:var(--t3)">' + esc(servicosTxt || 'Nenhum serviço ainda') + '</div>' + avisoIncompleto + '</div>' +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;text-align:center;padding:11px;background:var(--bg);border-radius:var(--rs);margin-bottom:11px">' +
       '<div><div style="font-size:1rem;font-weight:800;color:var(--ac)">' + brl(p.preco) + '</div><div style="font-size:.62rem;color:var(--t3)">Preço</div></div>' +
@@ -2296,9 +2362,9 @@ function renderPacotes(list) {
       '<div style="display:flex;gap:7px">' +
       (p.precisa_configurar
         ? '<button class="btn btnp btnsm" style="flex:1" onclick="abrirEditarPacote(\'' + p.id + '\')">⚙️ Configurar serviços</button>'
-        : '<button class="btn btnp btnsm" style="flex:1" onclick="abrirVenderPacote(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\',' + p.preco + ')">💰 Vender</button>') +
+        : '<button class="btn btnp btnsm" style="flex:1" onclick="abrirVenderPacote(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',' + p.preco + ')">💰 Vender</button>') +
       '<button class="btnic btn btnsm" onclick="abrirEditarPacote(\'' + p.id + '\')" title="Editar">✏️</button>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="desativarPacote(\'' + p.id + '\',\'' + p.nome.replace(/'/g,"\\'") + '\')" title="Desativar">🗑</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="desativarPacote(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')" title="Desativar">🗑</button>' +
       '</div></div>';
   }).join('');
 }
@@ -2315,7 +2381,7 @@ function abrirNovoPacote() {
   renderPacServicosSelecionados();
   var sel = document.getElementById('pac-add-servico');
   sel.innerHTML = '<option value="">Adicionar serviço...</option>' +
-    SVCS.map(function(s){ return '<option value="' + s.id + '">' + s.nome + '</option>'; }).join('');
+    SVCS.map(function(s){ return '<option value="' + s.id + '">' + esc(s.nome) + '</option>'; }).join('');
   openM('m-pacote');
 }
 
@@ -2334,7 +2400,7 @@ function abrirEditarPacote(id) {
   renderPacServicosSelecionados();
   var sel = document.getElementById('pac-add-servico');
   sel.innerHTML = '<option value="">Adicionar serviço...</option>' +
-    SVCS.map(function(s){ return '<option value="' + s.id + '">' + s.nome + '</option>'; }).join('');
+    SVCS.map(function(s){ return '<option value="' + s.id + '">' + esc(s.nome) + '</option>'; }).join('');
   openM('m-pacote');
 }
 
@@ -2411,7 +2477,7 @@ function abrirVenderPacote(pacoteId, pacoteNome, preco) {
   document.getElementById('vpac-pagar-depois').checked = false;
   var sel = document.getElementById('vpac-cliente');
   sel.innerHTML = '<option value="">Selecionar cliente...</option>' +
-    CLIS.map(function(c){ return '<option value="' + c.id + '">' + c.nome + '</option>'; }).join('');
+    CLIS.map(function(c){ return '<option value="' + c.id + '">' + esc(c.nome) + '</option>'; }).join('');
   openM('m-vender-pacote');
 }
 
@@ -2475,7 +2541,7 @@ function abrirNovoAgendamento() {
   var sel = document.getElementById('ag-vender-pacote-id');
   if (sel) {
     sel.innerHTML = '<option value="">Selecionar pacote...</option>' +
-      PACOTES_CACHE.map(function(p){ return '<option value="' + p.id + '" data-preco="' + p.preco + '">' + p.nome + ' — ' + brl(p.preco) + '</option>'; }).join('');
+      PACOTES_CACHE.map(function(p){ return '<option value="' + p.id + '" data-preco="' + p.preco + '">' + esc(p.nome) + ' — ' + brl(p.preco) + '</option>'; }).join('');
   }
   var buscaServico = document.getElementById('ag-svc-busca');
   if (buscaServico) { buscaServico.value = ''; filtrarServicosAgendamento(''); }
@@ -2741,7 +2807,7 @@ function abrirNovoLancamento() {
   document.getElementById('lan-dt').value = new Date().toISOString().split('T')[0];
   var sel = document.getElementById('lan-cli');
   sel.innerHTML = '<option value="">Sem cliente vinculado</option>' +
-    (CLIS || []).map(function(c){ return '<option value="' + c.id + '">' + c.nome + '</option>'; }).join('');
+    (CLIS || []).map(function(c){ return '<option value="' + c.id + '">' + esc(c.nome) + '</option>'; }).join('');
   selecionarStatusLancamento(true);
   openM('m-lan');
 }
@@ -3017,7 +3083,7 @@ function abrirConsumoProduto(id, nome) {
   document.getElementById('consumo-motivo').value = '';
   var sel = document.getElementById('consumo-prof');
   sel.innerHTML = '<option value="">Selecionar profissional...</option>' +
-    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
   openM('m-consumo');
 }
 
@@ -3059,10 +3125,10 @@ function abrirVenderProduto(id, nome, precoVenda) {
   }
   var selCli = document.getElementById('venda-cli');
   selCli.innerHTML = '<option value="">Selecionar cliente...</option>' +
-    (CLIS || []).map(function(c){ return '<option value="' + c.id + '">' + c.nome + '</option>'; }).join('');
+    (CLIS || []).map(function(c){ return '<option value="' + c.id + '">' + esc(c.nome) + '</option>'; }).join('');
   var selProf = document.getElementById('venda-prof');
   selProf.innerHTML = '<option value="">Sem profissional vinculado</option>' +
-    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
   selecionarStatusVendaProduto(true);
   openM('m-venda-produto');
 }
@@ -3112,14 +3178,14 @@ function renderMovimentacoesEstoque(lista) {
   if (!lista.length) { el.innerHTML = '<div class="empty">Nenhuma movimentação registrada ainda.</div>'; return; }
   el.innerHTML = lista.map(function(m){
     var detalhe = [];
-    if (m.profissional_nome) detalhe.push('👤 ' + m.profissional_nome);
-    if (m.cliente_nome) detalhe.push('🙋 ' + m.cliente_nome);
+    if (m.profissional_nome) detalhe.push('👤 ' + esc(m.profissional_nome));
+    if (m.cliente_nome) detalhe.push('🙋 ' + esc(m.cliente_nome));
     if (m.valor) detalhe.push(brl(m.valor));
-    if (m.motivo) detalhe.push(m.motivo);
+    if (m.motivo) detalhe.push(esc(m.motivo));
     return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd2)">' +
       '<div style="font-size:1.1rem">' + (ICONE_TIPO_MOV[m.tipo] || '•') + '</div>' +
       '<div style="flex:1">' +
-        '<div style="font-weight:700;font-size:.82rem">' + m.produto_nome + ' <span style="font-weight:400;color:var(--t3)">(' + LABEL_TIPO_MOV[m.tipo] + ')</span></div>' +
+        '<div style="font-weight:700;font-size:.82rem">' + esc(m.produto_nome) + ' <span style="font-weight:400;color:var(--t3)">(' + LABEL_TIPO_MOV[m.tipo] + ')</span></div>' +
         '<div style="font-size:.7rem;color:var(--t3)">' + detalhe.join(' · ') + '</div>' +
       '</div>' +
       '<div style="text-align:right">' +
@@ -3829,26 +3895,26 @@ function loadUsuarios() {
           ? '<span class="badge bp">Admin</span>'
           : '<span class="badge bw">Personalizado</span>';
         var vinculo = (u.profissionais && u.profissionais.nome)
-          ? '<span class="badge bi">👤 ' + u.profissionais.nome + '</span>'
+          ? '<span class="badge bi">👤 ' + esc(u.profissionais.nome) + '</span>'
           : '<span style="font-size:.7rem;color:var(--t3)">— (acesso geral)</span>';
 
         var emailStatus = u.email_verificado
           ? '<span class="badge bs">✅ Verificado</span>'
-          : '<span class="badge bw" style="cursor:pointer" onclick="reenviarCodigoVerificacao(\'' + u.email + '\')" title="Clique para reenviar o código">⚠️ Não verificado</span>';
+          : '<span class="badge bw" style="cursor:pointer" onclick="reenviarCodigoVerificacao(\'' + escAttr(u.email) + '\')" title="Clique para reenviar o código">⚠️ Não verificado</span>';
 
         var acoes = isAdmin ? '<span style="font-size:.7rem;color:var(--t3)">—</span>' :
           '<div style="display:flex;gap:4px">' +
-          '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="abrirEditPerms(this.dataset.uid,this.dataset.unome)" title="Editar permissões">✏️</button>' +
-          '<button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+u.nome+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Excluir">🗑</button>' +
+          '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="abrirEditPerms(this.dataset.uid,this.dataset.unome)" title="Editar permissões">✏️</button>' +
+          '<button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Excluir">🗑</button>' +
           '</div>';
-        return '<tr><td><strong>' + u.nome + '</strong><div style="font-size:.68rem;color:var(--t3)">' + (u.cargo||'') + '</div></td><td style="font-size:.78rem">' + u.email + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + emailStatus + '</td><td>' + acoes + '</td></tr>';
+        return '<tr><td><strong>' + esc(u.nome) + '</strong><div style="font-size:.68rem;color:var(--t3)">' + esc(u.cargo||'') + '</div></td><td style="font-size:.78rem">' + esc(u.email) + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + emailStatus + '</td><td>' + acoes + '</td></tr>';
       }).join('') + '</tbody></table>';
     setTimeout(iniciarSombrasScroll, 30);
   }).catch(function(e) {
     // Mostra o erro REAL vindo do backend (não uma mensagem genérica) —
     // isso é essencial pra diagnosticar problemas sem precisar adivinhar.
     el.innerHTML = '<div class="empty" style="color:var(--er)">Erro ao carregar usuários: ' +
-      (e && e.message ? e.message : 'motivo desconhecido') +
+      esc(e && e.message ? e.message : 'motivo desconhecido') +
       '<br><button class="btn btns btnsm" style="margin-top:10px" onclick="loadUsuarios()">🔄 Tentar novamente</button></div>';
   });
 }
@@ -3894,7 +3960,7 @@ function abrirNovoUsuario() {
   var sel = document.getElementById('nu-profissional');
   if (sel) {
     var options = '<option value="">Nenhum — acesso administrativo às páginas liberadas</option>';
-    options += (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    options += (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
     sel.innerHTML = options;
   }
   // Reseta o formulário sempre pro estado "Personalizado" em branco
@@ -4023,7 +4089,7 @@ function abrirEditPerms(uid, nome) {
   var selProf = document.getElementById('ep-profissional');
   if (selProf) {
     var options = '<option value="">Nenhum — acesso administrativo às páginas liberadas</option>';
-    options += (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + p.nome + '</option>'; }).join('');
+    options += (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
     selProf.innerHTML = options;
   }
 
@@ -4620,6 +4686,18 @@ function dispensarBannerPWA() {
       </div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-lan')">Cancelar</button><button class="btn btnp" onclick="saveLan()">Lançar</button></div>
+  </div>
+</div>
+
+<!-- Modal Pagar Fiado (total ou parcial) -->
+<div class="mov" id="m-pagar-fiado">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">💳 Registrar Pagamento — <span id="pagar-fiado-cliente-nome"></span></span><button class="mx" onclick="closeM('m-pagar-fiado')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.7rem;color:var(--t3);margin-bottom:8px">Pode ajustar o valor de cada cobrança pra registrar um pagamento parcial — o restante continua pendente.</div>
+      <div id="pagar-fiado-itens"></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-pagar-fiado')">Fechar</button></div>
   </div>
 </div>
 
