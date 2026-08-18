@@ -221,7 +221,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.4.0-fiado-e-pacotes-em-uso' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.6.0-consumo-venda-produto-historico' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1540,7 +1540,7 @@ app.post('/api/agendamentos', auth, async (req, res) => {
 });
 
 app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
-  const { status, forma_pgto } = req.body;
+  const { status, forma_pgto, pago } = req.body;
   const updates = { status };
   if (forma_pgto) updates.forma_pgto = forma_pgto;
 
@@ -1558,17 +1558,26 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
   let infoTaxaMaquininha = { taxa_total: 0, taxa_profissional: 0 };
 
   if (status === 'concluido') {
-    // Atualiza lancamento como pago
+    // Ficou combinado de pagar depois (fiado) — não marca como pago e não
+    // aplica taxa de maquininha (não teve cartão nenhum passado ainda).
+    // O padrão continua sendo "pago", pra não mudar o comportamento de
+    // quem não mandar esse campo.
+    const marcarComoPago = pago !== false;
+
+    // Atualiza lancamento
     await supabase.from('lancamentos')
-      .update({ pago: true, forma_pgto }).eq('agendamento_id', req.params.id);
+      .update({ pago: marcarComoPago, forma_pgto }).eq('agendamento_id', req.params.id);
 
     // Aplica o desconto da taxa da maquininha na comissão do profissional
-    // (só se o pagamento foi no cartão e o salão configurou uma taxa)
-    try {
-      infoTaxaMaquininha = await aplicarTaxaMaquininha(
-        req.params.id, req.salao_id, Number(data.valor_total || 0), forma_pgto
-      );
-    } catch(e) { console.error('Erro ao aplicar taxa maquininha:', e.message); }
+    // (só se o pagamento foi no cartão, o salão configurou uma taxa, E o
+    // atendimento já foi realmente pago agora — fiado não paga taxa ainda)
+    if (marcarComoPago) {
+      try {
+        infoTaxaMaquininha = await aplicarTaxaMaquininha(
+          req.params.id, req.salao_id, Number(data.valor_total || 0), forma_pgto
+        );
+      } catch(e) { console.error('Erro ao aplicar taxa maquininha:', e.message); }
+    }
 
     // Atualiza estatísticas do cliente automaticamente
     if (data.cliente_id) {
@@ -1955,7 +1964,7 @@ app.delete('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, re
   res.json({ message: 'Produto desativado' });
 });
 
-// Movimentar estoque
+// Movimentar estoque (reposição manual / ajuste avulso)
 app.post('/api/estoque/:id/movimentar', auth, requirePermissao('estoque'), async (req, res) => {
   const { tipo, quantidade, motivo } = req.body;
   const { data: prod } = await supabase.from('produtos')
@@ -1965,13 +1974,118 @@ app.post('/api/estoque/:id/movimentar', auth, requirePermissao('estoque'), async
   const nova  = Number(prod.qtd_atual) + delta;
   if (nova < 0) return res.status(422).json({ error: 'Estoque insuficiente. Atual: ' + prod.qtd_atual });
   await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
-  try {
-    await supabase.from('movimentacoes_estoque').insert({
-      salao_id: req.salao_id, produto_id: req.params.id,
-      tipo, quantidade, motivo, usuario_id: req.user.id
-    });
-  } catch(e) { /* tabela pode não existir, ignora */ }
+  await supabase.from('movimentacoes_estoque').insert({
+    salao_id: req.salao_id, produto_id: req.params.id,
+    tipo, quantidade, motivo, usuario_id: req.user.id
+  });
   res.json({ nova_quantidade: nova, produto: prod.nome });
+});
+
+// Registra CONSUMO de um produto durante um atendimento (ex.: shampoo usado
+// no cliente) — desconta do estoque, mas NÃO gera receita nenhuma, só
+// histórico de quem usou quanto (pedido específico: rastrear consumo por
+// profissional, tipo Jairo usando shampoo nos clientes dele).
+app.post('/api/estoque/:id/consumir', auth, requirePermissao('estoque'), async (req, res) => {
+  const { profissional_id, quantidade, cliente_id, motivo } = req.body;
+  if (!profissional_id || !quantidade || Number(quantidade) <= 0) {
+    return res.status(422).json({ error: 'profissional_id e quantidade (maior que zero) são obrigatórios' });
+  }
+  const { data: prod } = await supabase.from('produtos')
+    .select('qtd_atual, nome').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+  if (!prod) return res.status(404).json({ error: 'Produto não encontrado' });
+
+  const nova = Number(prod.qtd_atual) - Number(quantidade);
+  if (nova < 0) return res.status(422).json({ error: 'Estoque insuficiente. Atual: ' + prod.qtd_atual });
+
+  await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
+  await supabase.from('movimentacoes_estoque').insert({
+    salao_id: req.salao_id, produto_id: req.params.id, tipo: 'consumo',
+    quantidade, motivo: motivo || null, profissional_id, cliente_id: cliente_id || null,
+    usuario_id: req.user.id
+  });
+  res.json({ nova_quantidade: nova, produto: prod.nome });
+});
+
+// Registra a VENDA de um produto pro cliente (ex.: vendeu um shampoo pra
+// ele levar pra casa) — desconta do estoque E gera um lançamento financeiro
+// de verdade, vinculado ao cliente (entra no relatório de Fiado se marcado
+// como pendente).
+app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque'), async (req, res) => {
+  const { cliente_id, profissional_id, quantidade, valor, forma_pgto, pago, data } = req.body;
+  if (!cliente_id || !quantidade || Number(quantidade) <= 0) {
+    return res.status(422).json({ error: 'cliente_id e quantidade (maior que zero) são obrigatórios' });
+  }
+  const { data: prod } = await supabase.from('produtos')
+    .select('qtd_atual, nome, preco_venda').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+  if (!prod) return res.status(404).json({ error: 'Produto não encontrado' });
+
+  const nova = Number(prod.qtd_atual) - Number(quantidade);
+  if (nova < 0) return res.status(422).json({ error: 'Estoque insuficiente. Atual: ' + prod.qtd_atual });
+
+  const valorFinal = (valor !== undefined && valor !== null && valor !== '')
+    ? Number(valor) : Number(prod.preco_venda || 0) * Number(quantidade);
+  const dataFinal = data || new Date().toISOString().split('T')[0];
+  const pagoFinal = pago !== false;
+
+  await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
+
+  const { data: lancamento } = await supabase.from('lancamentos').insert({
+    salao_id: req.salao_id, cliente_id, tipo: 'entrada', categoria: 'Produto',
+    descricao: 'Venda: ' + prod.nome + ' (' + quantidade + 'x)',
+    valor: valorFinal, data: dataFinal, forma_pgto, pago: pagoFinal
+  }).select().single();
+
+  await supabase.from('movimentacoes_estoque').insert({
+    salao_id: req.salao_id, produto_id: req.params.id, tipo: 'venda',
+    quantidade, valor: valorFinal, cliente_id, profissional_id: profissional_id || null,
+    usuario_id: req.user.id, lancamento_id: lancamento ? lancamento.id : null
+  });
+
+  res.json({ nova_quantidade: nova, produto: prod.nome, valor: valorFinal, lancamento_id: lancamento ? lancamento.id : null });
+});
+
+// Histórico de movimentação de estoque — quem deu baixa em quê e quando.
+// Filtros opcionais: produto_id, profissional_id, tipo, data_inicio, data_fim.
+app.get('/api/estoque/movimentacoes', auth, requirePermissao('estoque'), async (req, res) => {
+  const { produto_id, profissional_id, tipo, data_inicio, data_fim, limit = 100 } = req.query;
+  try {
+    let q = supabase.from('movimentacoes_estoque').select('*')
+      .eq('salao_id', req.salao_id).order('created_at', { ascending: false }).limit(Number(limit));
+    if (produto_id) q = q.eq('produto_id', produto_id);
+    if (profissional_id) q = q.eq('profissional_id', profissional_id);
+    if (tipo) q = q.eq('tipo', tipo);
+    if (data_inicio) q = q.gte('created_at', data_inicio);
+    if (data_fim) q = q.lte('created_at', data_fim + 'T23:59:59');
+    const { data: movs, error } = await q;
+    if (error) throw error;
+    if (!movs || !movs.length) return res.json([]);
+
+    // Busca os nomes de produto/profissional/cliente/usuário separado (evita
+    // depender de relacionamento embutido do Supabase, que já deu problema
+    // antes com "mais de um relacionamento" quando há FK múltipla)
+    const idsProdutos = [...new Set(movs.map(m => m.produto_id).filter(Boolean))];
+    const idsProfissionais = [...new Set(movs.map(m => m.profissional_id).filter(Boolean))];
+    const idsClientes = [...new Set(movs.map(m => m.cliente_id).filter(Boolean))];
+    const idsUsuarios = [...new Set(movs.map(m => m.usuario_id).filter(Boolean))];
+
+    const [produtosInfo, profissionaisInfo, clientesInfo, usuariosInfo] = await Promise.all([
+      idsProdutos.length ? supabase.from('produtos').select('id, nome').in('id', idsProdutos) : { data: [] },
+      idsProfissionais.length ? supabase.from('profissionais').select('id, nome').in('id', idsProfissionais) : { data: [] },
+      idsClientes.length ? supabase.from('clientes').select('id, nome').in('id', idsClientes) : { data: [] },
+      idsUsuarios.length ? supabase.from('usuarios').select('id, nome').in('id', idsUsuarios) : { data: [] },
+    ]);
+    const nomePorId = (lista) => { const m = {}; (lista.data || []).forEach(x => { m[x.id] = x.nome; }); return m; };
+    const produtoNome = nomePorId(produtosInfo), profNome = nomePorId(profissionaisInfo),
+          cliNome = nomePorId(clientesInfo), userNome = nomePorId(usuariosInfo);
+
+    res.json(movs.map(m => ({
+      ...m,
+      produto_nome: produtoNome[m.produto_id] || '—',
+      profissional_nome: profNome[m.profissional_id] || null,
+      cliente_nome: cliNome[m.cliente_id] || null,
+      usuario_nome: userNome[m.usuario_id] || null
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════
