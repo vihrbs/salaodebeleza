@@ -604,6 +604,17 @@ select.fc option{background:var(--bg2)}
         </div>
         <div class="bc" id="fin-bc" style="height:140px"></div>
       </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="crow">
+          <span class="ch">💳 Fiado / Contas a Receber</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btns btnsm" onclick="openImport('pacotes_em_uso')" id="btn-import-pacotes-uso">📥 Importar Pacotes em Uso</button>
+            <button class="btn btns btnsm" onclick="exportarFiado()">⬇️ Exportar</button>
+          </div>
+        </div>
+        <div style="font-size:.74rem;color:var(--t3);margin-bottom:10px">Clientes com pagamento pendente — agendamento ou pacote ainda não pago.</div>
+        <div id="fiado-lst"><div class="lc"><div class="spin"></div></div></div>
+      </div>
       <div class="card">
         <div class="crow"><span class="ch">Lançamentos</span>
           <select class="fc" style="width:auto;font-size:.72rem" onchange="loadLan(this.value)"><option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option></select>
@@ -1795,6 +1806,51 @@ function loadFin() {
     renderFinChart(r ? (r.data||r) : []);
   }).catch(function(){ renderFinChart([]); });
   loadLan('');
+  loadFiado();
+}
+
+// ── FIADO / CONTAS A RECEBER ──────────────────────────
+function loadFiado() {
+  var el = document.getElementById('fiado-lst');
+  if (!el) return;
+  apiFetch('/api/financeiro/fiado').then(function(lista){
+    renderFiado(lista || []);
+  }).catch(function(){
+    el.innerHTML = '<div class="empty">Não foi possível carregar o fiado agora.</div>';
+  });
+}
+
+function renderFiado(lista) {
+  var el = document.getElementById('fiado-lst');
+  if (!lista.length) { el.innerHTML = '<div class="empty">✅ Nenhum cliente com pagamento pendente.</div>'; return; }
+  el.innerHTML = lista.map(function(c){
+    return '<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--bd2)">' +
+      '<div style="flex:1">' +
+        '<div style="font-weight:700">' + c.nome + '</div>' +
+        '<div style="font-size:.7rem;color:var(--t3)">' + (c.telefone || 'sem telefone') + ' · pendente desde ' + fdt(c.data_mais_antiga) + ' · ' + c.quantidade_lancamentos + ' cobrança(s)</div>' +
+      '</div>' +
+      '<div style="font-weight:800;color:var(--er)">' + brl(c.total_devido) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function exportarFiado() {
+  var headers = {};
+  if (TK) headers['Authorization'] = 'Bearer ' + TK;
+  fetch(API + '/api/financeiro/fiado/exportar', { headers: headers })
+    .then(function(r){
+      if (!r.ok) throw new Error('Erro ' + r.status);
+      return r.blob();
+    })
+    .then(function(blob){
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'fiado.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast('Exportado! ✅', 'ok');
+    })
+    .catch(function(e){ toast('Erro ao exportar: ' + (e.message||'tente novamente'), 'er'); });
 }
 
 function renderFinChart(lancamentos) {
@@ -3079,6 +3135,22 @@ var MODELOS = {
     transformarLinha: function(row) { return { nome: row.nome, preco: parseValorBR(row.preco), servicos: [], verificar_duplicidade: true }; },
     exemplo: [['Pacote 4 Cortes','280']]
   },
+  pacotes_em_uso: {
+    titulo: 'Importar Pacotes em Uso (com sessões já utilizadas)',
+    colunas: ['cliente_nome','pacote_nome','qtd_total','qtd_usada','valor','pago','data_compra'],
+    labels:  ['Cliente','Pacote','Sessões Totais','Sessões Usadas','Valor','Pago','Data da Compra'],
+    endpoint: '/api/pacotes-clientes/lote', modo: 'lote', chaveLote: 'pacotes',
+    aviso: '⚠️ O cliente precisa já estar cadastrado (importa Clientes primeiro, se ainda não fez). Casamos pelo nome exato — se não achar, esse item entra na lista de "não encontrados" no resultado, sem travar o resto da importação.',
+    transformarLinha: function(row) {
+      return {
+        cliente_nome: row.cliente_nome, pacote_nome: row.pacote_nome,
+        qtd_total: parseInt(row.qtd_total) || 1, qtd_usada: parseInt(row.qtd_usada) || 0,
+        valor: parseValorBR(row.valor), pago: normalizarPago(row.pago),
+        data_compra: row.data_compra ? converterDataBR(row.data_compra) : undefined
+      };
+    },
+    exemplo: [['Ana Paula Silva','Pacote 10 Cortes','10','3','400','Não','15/01/2026']]
+  },
   despesas: {
     titulo: 'Importar Despesas (Financeiro)',
     colunas: ['data','categoria','descricao','valor','pago'],
@@ -3462,16 +3534,17 @@ function executarImport() {
   var result = document.getElementById('import-result');
   btn.disabled = true; btn.textContent = 'Importando...';
 
-  function finalizar(ok, err, duplicados) {
+  function finalizar(ok, err, duplicados, naoEncontrados) {
     result.style.display = 'block';
     var partes = [];
     if (ok > 0) partes.push(ok + ' importado(s)');
     if (duplicados > 0) partes.push(duplicados + ' duplicado(s) ignorado(s)');
+    if (naoEncontrados > 0) partes.push(naoEncontrados + ' cliente(s) não encontrado(s)');
     if (err > 0) partes.push(err + ' com erro');
     if (!partes.length) partes.push('Nenhum registro processado');
     var textoFinal = partes.join(', ') + '.';
 
-    if (err > 0) { result.style.background = '#FEF3C7'; result.style.color = '#B45309'; }
+    if (err > 0 || naoEncontrados > 0) { result.style.background = '#FEF3C7'; result.style.color = '#B45309'; }
     else if (ok === 0 && duplicados > 0) { result.style.background = '#FEF3C7'; result.style.color = '#B45309'; }
     else { result.style.background = '#DCFCE7'; result.style.color = '#16A34A'; }
     result.textContent = textoFinal;
@@ -3482,6 +3555,7 @@ function executarImport() {
     if (tipo === 'servicos')      { loadSvcs(); fillSelects(); }
     if (tipo === 'produtos')      { loadEst(); }
     if (tipo === 'pacotes')       { loadPacotes(); }
+    if (tipo === 'pacotes_em_uso') { loadFin(); }
     if (tipo === 'despesas' || tipo === 'vendas') { loadFin(); loadKPIs(); }
     toast(textoFinal, ok > 0 ? 'ok' : 'inf');
   }
@@ -3499,7 +3573,8 @@ function executarImport() {
         // pode cair no "|| itens.length" nesse caso, senão mostra errado
         var totalOk  = (r && typeof r.total === 'number') ? r.total : itens.length;
         var totalDup = (r && typeof r.duplicados === 'number') ? r.duplicados : 0;
-        finalizar(totalOk, 0, totalDup);
+        var totalNaoEncontrados = (r && Array.isArray(r.nao_encontrados)) ? r.nao_encontrados.length : 0;
+        finalizar(totalOk, 0, totalDup, totalNaoEncontrados);
       })
       .catch(function(e) {
         result.style.display = 'block';
