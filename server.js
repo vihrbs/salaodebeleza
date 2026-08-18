@@ -221,7 +221,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.2.0-deduplicacao-importacao' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.4.0-fiado-e-pacotes-em-uso' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1012,7 +1012,7 @@ async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago
   const pago = (pagoAgora === undefined || pagoAgora === null) ? true : !!pagoAgora;
 
   const { data: lancamento } = await supabase.from('lancamentos').insert({
-    salao_id: salaoId, tipo: 'entrada', categoria: 'Pacote',
+    salao_id: salaoId, cliente_id: clienteId, tipo: 'entrada', categoria: 'Pacote',
     descricao: 'Pacote: ' + pacote.nome, valor: valorFinal, data: dataCompraFinal, pago
   }).select().single();
 
@@ -1042,6 +1042,69 @@ app.patch('/api/pacotes-clientes/:id/pagar', auth, async (req, res) => {
     }
     res.json({ message: 'Pacote marcado como pago!' });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Importa em lote pacotes que os clientes JÁ TINHAM em uso em outro sistema
+// (ex.: migrando do Trinks) — diferente do /api/pacotes/lote, que importa
+// só o CATÁLOGO. Aqui é "fulano comprou o pacote X, já usou 3 de 10
+// sessões, e ainda deve R$ 80" — o estado real de uso e da dívida.
+app.post('/api/pacotes-clientes/lote', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode importar pacotes de clientes' });
+  const { pacotes } = req.body;
+  if (!Array.isArray(pacotes) || !pacotes.length) {
+    return res.status(422).json({ error: 'Envie uma lista de pacotes em "pacotes"' });
+  }
+  if (pacotes.length > 20000) return res.status(422).json({ error: 'Máximo de 20.000 registros por importação' });
+
+  try {
+    // Carrega todos os clientes do salão uma vez só, pra casar por nome
+    // sem precisar de uma consulta por linha (isso que deixa rápido)
+    const { data: todosClientes } = await supabase.from('clientes')
+      .select('id, nome').eq('salao_id', req.salao_id).eq('ativo', true);
+    const clientePorNome = {};
+    (todosClientes || []).forEach(c => { clientePorNome[normalizarTexto(c.nome)] = c.id; });
+
+    let totalInseridos = 0;
+    const naoEncontrados = [];
+
+    for (const item of pacotes) {
+      const clienteId = clientePorNome[normalizarTexto(item.cliente_nome)];
+      if (!clienteId) { naoEncontrados.push(item.cliente_nome); continue; }
+
+      const qtdTotal = Number(item.qtd_total) || 1;
+      const qtdUsada = Math.min(Number(item.qtd_usada) || 0, qtdTotal);
+      const pago = item.pago !== false;
+      const valor = Number(item.valor) || 0;
+      const dataCompra = item.data_compra || new Date().toISOString().split('T')[0];
+
+      let lancamentoId = null;
+      if (valor > 0) {
+        const { data: lanc } = await supabase.from('lancamentos').insert({
+          salao_id: req.salao_id, cliente_id: clienteId, tipo: 'entrada', categoria: 'Pacote',
+          descricao: 'Pacote (importado): ' + (item.pacote_nome || 'Sem nome'),
+          valor, data: dataCompra, pago
+        }).select().single();
+        lancamentoId = lanc ? lanc.id : null;
+      }
+
+      await supabase.from('pacotes_clientes').insert({
+        salao_id: req.salao_id, cliente_id: clienteId, pacote_id: null,
+        nome_snapshot: item.pacote_nome || 'Pacote importado',
+        data_compra: dataCompra, valor_pago: valor, validade: null,
+        sessoes: [{ servico_id: null, qtd_total: qtdTotal, qtd_usada: qtdUsada }],
+        status: qtdUsada >= qtdTotal ? 'finalizado' : 'ativo',
+        pago, lancamento_id: lancamentoId
+      });
+      totalInseridos++;
+    }
+
+    res.status(201).json({
+      message: totalInseridos + ' pacote(s) de cliente importado(s)' + (naoEncontrados.length ? ', ' + naoEncontrados.length + ' cliente(s) não encontrado(s)' : '') + '!',
+      total: totalInseridos, nao_encontrados: naoEncontrados
+    });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/clientes/:id/pacotes', auth, async (req, res) => {
@@ -1304,7 +1367,7 @@ async function criarAgendamentoUnico({
   // Só lança cobrança financeira se sobrou algo pra cobrar do cliente agora
   if (valor_total > 0) {
     await supabase.from('lancamentos').insert({
-      salao_id: salaoId, agendamento_id: ag.id, tipo: 'entrada',
+      salao_id: salaoId, agendamento_id: ag.id, cliente_id: clienteId, tipo: 'entrada',
       categoria: 'Serviço', descricao: 'Agendamento #' + ag.id.slice(-6).toUpperCase(),
       valor: valor_total, data: dataParte, pago: false
     });
@@ -1642,6 +1705,86 @@ app.get('/api/financeiro/resumo', auth, requirePermissao('financeiro'), async (r
   res.json({ receita, despesa, lucro: receita - despesa, apagar });
 });
 
+// ── FIADO / CONTAS A RECEBER ──────────────────────────
+// Agrupa por cliente todos os lançamentos de entrada ainda não pagos —
+// "quem me deve e quanto". Só considera lançamentos com cliente_id (os
+// vindos de agendamento/pacote têm; um "+Lançamento" manual sem cliente
+// selecionado não entra aqui, porque não tem como saber de quem é).
+app.get('/api/financeiro/fiado', auth, requirePermissao('financeiro'), async (req, res) => {
+  try {
+    const { data: pendentes, error } = await supabase.from('lancamentos')
+      .select('id, cliente_id, valor, data, descricao, categoria')
+      .eq('salao_id', req.salao_id).eq('tipo', 'entrada').eq('pago', false)
+      .not('cliente_id', 'is', null);
+    if (error) throw error;
+
+    if (!pendentes || !pendentes.length) return res.json([]);
+
+    const idsClientes = [...new Set(pendentes.map(l => l.cliente_id))];
+    const { data: clientesInfo } = await supabase.from('clientes')
+      .select('id, nome, telefone').in('id', idsClientes);
+    const clientesPorId = {};
+    (clientesInfo || []).forEach(c => { clientesPorId[c.id] = c; });
+
+    const porCliente = {};
+    pendentes.forEach(l => {
+      if (!porCliente[l.cliente_id]) {
+        const c = clientesPorId[l.cliente_id] || { nome: 'Cliente removido', telefone: '' };
+        porCliente[l.cliente_id] = {
+          cliente_id: l.cliente_id, nome: c.nome, telefone: c.telefone,
+          total_devido: 0, quantidade_lancamentos: 0, data_mais_antiga: l.data, itens: []
+        };
+      }
+      const registro = porCliente[l.cliente_id];
+      registro.total_devido += Number(l.valor);
+      registro.quantidade_lancamentos += 1;
+      if (l.data < registro.data_mais_antiga) registro.data_mais_antiga = l.data;
+      registro.itens.push({ id: l.id, valor: l.valor, data: l.data, descricao: l.descricao, categoria: l.categoria });
+    });
+
+    const lista = Object.values(porCliente).sort((a, b) => b.total_devido - a.total_devido);
+    res.json(lista);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Mesmo relatório, mas devolvendo um CSV pronto pra baixar/abrir no Excel
+app.get('/api/financeiro/fiado/exportar', auth, requirePermissao('financeiro'), async (req, res) => {
+  try {
+    const { data: pendentes, error } = await supabase.from('lancamentos')
+      .select('cliente_id, valor, data, descricao')
+      .eq('salao_id', req.salao_id).eq('tipo', 'entrada').eq('pago', false)
+      .not('cliente_id', 'is', null);
+    if (error) throw error;
+
+    const idsClientes = [...new Set((pendentes || []).map(l => l.cliente_id))];
+    const { data: clientesInfo } = await supabase.from('clientes')
+      .select('id, nome, telefone').in('id', idsClientes.length ? idsClientes : ['-']);
+    const clientesPorId = {};
+    (clientesInfo || []).forEach(c => { clientesPorId[c.id] = c; });
+
+    const porCliente = {};
+    (pendentes || []).forEach(l => {
+      if (!porCliente[l.cliente_id]) {
+        const c = clientesPorId[l.cliente_id] || { nome: 'Cliente removido', telefone: '' };
+        porCliente[l.cliente_id] = { nome: c.nome, telefone: c.telefone || '', total: 0, qtd: 0, maisAntiga: l.data };
+      }
+      porCliente[l.cliente_id].total += Number(l.valor);
+      porCliente[l.cliente_id].qtd += 1;
+      if (l.data < porCliente[l.cliente_id].maisAntiga) porCliente[l.cliente_id].maisAntiga = l.data;
+    });
+
+    const linhas = Object.values(porCliente).sort((a, b) => b.total - a.total);
+    const cabecalho = 'Cliente;Telefone;Total Devido;Quantidade de Cobrancas;Pendente Desde\n';
+    const corpo = linhas.map(l =>
+      [l.nome, l.telefone, l.total.toFixed(2).replace('.', ','), l.qtd, l.maisAntiga].join(';')
+    ).join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="fiado.csv"');
+    res.send('\uFEFF' + cabecalho + corpo); // BOM na frente pra acentuação abrir certo no Excel
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/financeiro/lancamentos', auth, requirePermissao('financeiro'), async (req, res) => {
   const { tipo, limit = 50, page = 1 } = req.query;
   const offset = (page - 1) * limit;
@@ -1966,12 +2109,16 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
     }
     if (error) throw error;
 
-    // Notificação por e-mail pro profissional — best-effort
+    // Notificação por e-mail pro profissional — best-effort. A função nunca
+    // rejeita a Promise (sempre resolve com {enviado,motivo}), então checa
+    // o resultado explicitamente em vez de um .catch() sozinho.
     const { data: profInfo } = await supabase.from('profissionais')
       .select('nome, email').eq('id', profissional_id).single();
     if (profInfo && profInfo.email) {
       notificarProfissionalComissaoFechada(profInfo.email, profInfo.nome, total_comissao, ini, fim)
-        .catch(() => {});
+        .then(r => {
+          if (!r.enviado) console.error('Notificação de comissão fechada NÃO enviada pro profissional ' + profInfo.email + ': ' + r.motivo);
+        }).catch(e => console.error('Erro inesperado ao notificar profissional (comissão):', e.message));
     }
 
     res.json(data);
@@ -2505,7 +2652,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
     // Cria lançamento financeiro pendente
     try {
       await supabase.from('lancamentos').insert({
-        salao_id, agendamento_id: agendamento.id, tipo: 'entrada',
+        salao_id, agendamento_id: agendamento.id, cliente_id: cliente.id, tipo: 'entrada',
         categoria: 'Serviço', descricao: servico.nome + ' - ' + nome,
         valor: servico.preco, data, pago: false
       });
