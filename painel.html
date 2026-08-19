@@ -1331,7 +1331,7 @@ function renderTl(list) {
 
   function itemAgendamento(a) {
     var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos && s.servicos.nome; }).join(', ') || '—';
-    return '<div class="tli" onclick="toast(\'' + escAttr(a.clientes&&a.clientes.nome||'') + '\',\'inf\')">' +
+    return '<div class="tli" onclick="abrirDetalhesAgendamento(\'' + a.id + '\')">' +
       '<div style="font-size:.73rem;font-weight:700;min-width:38px">' + fhr(a.data_hora) + '</div>' +
       '<div class="tdot" style="background:' + (a.profissionais&&a.profissionais.cor_agenda||'#999') + '"></div>' +
       '<div style="flex:1"><div style="font-size:.8rem;font-weight:600">' + esc(a.clientes&&a.clientes.nome||'—') + '</div>' +
@@ -1363,6 +1363,136 @@ function renderTl(list) {
     html += grupos[dia].map(itemAgendamento).join('');
   });
   el.innerHTML = html;
+}
+
+// ── DETALHES DO AGENDAMENTO (clicar no cliente na agenda) ────
+function abrirDetalhesAgendamento(id) {
+  document.getElementById('det-ag-id').value = id;
+  document.getElementById('det-ag-conteudo').innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  openM('m-detalhes-ag');
+
+  // Já tem em cache da lista carregada — evita esperar uma requisição nova
+  var doCache = (AGENDA_ULTIMA_LISTA || []).find(function(a){ return a.id === id; });
+  if (doCache) { renderDetalhesAgendamento(doCache); return; }
+
+  // Não achou no cache (pode acontecer se veio de outra tela) — busca direto
+  apiFetch('/api/agendamentos?id=' + id).then(function(r){
+    var ag = (r || [])[0] || (r && r.data && r.data[0]);
+    if (ag) renderDetalhesAgendamento(ag);
+    else document.getElementById('det-ag-conteudo').innerHTML = '<div class="empty">Não foi possível carregar esse atendimento.</div>';
+  }).catch(function(){
+    document.getElementById('det-ag-conteudo').innerHTML = '<div class="empty">Erro ao carregar.</div>';
+  });
+}
+
+function renderDetalhesAgendamento(ag) {
+  DETALHES_AG_ATUAL = ag; // guarda pra reusar em outras ações desse modal
+  var cliente = ag.clientes || {};
+  var profissional = ag.profissionais || {};
+  var servicos = ag.agendamento_servicos || [];
+  // Fiado = concluído mas sem forma de pagamento registrada (é como o
+  // fluxo de concluir grava quando a pessoa escolhe "vai pagar depois")
+  var ehFiadoPendente = ag.status === 'concluido' && !ag.forma_pgto;
+
+  var linhasServicos = servicos.map(function(s){
+    var nomeServico = (s.servicos && s.servicos.nome) || 'Serviço';
+    return '<div class="det-svc-linha" data-as-id="' + s.id + '" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bd2)">' +
+      '<span style="font-size:.82rem">' + esc(nomeServico) + '</span>' +
+      '<span style="display:flex;align-items:center;gap:6px">' +
+        '<span class="det-svc-preco-texto" style="font-weight:700">' + brl(s.preco) + '</span>' +
+        '<button class="btnic btn btnsm" onclick="editarPrecoServicoComanda(\'' + s.id + '\')" title="Editar valor">✏️</button>' +
+      '</span>' +
+    '</div>';
+  }).join('') || '<div style="font-size:.78rem;color:var(--t3)">Nenhum serviço registrado.</div>';
+
+  var statusInfo = ehFiadoPendente
+    ? '<span class="badge bw">🧾 Fiado — pagamento pendente</span>'
+    : '<span class="badge ' + (SC[ag.status]||'bg2') + '">' + (SL[ag.status]||ag.status) + '</span>';
+
+  var podeConcluir = ag.status !== 'concluido' && ag.status !== 'cancelado';
+  var podeCancelar = ag.status !== 'cancelado';
+
+  document.getElementById('det-ag-conteudo').innerHTML =
+    '<div style="margin-bottom:14px">' +
+      '<div style="font-weight:700;font-size:.95rem">' + esc(cliente.nome || 'Cliente') + '</div>' +
+      '<div style="font-size:.76rem;color:var(--t3)">' + esc(cliente.telefone || 'sem telefone') + '</div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<span style="font-size:.78rem;color:var(--t3)">' + fdt(ag.data_hora) + ' às ' + fhr(ag.data_hora) + ' · ' + esc(profissional.nome||'—') + '</span>' +
+      statusInfo +
+    '</div>' +
+    '<div style="background:var(--bg3);border-radius:var(--rs);padding:10px 12px;margin-bottom:14px">' +
+      linhasServicos +
+      '<div style="display:flex;justify-content:space-between;padding-top:8px;font-weight:800">' +
+        '<span>Total</span><span id="det-ag-total">' + brl(ag.valor_total) + '</span>' +
+      '</div>' +
+      (ag.forma_pgto ? '<div style="font-size:.7rem;color:var(--t3);margin-top:2px">Pago via ' + esc(ag.forma_pgto) + '</div>' : '') +
+      (ag.desconto_aplicado > 0 ? '<div style="font-size:.7rem;color:var(--ac)">Desconto aplicado: ' + brl(ag.desconto_aplicado) + '</div>' : '') +
+    '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px">' +
+      (podeConcluir ? '<button class="btn btnp btnsm" onclick="closeM(\'m-detalhes-ag\');abrirModalConcluir(\'' + ag.id + '\')">✅ Concluir Atendimento</button>' : '') +
+      '<button class="btn btns btnsm" onclick="closeM(\'m-detalhes-ag\');abrirEditarClientePorId(\'' + (cliente.id||'') + '\')">✏️ Editar Cliente</button>' +
+      (podeCancelar ? '<button class="btn btns btnsm" style="color:var(--er)" onclick="cancelarAgendamentoDetalhes(\'' + ag.id + '\')">🗑️ Cancelar Agendamento</button>' : '') +
+    '</div>';
+}
+
+// Edição rápida do preço de um serviço, direto na comanda — troca o texto
+// pelo campo de valor + botão de confirmar, sem precisar abrir outro modal
+function editarPrecoServicoComanda(agServicoId) {
+  var linha = document.querySelector('.det-svc-linha[data-as-id="' + agServicoId + '"]');
+  if (!linha) return;
+  var textoAtual = linha.querySelector('.det-svc-preco-texto');
+  var valorAtual = textoAtual.textContent.replace(/[^\d,]/g,'').replace(',','.');
+  textoAtual.outerHTML =
+    '<span style="display:flex;align-items:center;gap:4px">' +
+    '<input type="number" step="0.01" min="0" value="' + valorAtual + '" id="det-svc-input-' + agServicoId + '" class="fc" style="width:80px;font-size:.78rem;padding:4px 6px"/>' +
+    '<button class="btnic btn btnsm" onclick="salvarPrecoServicoComanda(\'' + agServicoId + '\')" title="Salvar">✔️</button>' +
+    '</span>';
+}
+
+function salvarPrecoServicoComanda(agServicoId) {
+  var input = document.getElementById('det-svc-input-' + agServicoId);
+  var novoPreco = parseFloat(input.value);
+  if (!novoPreco || novoPreco < 0) { toast('Informe um valor válido','er'); return; }
+  apiFetch('/api/agendamento-servicos/' + agServicoId, { method: 'PUT', body: { preco: novoPreco } })
+    .then(function(r){
+      toast('Valor atualizado! ✅','ok');
+      var totalEl = document.getElementById('det-ag-total');
+      if (totalEl) totalEl.textContent = brl(r.novo_valor_total);
+      if (DETALHES_AG_ATUAL) {
+        DETALHES_AG_ATUAL.valor_total = r.novo_valor_total;
+        var svc = (DETALHES_AG_ATUAL.agendamento_servicos||[]).find(function(s){ return s.id === agServicoId; });
+        if (svc) svc.preco = novoPreco;
+      }
+      renderDetalhesAgendamento(DETALHES_AG_ATUAL);
+      loadAgenda(); loadDashTl(); loadKPIs();
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); });
+}
+
+function cancelarAgendamentoDetalhes(id) {
+  if (!confirm('Cancelar esse agendamento? Se já estava pago, o lançamento financeiro correspondente também será removido.')) return;
+  apiFetch('/api/agendamentos/' + id + '/status', { method: 'PATCH', body: { status: 'cancelado' } })
+    .then(function(){
+      toast('Agendamento cancelado','ok');
+      closeM('m-detalhes-ag');
+      loadDashTl(); loadAgenda(); loadKPIs(); loadFiado();
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); });
+}
+
+// Atalho pra abrir a edição de um cliente a partir do ID (o modal de editar
+// cliente normalmente é aberto a partir dos dados já na linha da tabela —
+// aqui a gente vem de outro lugar, então busca os dados primeiro)
+function abrirEditarClientePorId(clienteId) {
+  if (!clienteId) { toast('Cliente sem cadastro vinculado','inf'); return; }
+  var clienteCache = (CLIS || []).find(function(c){ return c.id === clienteId; });
+  if (clienteCache) {
+    editCli({ getAttribute: function(){ return JSON.stringify(clienteCache); } });
+  } else {
+    nav('clientes', document.querySelector('[data-page="clientes"]'));
+    toast('Busca o cliente na lista pra editar','inf');
+  }
 }
 
 function mudaStatus(id, status) {
@@ -1636,6 +1766,7 @@ var CFG_HORARIO_ABRE = '08:00';  // preenchido de verdade por carregarHorarioFun
 var CFG_HORARIO_FECHA = '19:00';
 var AGENDA_ULTIMA_LISTA = [];
 var AGENDA_ULTIMA_AGRUPADA = false;
+var DETALHES_AG_ATUAL = null; // guarda o agendamento aberto no modal de Detalhes
 
 function loadAgenda() {
   var data = document.getElementById('ag-dt').value;
@@ -1751,7 +1882,7 @@ function renderAgendaGrid(list) {
       var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).filter(Boolean).join(', ') || '';
       var statusClasse = 'ag-block-' + (a.status||'agendado');
       var nomeCliente = (a.clientes&&a.clientes.nome)||'—';
-      return '<div class="ag-block ' + statusClasse + '" style="top:' + top + 'px;height:' + altura + 'px" onclick="toast(\'' + escAttr(nomeCliente) + '\',\'inf\')" title="' + escAttr(nomeCliente) + (sv?' · '+escAttr(sv):'') + '">' +
+      return '<div class="ag-block ' + statusClasse + '" style="top:' + top + 'px;height:' + altura + 'px" onclick="abrirDetalhesAgendamento(\'' + a.id + '\')" title="' + escAttr(nomeCliente) + (sv?' · '+escAttr(sv):'') + '">' +
         '<div class="ag-block-hora">' + fhr(a.data_hora) + '</div>' +
         '<div class="ag-block-cliente">' + esc(nomeCliente) + '</div>' +
         (sv ? '<div class="ag-block-servico">' + esc(sv) + '</div>' : '') +
@@ -1778,7 +1909,7 @@ function renderAgenda(list, agrupado) {
 
   function linhaAgendamento(a) {
     var sv = a.agendamento_servicos && a.agendamento_servicos.map(function(s){ return s.servicos&&s.servicos.nome; }).join(', ') || '—';
-    return '<tr onclick="toast(\'' + escAttr(a.clientes&&a.clientes.nome||'') + '\',\'inf\')">' +
+    return '<tr onclick="abrirDetalhesAgendamento(\'' + a.id + '\')">' +
       '<td><strong>' + fhr(a.data_hora) + '</strong></td>' +
       '<td><strong>' + esc(a.clientes&&a.clientes.nome||'—') + '</strong></td>' +
       '<td style="color:var(--t2)">' + esc(sv) + '</td>' +
@@ -2626,6 +2757,8 @@ function abrirNovoAgendamento() {
   }
   var buscaServico = document.getElementById('ag-svc-busca');
   if (buscaServico) { buscaServico.value = ''; filtrarServicosAgendamento(''); }
+  var buscaCliente = document.getElementById('ag-cli-busca');
+  if (buscaCliente) { buscaCliente.value = ''; filtrarClientesAgendamento(''); }
   openM('m-ag');
   // Sempre recalcula as sessões de pacote disponíveis, os horários livres, E
   // os preços dos serviços (podem variar por dia da semana) ao abrir o
@@ -2637,10 +2770,30 @@ function abrirNovoAgendamento() {
   atualizarPrecosPillsServico();
 }
 
-// Filtra os "pills" de serviço já renderizados pelo texto digitado, sem
-// perder a seleção ("on") de quem já estava marcado.
-function filtrarServicosAgendamento(termo) {
+// Reconstrói as opções do <select> de cliente com base na busca — não dá
+// pra simplesmente esconder <option> existentes porque o suporte a isso é
+// inconsistente entre navegadores/celulares, principalmente no seletor
+// nativo do iOS/Android.
+function filtrarClientesAgendamento(termo) {
   var termoNorm = (termo || '').trim().toLowerCase();
+  var sel = document.getElementById('ag-cli');
+  if (!sel) return;
+  var valorAtual = sel.value;
+  var filtrados = (CLIS || []).filter(function(c) {
+    if (!termoNorm) return true;
+    var nome = (c.nome || '').toLowerCase();
+    var tel = (c.telefone || '').toLowerCase();
+    return nome.indexOf(termoNorm) >= 0 || tel.indexOf(termoNorm) >= 0;
+  });
+  sel.innerHTML = '<option value="">Selecionar...</option>' +
+    filtrados.map(function(c) {
+      return '<option value="' + c.id + '">' + esc(c.nome) + (c.telefone ? ' — ' + esc(c.telefone) : '') + '</option>';
+    }).join('');
+  // Mantém a seleção anterior se o cliente escolhido ainda estiver na lista filtrada
+  if (filtrados.some(function(c){ return c.id === valorAtual; })) sel.value = valorAtual;
+}
+
+function filtrarServicosAgendamento(termo) {  var termoNorm = (termo || '').trim().toLowerCase();
   var pills = document.querySelectorAll('#ag-svcs .svc-pill');
   var algumVisivel = false;
   pills.forEach(function(pill) {
@@ -4718,7 +4871,11 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">Novo Agendamento</span><button class="mx" onclick="closeM('m-ag')">✕</button></div>
     <div class="mb">
       <div class="fr">
-        <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="ag-cli" onchange="atualizarPacotesDisponiveis()"><option value="">Selecionar...</option></select></div>
+        <div class="fg">
+          <label class="fl">Cliente*</label>
+          <input class="fc" id="ag-cli-busca" placeholder="🔍 Buscar por nome ou telefone..." oninput="filtrarClientesAgendamento(this.value)" style="margin-bottom:6px"/>
+          <select class="fc" id="ag-cli" onchange="atualizarPacotesDisponiveis()"><option value="">Selecionar...</option></select>
+        </div>
         <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro" onchange="onSelecaoAgendamentoMudou()"><option value="">Selecionar...</option></select></div>
       </div>
       <div class="fg"><label class="fl">Serviços* (clique para selecionar)</label>
@@ -4781,6 +4938,18 @@ function dispensarBannerPWA() {
       </div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-ag')">Cancelar</button><button class="btn btnp" onclick="saveAg()">✅ Confirmar</button></div>
+  </div>
+</div>
+
+<!-- Modal de Detalhes do Agendamento (clicar no cliente na agenda) -->
+<div class="mov" id="m-detalhes-ag">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">📋 Detalhes do Atendimento</span><button class="mx" onclick="closeM('m-detalhes-ag')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="det-ag-id"/>
+      <div id="det-ag-conteudo"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-detalhes-ag')">Fechar</button></div>
   </div>
 </div>
 
