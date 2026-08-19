@@ -221,7 +221,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.6.0-consumo-venda-produto-historico' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.7.1-pagina-fiado-badge' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1757,6 +1757,51 @@ app.get('/api/financeiro/fiado', auth, requirePermissao('financeiro'), async (re
 });
 
 // Mesmo relatório, mas devolvendo um CSV pronto pra baixar/abrir no Excel
+// Registra um pagamento (total ou parcial) de um lançamento em aberto — se
+// pagar menos que o valor total, "quebra" o lançamento em dois: um já pago
+// (o valor que entrou agora) e outro que continua pendente com o restante.
+// Assim o relatório de Fiado sempre reflete o saldo real que ainda falta.
+app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('financeiro'), async (req, res) => {
+  const { valor, forma_pgto } = req.body;
+  try {
+    const { data: lanc } = await supabase.from('lancamentos')
+      .select('*').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!lanc) return res.status(404).json({ error: 'Lançamento não encontrado' });
+    if (lanc.pago) return res.status(409).json({ error: 'Esse lançamento já está pago' });
+
+    const valorPago = (valor !== undefined && valor !== null && valor !== '')
+      ? Number(valor) : Number(lanc.valor);
+    if (!valorPago || valorPago <= 0) return res.status(422).json({ error: 'Informe um valor válido' });
+    if (valorPago > Number(lanc.valor) + 0.01) {
+      return res.status(422).json({ error: 'O valor pago não pode ser maior que o valor devido (' + lanc.valor + ')' });
+    }
+
+    const restante = Number((Number(lanc.valor) - valorPago).toFixed(2));
+    const pagouTudo = restante <= 0.01;
+
+    if (pagouTudo) {
+      // Pagou o valor inteiro — só marca como pago, sem precisar quebrar em dois
+      const { data } = await supabase.from('lancamentos')
+        .update({ pago: true, forma_pgto: forma_pgto || lanc.forma_pgto }).eq('id', lanc.id).select().single();
+      return res.json({ pago_total: true, lancamento: data });
+    }
+
+    // Pagamento parcial: cria um novo lançamento com o valor pago agora
+    // (já quitado) e reduz o lançamento original pro saldo que ainda falta
+    const { data: pagamento } = await supabase.from('lancamentos').insert({
+      salao_id: req.salao_id, cliente_id: lanc.cliente_id, tipo: lanc.tipo, categoria: lanc.categoria,
+      descricao: lanc.descricao + ' (pagamento parcial)', valor: valorPago,
+      data: new Date().toISOString().split('T')[0], forma_pgto: forma_pgto || null, pago: true,
+      agendamento_id: lanc.agendamento_id || null
+    }).select().single();
+
+    const { data: atualizado } = await supabase.from('lancamentos')
+      .update({ valor: restante }).eq('id', lanc.id).select().single();
+
+    res.json({ pago_total: false, restante, pagamento, lancamento: atualizado });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/financeiro/fiado/exportar', auth, requirePermissao('financeiro'), async (req, res) => {
   try {
     const { data: pendentes, error } = await supabase.from('lancamentos')
