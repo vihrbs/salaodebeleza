@@ -142,6 +142,26 @@ function separarDuplicados(itens, chavesExistentes, calcularChave) {
   return { paraInserir, duplicados };
 }
 
+// ── PREÇO POR DIA DA SEMANA ────────────────────────────
+// Serviço pode ter um preço diferente em dias específicos (ex.: Corte custa
+// R$55, mas R$45 na Terça/Quarta/Quinta). Guardado em servicos.precos_por_dia
+// como um objeto { "2": 45, "3": 45, "4": 45 } — chave é o dia da semana
+// (0=domingo ... 6=sábado, igual o Date.getDay() do JavaScript).
+// dataHoraISO é interpretado direto da data (sem passar pelo fuso do JS
+// Date), senão um agendamento perto da meia-noite poderia cair no dia errado.
+function diaDaSemanaBrasil(dataHoraISO) {
+  const dataParte = String(dataHoraISO).split('T')[0];
+  const [ano, mes, dia] = dataParte.split('-').map(Number);
+  return new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+}
+
+function precoEfetivoServico(servico, dataHoraISO) {
+  const precosPorDia = servico.precos_por_dia || {};
+  const diaSemana = diaDaSemanaBrasil(dataHoraISO);
+  const precoDoDia = precosPorDia[String(diaSemana)];
+  return (precoDoDia !== undefined && precoDoDia !== null) ? Number(precoDoDia) : Number(servico.preco);
+}
+
 // ── MAQUININHA DE CARTÃO ─────────────────────────────
 // Formas de pagamento que sofrem desconto de taxa de maquininha.
 // Precisa bater exatamente com os valores enviados pelo frontend (botões fpg-btn).
@@ -221,7 +241,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.7.1-pagina-fiado-badge' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.8.0-preco-por-dia-semana' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1314,8 +1334,10 @@ async function criarAgendamentoUnico({
   pacotePorServico = pacotePorServico || {}; // { [servico_id]: pacote_cliente_id } — serviços pagos via pacote
 
   const duracao_total = servicosInfo.reduce((s, sv) => s + sv.duracao_min, 0);
-  // Só cobra agora os serviços que NÃO vieram de um pacote já pago antes
-  const valor_total = servicosInfo.reduce((s, sv) => s + (pacotePorServico[sv.id] ? 0 : Number(sv.preco)), 0);
+  // Só cobra agora os serviços que NÃO vieram de um pacote já pago antes —
+  // e usa o preço EFETIVO daquele dia da semana (se o serviço tiver preço
+  // diferente configurado pra esse dia; senão usa o preço padrão)
+  const valor_total = servicosInfo.reduce((s, sv) => s + (pacotePorServico[sv.id] ? 0 : precoEfetivoServico(sv, dataHora)), 0);
 
   const data_hora_final = /[+-]\d{2}:\d{2}$|Z$/.test(dataHora) ? dataHora : dataHora + '-03:00';
   const dataParte = data_hora_final.split('T')[0];
@@ -1350,15 +1372,18 @@ async function criarAgendamentoUnico({
     .insert(insertPayload).select().single();
   if (error) throw error;
 
-  // A comissão é calculada sobre o preço CHEIO do serviço — o profissional
-  // continua recebendo normalmente mesmo quando o cliente já pagou pelo
-  // pacote antes. Só a cobrança do cliente (lançamento) é que não se repete.
+  // A comissão é calculada sobre o preço CHEIO do serviço naquele dia (que
+  // já reflete o preço específico do dia da semana, se houver) — o
+  // profissional continua recebendo normalmente mesmo quando o cliente já
+  // pagou pelo pacote antes. Só a cobrança do cliente (lançamento) é que
+  // não se repete.
   const linhas = servicosInfo.map(sv => {
+    const precoDoServicoNesseDia = precoEfetivoServico(sv, dataHora);
     const cpct = sv.comissao_pct ?? profComissaoPct ?? 40;
     const pacoteClienteId = pacotePorServico[sv.id] || null;
     return {
-      agendamento_id: ag.id, servico_id: sv.id, preco: sv.preco,
-      comissao_pct: cpct, comissao_valor: (Number(sv.preco) * cpct) / 100,
+      agendamento_id: ag.id, servico_id: sv.id, preco: precoDoServicoNesseDia,
+      comissao_pct: cpct, comissao_valor: (precoDoServicoNesseDia * cpct) / 100,
       pago_via_pacote: !!pacoteClienteId, pacote_cliente_id: pacoteClienteId
     };
   });
@@ -1412,7 +1437,7 @@ app.post('/api/agendamentos', auth, async (req, res) => {
 
   try {
     const { data: srvcs } = await supabase
-      .from('servicos').select('id, nome, preco, duracao_min, comissao_pct')
+      .from('servicos').select('id, nome, preco, duracao_min, comissao_pct, precos_por_dia')
       .in('id', servicos).eq('salao_id', req.salao_id);
 
     const { data: prof } = await supabase
@@ -2744,10 +2769,13 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
 
     // Busca dados do serviço
     const { data: servico } = await supabase.from('servicos')
-      .select('id, nome, duracao_min, preco, comissao_pct').eq('id', servico_id).single();
+      .select('id, nome, duracao_min, preco, comissao_pct, precos_por_dia').eq('id', servico_id).single();
     if (!servico) return res.status(404).json({ error: 'Serviço não encontrado' });
 
     const data_hora = data + 'T' + hora_inicio + ':00-03:00';
+    // Preço EFETIVO daquele dia da semana (usa o preço especial configurado
+    // pro dia, se houver; senão o preço padrão do serviço)
+    const precoEfetivo = precoEfetivoServico(servico, data_hora);
 
     // Busca ou cria cliente pelo telefone
     let { data: cliente } = await supabase.from('clientes')
@@ -2793,7 +2821,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
       .insert({
         salao_id, cliente_id: cliente.id, profissional_id,
         data_hora, duracao_min: servico.duracao_min,
-        status: 'confirmado', valor_total: servico.preco,
+        status: 'confirmado', valor_total: precoEfetivo,
         origem: 'app_cliente'
       })
       .select().single();
@@ -2804,8 +2832,8 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
     const cpct = servico.comissao_pct ?? prof?.comissao_pct ?? 40;
     await supabase.from('agendamento_servicos').insert({
       agendamento_id: agendamento.id, servico_id: servico.id,
-      preco: servico.preco, comissao_pct: cpct,
-      comissao_valor: (Number(servico.preco) * cpct) / 100
+      preco: precoEfetivo, comissao_pct: cpct,
+      comissao_valor: (precoEfetivo * cpct) / 100
     });
 
     // Cria lançamento financeiro pendente
@@ -2813,7 +2841,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
       await supabase.from('lancamentos').insert({
         salao_id, agendamento_id: agendamento.id, cliente_id: cliente.id, tipo: 'entrada',
         categoria: 'Serviço', descricao: servico.nome + ' - ' + nome,
-        valor: servico.preco, data, pago: false
+        valor: precoEfetivo, data, pago: false
       });
     } catch(lancErr) { console.log('Lancamento nao criado:', lancErr.message); }
 
@@ -2821,7 +2849,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
     // é um caminho SEPARADO do agendamento criado pelo painel admin, então
     // precisa da própria chamada (não reaproveita a lógica de /api/agendamentos)
     if (prof && prof.email) {
-      notificarProfissionalNovoAgendamento(prof.email, prof.nome, nome, data_hora, [servico.nome], servico.preco)
+      notificarProfissionalNovoAgendamento(prof.email, prof.nome, nome, data_hora, [servico.nome], precoEfetivo)
         .then(r => {
           if (!r.enviado) console.error('Notificação de agendamento (link público) NÃO enviada pro profissional ' + prof.email + ': ' + r.motivo);
         }).catch(e => console.error('Erro inesperado ao notificar profissional (link público):', e.message));
@@ -2835,7 +2863,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
         id: agendamento.id,
         servico: servico.nome,
         data: data, hora_inicio: hora_inicio,
-        valor: servico.preco
+        valor: precoEfetivo
       }
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
