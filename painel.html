@@ -1388,16 +1388,55 @@ function abrirModalConcluir(id) {
       info = '<strong>' + (ag.clientes && ag.clientes.nome || '') + '</strong>' +
              (svc ? ' — ' + svc : '') +
              '<div style="margin-top:4px;font-size:.78rem;font-weight:700;color:var(--gold)">Total: ' + brl(ag.valor_total) + '</div>';
+      document.getElementById('concluir-valor-original').value = ag.valor_total || 0;
+    } else {
+      document.getElementById('concluir-valor-original').value = 0;
     }
     document.getElementById('concluir-info').innerHTML = info || 'Confirmar conclusão do atendimento';
   }).catch(function(){
     document.getElementById('concluir-info').innerHTML = 'Confirmar conclusão do atendimento';
+    document.getElementById('concluir-valor-original').value = 0;
   });
   // Limpa seleção anterior
   document.querySelectorAll('.fpg-btn').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('fiado-aviso').textContent = '';
   document.getElementById('btn-concluir-ok').textContent = 'Confirmar pagamento ✅';
+  document.getElementById('desc-input').value = '';
+  document.getElementById('desc-resumo').textContent = '';
+  selecionarTipoDesconto('pct');
   openM('m-concluir');
+}
+
+// ── DESCONTO NO ATENDIMENTO ────────────────────────────
+var DESCONTO_TIPO_SELECIONADO = 'pct';
+
+function selecionarTipoDesconto(tipo) {
+  DESCONTO_TIPO_SELECIONADO = tipo;
+  document.getElementById('desc-tipo-pct').className   = 'btn btnsm ' + (tipo==='pct'   ? 'btnp' : 'btns');
+  document.getElementById('desc-tipo-valor').className  = 'btn btnsm ' + (tipo==='valor' ? 'btnp' : 'btns');
+  recalcularDesconto();
+}
+
+// Calcula quanto de desconto em R$ sai do valor digitado (seja % ou R$
+// direto) — usado tanto pra mostrar o resumo quanto na hora de mandar pro
+// backend, que sempre recebe o valor final já em reais.
+function calcularDescontoEmReais() {
+  var valorOriginal = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
+  var digitado = parseFloat(document.getElementById('desc-input').value) || 0;
+  if (digitado <= 0) return 0;
+  if (DESCONTO_TIPO_SELECIONADO === 'pct') {
+    return Math.min(valorOriginal, (valorOriginal * digitado) / 100);
+  }
+  return Math.min(valorOriginal, digitado);
+}
+
+function recalcularDesconto() {
+  var valorOriginal = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
+  var desconto = calcularDescontoEmReais();
+  var resumo = document.getElementById('desc-resumo');
+  if (desconto <= 0) { resumo.textContent = ''; return; }
+  var valorFinal = valorOriginal - desconto;
+  resumo.innerHTML = 'Desconto de ' + brl(desconto) + ' — <strong style="color:var(--ac)">valor final: ' + brl(valorFinal) + '</strong>';
 }
 
 function selecionarFpg(btn) {
@@ -1420,16 +1459,21 @@ function confirmarConclusao() {
   if (!fpgBtn) { toast('Selecione a forma de pagamento (ou fiado)','er'); return; }
   var fpg = fpgBtn.dataset.val;
   var ehFiado = fpg === 'fiado';
+  var desconto = calcularDescontoEmReais();
 
   var btn = document.getElementById('btn-concluir-ok');
   btn.disabled = true; btn.textContent = 'Salvando...';
 
   apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{
-    status:'concluido', forma_pgto: ehFiado ? undefined : fpg, pago: !ehFiado
+    status:'concluido', forma_pgto: ehFiado ? undefined : fpg, pago: !ehFiado,
+    desconto: desconto > 0 ? desconto : undefined
   }})
     .then(function(r){
       closeM('m-concluir');
       toast(ehFiado ? 'Atendimento concluído — marcado como fiado 🧾' : 'Atendimento concluído! ✅', 'ok');
+      if (r && r.desconto_aplicado > 0) {
+        toast('Desconto de ' + brl(r.desconto_aplicado) + ' aplicado — valor final: ' + brl(r.valor_total), 'inf');
+      }
       if (r && r.taxa_maquininha && r.taxa_maquininha.taxa_profissional > 0) {
         toast('Taxa da maquininha: ' + brl(r.taxa_maquininha.taxa_total) + ' (profissional absorveu ' + brl(r.taxa_maquininha.taxa_profissional) + ')', 'inf');
       }
@@ -2582,12 +2626,14 @@ function abrirNovoAgendamento() {
   var buscaServico = document.getElementById('ag-svc-busca');
   if (buscaServico) { buscaServico.value = ''; filtrarServicosAgendamento(''); }
   openM('m-ag');
-  // Sempre recalcula as sessões de pacote disponíveis E os horários livres ao
-  // abrir o modal — não depende só do evento onchange do cliente/serviço,
+  // Sempre recalcula as sessões de pacote disponíveis, os horários livres, E
+  // os preços dos serviços (podem variar por dia da semana) ao abrir o
+  // modal — não depende só do evento onchange do cliente/serviço/data,
   // porque se algo já estava selecionado de uma vez anterior (valor não
   // muda), o onchange não dispara e a seção ficaria desatualizada.
   atualizarPacotesDisponiveis();
   atualizarHorariosDisponiveis();
+  atualizarPrecosPillsServico();
 }
 
 // Filtra os "pills" de serviço já renderizados pelo texto digitado, sem
@@ -2620,6 +2666,40 @@ function toggleVenderPacoteAgendamento() {
 function onSelecaoAgendamentoMudou() {
   atualizarPacotesDisponiveis();
   atualizarHorariosDisponiveis();
+  atualizarPrecosPillsServico();
+}
+
+// Calcula o preço EFETIVO de um serviço numa data (mesma lógica do
+// backend) — só pra já MOSTRAR o valor certo antes de agendar. O valor
+// cobrado de verdade sempre é recalculado no servidor na hora de salvar,
+// isso aqui é só um preview visual pra não confundir quem tá agendando.
+function precoEfetivoServicoPreview(servico, dataISO) {
+  if (!dataISO) return Number(servico.preco);
+  var precosPorDia = servico.precos_por_dia || {};
+  var partes = dataISO.split('-').map(Number);
+  var diaSemana = new Date(Date.UTC(partes[0], partes[1] - 1, partes[2])).getUTCDay();
+  var precoDoDia = precosPorDia[String(diaSemana)];
+  return (precoDoDia !== undefined && precoDoDia !== null) ? Number(precoDoDia) : Number(servico.preco);
+}
+
+// Atualiza o preço mostrado em cada "pill" de serviço do Novo Agendamento
+// toda vez que a data muda — assim quem tá agendando já vê na hora se
+// aquele serviço tem preço promocional naquele dia da semana.
+function atualizarPrecosPillsServico() {
+  var dataSelecionada = document.getElementById('ag-d') ? document.getElementById('ag-d').value : '';
+  document.querySelectorAll('#ag-svcs .svc-pill').forEach(function(pill){
+    var servico = (SVCS || []).find(function(s){ return s.id === pill.dataset.id; });
+    if (!servico) return;
+    var precoEfetivo = precoEfetivoServicoPreview(servico, dataSelecionada);
+    pill.dataset.preco = precoEfetivo;
+    var spanPreco = pill.querySelector('span');
+    if (spanPreco) {
+      var mudouPreco = precoEfetivo !== Number(servico.preco);
+      spanPreco.innerHTML = (mudouPreco ? '🏷️ ' : '') + brl(precoEfetivo);
+      spanPreco.style.color = mudouPreco ? 'var(--green)' : '';
+      spanPreco.style.fontWeight = mudouPreco ? '700' : '';
+    }
+  });
 }
 
 function horaParaMinutos(hstr) {
@@ -3287,7 +3367,7 @@ function montarGradePrecoDia(precosExistentes) {
     var temPrecoNesseDia = precosExistentes && precosExistentes[indice] !== undefined;
     return '<div style="display:flex;align-items:center;gap:8px">' +
       '<label style="display:flex;align-items:center;gap:6px;min-width:90px;font-size:.78rem;cursor:pointer">' +
-      '<input type="checkbox" class="esv-dia-check" data-dia="' + indice + '" ' + (temPrecoNesseDia?'checked':'') + ' onchange="this.nextElementSibling.disabled=!this.checked">' +
+      '<input type="checkbox" class="esv-dia-check" data-dia="' + indice + '" ' + (temPrecoNesseDia?'checked':'') + ' onchange="this.parentElement.nextElementSibling.disabled=!this.checked">' +
       nomeDia + '</label>' +
       '<input type="number" class="fc esv-dia-preco" data-dia="' + indice + '" step="0.01" placeholder="Preço nesse dia" style="font-size:.78rem" ' +
       (temPrecoNesseDia ? 'value="' + precosExistentes[indice] + '"' : 'disabled') + '>' +
@@ -4709,6 +4789,20 @@ function dispensarBannerPWA() {
     <div class="mb">
       <div style="background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs);padding:14px;margin-bottom:16px;font-size:.82rem;color:var(--ink2)" id="concluir-info">—</div>
       <input type="hidden" id="concluir-id"/>
+      <input type="hidden" id="concluir-valor-original" value="0"/>
+
+      <div class="fg">
+        <label class="fl">Desconto (opcional)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;border:1.5px solid var(--bd);border-radius:var(--rs);overflow:hidden">
+            <button type="button" class="btn btns btnsm" id="desc-tipo-pct" style="border-radius:0" onclick="selecionarTipoDesconto('pct')">%</button>
+            <button type="button" class="btn btns btnsm" id="desc-tipo-valor" style="border-radius:0" onclick="selecionarTipoDesconto('valor')">R$</button>
+          </div>
+          <input type="number" class="fc" id="desc-input" step="0.01" min="0" placeholder="0" oninput="recalcularDesconto()" style="flex:1"/>
+        </div>
+        <div style="font-size:.74rem;margin-top:6px" id="desc-resumo"></div>
+      </div>
+
       <div class="fg">
         <label class="fl">Forma de pagamento</label>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="fpg-options">
