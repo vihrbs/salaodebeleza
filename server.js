@@ -241,7 +241,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.9.1-preview-preco-e-grade-corrigida' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.0.0-detalhes-agendamento-e-correcoes' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1163,7 +1163,12 @@ app.get('/api/clientes', auth, async (req, res) => {
   const offset = (page - 1) * limit;
   let query = supabase.from('clientes').select('*', { count: 'exact' })
     .eq('salao_id', req.salao_id).eq('ativo', true).order('nome').range(offset, offset + Number(limit) - 1);
-  if (q) query = query.ilike('nome', `%${q}%`);
+  // Busca por nome OU telefone — antes só buscava por nome, o que obrigava
+  // a pessoa a lembrar exatamente o nome digitado no cadastro
+  if (q) {
+    const qLimpo = q.replace(/'/g, "''"); // escapa aspa simples pra não quebrar o filtro .or()
+    query = query.or(`nome.ilike.%${qLimpo}%,telefone.ilike.%${qLimpo}%`);
+  }
   const { data, count, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data: data || [], total: count });
@@ -1265,7 +1270,7 @@ app.put('/api/clientes/:id', auth, async (req, res) => {
 app.get('/api/agendamentos', auth, async (req, res) => {
   const { data, data_inicio, data_fim, status } = req.query;
   let q = supabase.from('agendamentos')
-    .select(`id, data_hora, duracao_min, status, valor_total, forma_pgto, observacoes, origem,
+    .select(`id, data_hora, duracao_min, status, valor_total, forma_pgto, observacoes, origem, desconto_aplicado,
              clientes(id, nome, telefone),
              profissionais(id, nome, cor_agenda),
              agendamento_servicos(id, preco, servicos(id, nome, duracao_min))`)
@@ -1294,6 +1299,43 @@ app.get('/api/agendamentos', auth, async (req, res) => {
   const { data: rows, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json(rows || []);
+});
+
+// Edita o preço de UM serviço específico dentro de um agendamento (a
+// "comanda" do cliente) — recalcula sozinho o valor_total do agendamento
+// (soma de todos os serviços) e o lançamento financeiro vinculado, pra
+// tudo ficar consistente sem precisar mexer em mais nada manualmente.
+app.put('/api/agendamento-servicos/:id', auth, async (req, res) => {
+  const { preco } = req.body;
+  if (preco === undefined || preco === null || Number(preco) < 0 || isNaN(Number(preco))) {
+    return res.status(422).json({ error: 'Informe um preço válido' });
+  }
+  try {
+    const { data: linha } = await supabase.from('agendamento_servicos')
+      .select('*').eq('id', req.params.id).single();
+    if (!linha) return res.status(404).json({ error: 'Serviço do agendamento não encontrado' });
+
+    // Confirma que o agendamento pertence ao salão de quem está pedindo
+    const { data: agendamento } = await supabase.from('agendamentos')
+      .select('id, salao_id').eq('id', linha.agendamento_id).eq('salao_id', req.salao_id).single();
+    if (!agendamento) return res.status(404).json({ error: 'Não encontrado' });
+
+    const novoPreco = Number(preco);
+    const novaComissao = Number(((novoPreco * (linha.comissao_pct || 0)) / 100).toFixed(2));
+    await supabase.from('agendamento_servicos')
+      .update({ preco: novoPreco, comissao_valor: novaComissao }).eq('id', req.params.id);
+
+    // Recalcula o valor_total do agendamento = soma de TODOS os serviços dele
+    const { data: todasLinhas } = await supabase.from('agendamento_servicos')
+      .select('preco').eq('agendamento_id', linha.agendamento_id);
+    const novoValorTotal = (todasLinhas || []).reduce((s, l) => s + Number(l.preco || 0), 0);
+    await supabase.from('agendamentos').update({ valor_total: novoValorTotal }).eq('id', linha.agendamento_id);
+
+    // Se já existe um lançamento financeiro pra esse agendamento, atualiza o valor também
+    await supabase.from('lancamentos').update({ valor: novoValorTotal }).eq('agendamento_id', linha.agendamento_id);
+
+    res.json({ novo_preco: novoPreco, nova_comissao: novaComissao, novo_valor_total: novoValorTotal });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── AGENDAMENTO RECORRENTE ────────────────────────────
@@ -1680,6 +1722,36 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
         whatsapp_link = 'https://wa.me/' + telComPais + '?text=' + encodeURIComponent(msg);
       }
     } catch(e) { console.error('Erro ao gerar link WhatsApp:', e.message); }
+  }
+
+  // Cancelar (ou marcar "não compareceu") um atendimento que já tinha
+  // lançamento financeiro criado precisa REMOVER esse lançamento — senão
+  // ele fica pra sempre contando na receita/fiado, mesmo cancelado. Isso
+  // cobre tanto cancelar um agendamento pendente (lançamento não pago
+  // ainda) quanto cancelar um que já tinha sido CONCLUÍDO por engano
+  // (lançamento já pago, mas que não devia mais contar).
+  if (status === 'cancelado' || status === 'nao_compareceu') {
+    try {
+      await supabase.from('lancamentos').delete().eq('agendamento_id', req.params.id).eq('salao_id', req.salao_id);
+    } catch(e) { console.error('Erro ao remover lançamento do agendamento cancelado:', e.message); }
+
+    // Recalcula as estatísticas do cliente também — se esse atendimento já
+    // tinha sido contado como visita concluída antes, precisa sair da conta
+    if (data.cliente_id) {
+      try {
+        const { data: ags } = await supabase
+          .from('agendamentos').select('valor_total')
+          .eq('cliente_id', data.cliente_id).eq('salao_id', req.salao_id).eq('status', 'concluido');
+        const total_visitas = ags ? ags.length : 0;
+        const total_gasto   = ags ? ags.reduce((s, a) => s + Number(a.valor_total || 0), 0) : 0;
+        let novo_status = 'ativo';
+        if (total_visitas >= 10) novo_status = 'vip';
+        else if (total_visitas === 1) novo_status = 'novo';
+        await supabase.from('clientes').update({
+          historico_count: total_visitas, total_gasto: total_gasto, status: novo_status
+        }).eq('id', data.cliente_id).eq('salao_id', req.salao_id);
+      } catch(e) { console.error('Erro ao recalcular stats do cliente após cancelamento:', e.message); }
+    }
   }
 
   res.json({ ...data, whatsapp_link, taxa_maquininha: infoTaxaMaquininha });
