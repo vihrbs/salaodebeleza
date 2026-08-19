@@ -2338,10 +2338,12 @@ function loadSvcs() {
 
 function renderSvcs(list) {
   document.getElementById('svc-tb').innerHTML = list.map(function(s){
+    var temPrecoPorDia = s.precos_por_dia && Object.keys(s.precos_por_dia).length > 0;
+    var tagPrecoDia = temPrecoPorDia ? ' <span class="badge bi" style="font-size:.6rem" title="Tem preço diferente em alguns dias da semana">🗓️ varia</span>' : '';
     return '<tr><td><strong>' + esc(s.nome) + '</strong></td>' +
       '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + esc(s.categoria) + '</span></td>' +
       '<td>' + s.duracao_min + ' min</td>' +
-      '<td><strong>' + brl(s.preco) + '</strong></td>' +
+      '<td><strong>' + brl(s.preco) + '</strong>' + tagPrecoDia + '</td>' +
       '<td><span class="badge bp">' + (s.comissao_pct||40) + '%</span></td>' +
       '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toggleServicoAtivo(\'' + s.id + '\',this.checked)"/></td>' +
       '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarServico(\'' + s.id + '\',\'' + escAttr(s.nome) + '\')" title="Remover">🗑</button></div></td></tr>';
@@ -3275,6 +3277,43 @@ function updatePro() {
   .finally(function(){ btn.disabled=false; btn.textContent='Salvar'; });
 }
 
+var NOMES_DIAS_SEMANA = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+
+// Monta as 7 linhas (uma por dia da semana) com um checkbox + campo de
+// preço — só usado dentro do modal de editar serviço
+function montarGradePrecoDia(precosExistentes) {
+  var wrap = document.getElementById('esv-dias-wrap');
+  wrap.innerHTML = NOMES_DIAS_SEMANA.map(function(nomeDia, indice){
+    var temPrecoNesseDia = precosExistentes && precosExistentes[indice] !== undefined;
+    return '<div style="display:flex;align-items:center;gap:8px">' +
+      '<label style="display:flex;align-items:center;gap:6px;min-width:90px;font-size:.78rem;cursor:pointer">' +
+      '<input type="checkbox" class="esv-dia-check" data-dia="' + indice + '" ' + (temPrecoNesseDia?'checked':'') + ' onchange="this.nextElementSibling.disabled=!this.checked">' +
+      nomeDia + '</label>' +
+      '<input type="number" class="fc esv-dia-preco" data-dia="' + indice + '" step="0.01" placeholder="Preço nesse dia" style="font-size:.78rem" ' +
+      (temPrecoNesseDia ? 'value="' + precosExistentes[indice] + '"' : 'disabled') + '>' +
+      '</div>';
+  }).join('');
+}
+
+function toggleGradePrecoDia(ativado) {
+  document.getElementById('esv-grade-precos-dia').style.display = ativado ? 'block' : 'none';
+  if (ativado && !document.getElementById('esv-dias-wrap').innerHTML) montarGradePrecoDia(null);
+}
+
+// Lê o que foi marcado na grade e monta o objeto { "2": 45, "3": 45, ... }
+// pra mandar pro backend — só inclui os dias que estão marcados E com preço
+function lerGradePrecoDia() {
+  var precos = {};
+  document.querySelectorAll('.esv-dia-check').forEach(function(chk){
+    if (!chk.checked) return;
+    var dia = chk.dataset.dia;
+    var inputPreco = document.querySelector('.esv-dia-preco[data-dia="' + dia + '"]');
+    var valor = parseFloat(inputPreco.value);
+    if (valor > 0) precos[dia] = valor;
+  });
+  return precos;
+}
+
 function editSvc(btn) {
   var raw = btn.getAttribute('data-svc');
   var s;
@@ -3290,6 +3329,12 @@ function editSvc(btn) {
   for (var i=0; i<sel.options.length; i++) {
     if (sel.options[i].value === s.categoria) { sel.selectedIndex = i; break; }
   }
+  // Preço por dia da semana — só marca o checkbox mestre se já tiver algum configurado
+  var precosPorDia = s.precos_por_dia || {};
+  var temAlgumPreco = Object.keys(precosPorDia).length > 0;
+  document.getElementById('esv-preco-dia-ativo').checked = temAlgumPreco;
+  document.getElementById('esv-grade-precos-dia').style.display = temAlgumPreco ? 'block' : 'none';
+  montarGradePrecoDia(precosPorDia);
   openM('m-edit-svc');
 }
 
@@ -3306,7 +3351,8 @@ function updateSvc() {
     duracao_min: parseInt(document.getElementById('esv-d').value)||60,
     preco: preco,
     comissao_pct: parseFloat(document.getElementById('esv-com').value)||40,
-    ativo: document.getElementById('esv-ativo').value === 'true'
+    ativo: document.getElementById('esv-ativo').value === 'true',
+    precos_por_dia: document.getElementById('esv-preco-dia-ativo').checked ? lerGradePrecoDia() : {}
   }})
   .then(function(){ toast('Serviço atualizado! ✅','ok'); closeM('m-edit-svc'); loadSvcs(); fillSelects(); })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -4837,6 +4883,17 @@ function dispensarBannerPWA() {
       <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="esv-c"><option>Cabelo</option><option>Unhas</option><option>Estética</option><option>Barba</option><option>Outro</option></select></div><div class="fg"><label class="fl">Duração (min)</label><input type="number" class="fc" id="esv-d"/></div></div>
       <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="esv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="esv-com"/></div></div>
       <div class="fg"><label class="fl">Ativo</label><select class="fc" id="esv-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+
+      <div class="fg" style="border-top:1px solid var(--bd);padding-top:14px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="esv-preco-dia-ativo" onchange="toggleGradePrecoDia(this.checked)"/>
+          <span class="fl" style="margin:0">Preço diferente em dias específicos da semana</span>
+        </label>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Ex.: esse serviço custa R$ 55, mas na Terça, Quarta e Quinta custa R$ 45. O preço muda sozinho na hora de agendar, sem precisar fazer nada manualmente.</div>
+        <div id="esv-grade-precos-dia" style="display:none;margin-top:12px">
+          <div id="esv-dias-wrap" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+      </div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-edit-svc')">Cancelar</button><button class="btn btnp" onclick="updateSvc()">Salvar</button></div>
   </div>
