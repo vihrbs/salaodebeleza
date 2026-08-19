@@ -241,7 +241,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.8.0-preco-por-dia-semana' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '3.9.1-preview-preco-e-grade-corrigida' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1583,15 +1583,46 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
   let infoTaxaMaquininha = { taxa_total: 0, taxa_profissional: 0 };
 
   if (status === 'concluido') {
+    // Desconto opcional aplicado na hora de concluir — desconta tanto do
+    // valor cobrado quanto proporcionalmente da comissão do profissional
+    // (decisão de negócio: o profissional também sente o desconto, não só
+    // o salão).
+    const desconto = Number(req.body.desconto || 0);
+    if (desconto > 0) {
+      const valorOriginal = Number(data.valor_total || 0);
+      if (desconto > valorOriginal) {
+        return res.status(422).json({ error: 'O desconto não pode ser maior que o valor do atendimento (' + valorOriginal + ')' });
+      }
+      const valorFinal = Number((valorOriginal - desconto).toFixed(2));
+      const fatorDesconto = valorOriginal > 0 ? valorFinal / valorOriginal : 1;
+
+      await supabase.from('agendamentos')
+        .update({ valor_total: valorFinal, desconto_aplicado: desconto })
+        .eq('id', req.params.id);
+      // Atualiza a cópia local também, pro resto da função (taxa de
+      // maquininha, lançamento financeiro, resposta) já usar o valor certo
+      data.valor_total = valorFinal;
+      data.desconto_aplicado = desconto;
+
+      const { data: servicosDoAgendamento } = await supabase
+        .from('agendamento_servicos').select('*').eq('agendamento_id', req.params.id);
+      for (const linha of (servicosDoAgendamento || [])) {
+        await supabase.from('agendamento_servicos').update({
+          preco: Number((Number(linha.preco) * fatorDesconto).toFixed(2)),
+          comissao_valor: Number((Number(linha.comissao_valor) * fatorDesconto).toFixed(2))
+        }).eq('id', linha.id);
+      }
+    }
+
     // Ficou combinado de pagar depois (fiado) — não marca como pago e não
     // aplica taxa de maquininha (não teve cartão nenhum passado ainda).
     // O padrão continua sendo "pago", pra não mudar o comportamento de
     // quem não mandar esse campo.
     const marcarComoPago = pago !== false;
 
-    // Atualiza lancamento
+    // Atualiza lancamento — já reflete o valor com desconto (se algum foi aplicado)
     await supabase.from('lancamentos')
-      .update({ pago: marcarComoPago, forma_pgto }).eq('agendamento_id', req.params.id);
+      .update({ pago: marcarComoPago, forma_pgto, valor: data.valor_total }).eq('agendamento_id', req.params.id);
 
     // Aplica o desconto da taxa da maquininha na comissão do profissional
     // (só se o pagamento foi no cartão, o salão configurou uma taxa, E o
