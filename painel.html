@@ -463,6 +463,7 @@ select.fc option{background:var(--bg2)}
         <button class="sb-item" data-page="agenda" onclick="nav('agenda',this)"><span class="sb-ic">📅</span>Agenda<span class="sb-badge" id="nbag" style="display:none">0</span></button>
         <button class="sb-item" data-page="clientes" onclick="nav('clientes',this)"><span class="sb-ic">👥</span>Clientes</button>
         <div class="sb-section">Financeiro</div>
+        <button class="sb-item" data-page="fiado" onclick="nav('fiado',this)"><span class="sb-ic">💳</span>Fiado<span class="sb-badge" id="nbfiado" style="display:none">0</span></button>
         <button class="sb-item" data-page="financeiro" onclick="nav('financeiro',this)"><span class="sb-ic">💰</span>Financeiro</button>
         <button class="sb-item" data-page="comissoes" onclick="nav('comissoes',this)"><span class="sb-ic">💸</span>Comissões</button>
         <div class="sb-section">Operação</div>
@@ -592,7 +593,7 @@ select.fc option{background:var(--bg2)}
         <div class="kc c1"><div class="ki c1">📈</div><div><div class="kv" id="fr">—</div><div class="kl">Receita do mês</div></div></div>
         <div class="kc c2"><div class="ki c2">📉</div><div><div class="kv" id="fd">—</div><div class="kl">Despesas</div></div></div>
         <div class="kc c3"><div class="ki c3">💵</div><div><div class="kv" id="fl">—</div><div class="kl">Lucro</div></div></div>
-        <div class="kc c4"><div class="ki c4">⏳</div><div><div class="kv" id="fa">—</div><div class="kl">A receber</div></div></div>
+        <div class="kc c4" style="cursor:pointer" onclick="nav('fiado', document.querySelector('[data-page=fiado]'))"><div class="ki c4">⏳</div><div><div class="kv" id="fa">—</div><div class="kl">A receber (ver Fiado →)</div></div></div>
       </div>
       <div class="card" style="margin-bottom:14px">
         <div class="crow"><span class="ch">Faturamento 2026</span>
@@ -604,7 +605,21 @@ select.fc option{background:var(--bg2)}
         </div>
         <div class="bc" id="fin-bc" style="height:140px"></div>
       </div>
-      <div class="card" style="margin-bottom:14px">
+      <div class="card">
+        <div class="crow"><span class="ch">Lançamentos</span>
+          <select class="fc" style="width:auto;font-size:.72rem" onchange="loadLan(this.value)"><option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option></select>
+        </div>
+        <div id="lan-lst"><div class="lc"><div class="spin"></div></div></div>
+      </div>
+    </div>
+
+    <!-- FIADO -->
+    <div class="page" id="page-fiado">
+      <div class="kpis">
+        <div class="kc c4"><div class="ki c4">⏳</div><div><div class="kv" id="fiado-total-kpi">—</div><div class="kl">Total a receber</div></div></div>
+        <div class="kc c1"><div class="ki c1">👥</div><div><div class="kv" id="fiado-qtd-kpi">—</div><div class="kl">Clientes devendo</div></div></div>
+      </div>
+      <div class="card">
         <div class="crow">
           <span class="ch">💳 Fiado / Contas a Receber</span>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -614,12 +629,6 @@ select.fc option{background:var(--bg2)}
         </div>
         <div style="font-size:.74rem;color:var(--t3);margin-bottom:10px">Clientes com pagamento pendente — agendamento ou pacote ainda não pago.</div>
         <div id="fiado-lst"><div class="lc"><div class="spin"></div></div></div>
-      </div>
-      <div class="card">
-        <div class="crow"><span class="ch">Lançamentos</span>
-          <select class="fc" style="width:auto;font-size:.72rem" onchange="loadLan(this.value)"><option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option></select>
-        </div>
-        <div id="lan-lst"><div class="lc"><div class="spin"></div></div></div>
       </div>
     </div>
 
@@ -1134,7 +1143,11 @@ function nav(page, el) {
   // Bloqueio de verdade: mesmo que o botão de alguma forma fique visível ou
   // alguém chame nav() manualmente, a troca de página não acontece se o
   // usuário não tiver essa permissão (exceto admin, que sempre pode tudo).
-  if (USER_PERFIL !== 'admin' && MODULOS_COM_PERMISSAO.indexOf(page) >= 0 && USER_PERMISSOES.indexOf(page) < 0) {
+  // "Fiado" usa a MESMA permissão de "Financeiro" (não criei uma permissão
+  // separada só pra ela) — precisa mapear aqui pra bater com o que o
+  // backend já exige em /api/financeiro/fiado.
+  var moduloPermissaoNecessaria = page === 'fiado' ? 'financeiro' : page;
+  if (USER_PERFIL !== 'admin' && MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) >= 0 && USER_PERMISSOES.indexOf(moduloPermissaoNecessaria) < 0) {
     toast('Você não tem permissão para acessar essa área. Fale com o administrador.', 'er');
     return;
   }
@@ -1153,7 +1166,7 @@ function nav(page, el) {
   });
 
   // Título da topbar
-  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',clientes:'Clientes',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
+  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
   var tbTitle = document.getElementById('tb-page-title');
   if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
 
@@ -1295,7 +1308,9 @@ function loadKPIs() {
     document.getElementById('k1d').textContent = '+' + (d.novos_clientes_mes||0) + ' novos este mês';
     document.getElementById('k2d').textContent = d.agendamentos_hoje + ' atendimentos';
     document.getElementById('k3d').textContent = (d.novos_clientes_mes||0) + ' novos este mês';
-    document.getElementById('nbag').textContent = d.agendamentos_hoje;
+    var badgeAgenda = document.getElementById('nbag');
+    badgeAgenda.textContent = d.agendamentos_hoje;
+    badgeAgenda.style.display = d.agendamentos_hoje > 0 ? '' : 'none';
   }).catch(function(){ /* use demo */ });
 }
 
@@ -1865,16 +1880,35 @@ function loadFin() {
 // ── FIADO / CONTAS A RECEBER ──────────────────────────
 function loadFiado() {
   var el = document.getElementById('fiado-lst');
-  if (!el) return;
   apiFetch('/api/financeiro/fiado').then(function(lista){
     renderFiado(lista || []);
   }).catch(function(){
-    el.innerHTML = '<div class="empty">Não foi possível carregar o fiado agora.</div>';
+    if (el) el.innerHTML = '<div class="empty">Não foi possível carregar o fiado agora.</div>';
+    atualizarBadgeFiado(0); // não sabemos o total real, mas não deixa o badge com valor velho/errado
   });
+}
+
+// Atualiza tanto o número quanto a visibilidade do badge — sem isso ele
+// fica sempre escondido mesmo quando tem gente devendo (era exatamente o
+// bug que o badge da Agenda tinha antes de eu notar e corrigir aqui também).
+function atualizarBadgeFiado(qtdClientes) {
+  var badge = document.getElementById('nbfiado');
+  if (!badge) return;
+  badge.textContent = qtdClientes;
+  badge.style.display = qtdClientes > 0 ? '' : 'none';
 }
 
 function renderFiado(lista) {
   var el = document.getElementById('fiado-lst');
+  var kpiTotal = document.getElementById('fiado-total-kpi');
+  var kpiQtd = document.getElementById('fiado-qtd-kpi');
+  var totalGeral = lista.reduce(function(soma, c){ return soma + Number(c.total_devido || 0); }, 0);
+
+  atualizarBadgeFiado(lista.length);
+  if (kpiTotal) kpiTotal.textContent = brl(totalGeral);
+  if (kpiQtd) kpiQtd.textContent = lista.length;
+
+  if (!el) return; // pode ser chamado antes da página de Fiado existir no DOM em algum fluxo
   if (!lista.length) { el.innerHTML = '<div class="empty">✅ Nenhum cliente com pagamento pendente.</div>'; return; }
   el.innerHTML = lista.map(function(c){
     return '<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--bd2)">' +
@@ -4040,8 +4074,12 @@ function aplicarPermissoes() {
     // Esconde/mostra os itens do menu lateral com base nas permissões reais do usuário
     document.querySelectorAll('.sb-item[data-page]').forEach(function(btn) {
       var pagina = btn.getAttribute('data-page');
-      if (MODULOS_COM_PERMISSAO.indexOf(pagina) < 0) return;
-      btn.style.display = permitidos.indexOf(pagina) >= 0 ? '' : 'none';
+      // "Fiado" usa a mesma permissão de "Financeiro" (não existe uma
+      // permissão separada só pra ela) — sem esse mapeamento, o item nunca
+      // seria escondido de quem não tem acesso a financeiro.
+      var moduloPermissaoNecessaria = pagina === 'fiado' ? 'financeiro' : pagina;
+      if (MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) < 0) return;
+      btn.style.display = permitidos.indexOf(moduloPermissaoNecessaria) >= 0 ? '' : 'none';
     });
   }
 
