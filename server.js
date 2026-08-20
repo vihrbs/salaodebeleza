@@ -241,7 +241,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.0.0-detalhes-agendamento-e-correcoes' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.0.1-autocomplete-cliente' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
