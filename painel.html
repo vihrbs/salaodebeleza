@@ -604,9 +604,8 @@ select.fc option{background:var(--bg2)}
           <button class="btn btns btnsm" data-status="cancelado" onclick="filtrarComandasPorStatus('cancelado')">Canceladas</button>
         </div>
       </div>
-      <div class="card">
-        <div class="tw"><table><thead><tr><th>Hora</th><th>Cliente</th><th>Serviço(s)</th><th>Profissional</th><th>Valor</th><th>Status</th><th></th></tr></thead>
-        <tbody id="cmd-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
+      <div id="cmd-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+        <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
       </div>
     </div>
 
@@ -1833,12 +1832,12 @@ function loadComandas() {
   var campoData = document.getElementById('cmd-data');
   if (!campoData.value) campoData.value = today();
   var data = campoData.value;
-  document.getElementById('cmd-tb').innerHTML = '<tr><td colspan="7" class="lc"><div class="spin"></div></td></tr>';
+  document.getElementById('cmd-grid').innerHTML = '<div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>';
   apiFetch('/api/agendamentos?data=' + data).then(function(lista){
     COMANDAS_TODAS_DO_DIA = lista || [];
     renderComandas();
   }).catch(function(){
-    document.getElementById('cmd-tb').innerHTML = '<tr><td colspan="7"><div class="empty">Erro ao carregar as comandas.</div></td></tr>';
+    document.getElementById('cmd-grid').innerHTML = '<div class="empty" style="grid-column:1/-1">Erro ao carregar as comandas.</div>';
   });
 }
 
@@ -1854,6 +1853,9 @@ function filtrarComandasPorStatus(status) {
 // ainda não terminou (nem concluído, cancelado ou não-compareceu)
 var STATUS_A_CONCLUIR = ['agendado', 'confirmado', 'em_atendimento'];
 
+// Comandas em cartões (quadradinhos), um por atendimento — pedido
+// específico pra ficar visualmente parecido com o print que foi mandado
+// de referência (outro sistema mostrando as comandas do dia assim)
 function renderComandas() {
   var lista = COMANDAS_TODAS_DO_DIA;
   if (COMANDAS_FILTRO_ATUAL === 'a_concluir') {
@@ -1861,19 +1863,29 @@ function renderComandas() {
   } else if (COMANDAS_FILTRO_ATUAL) {
     lista = lista.filter(function(a){ return a.status === COMANDAS_FILTRO_ATUAL; });
   }
-  var tb = document.getElementById('cmd-tb');
-  if (!lista.length) { tb.innerHTML = '<tr><td colspan="7"><div class="empty">Nenhuma comanda encontrada com esse filtro.</div></td></tr>'; return; }
-  tb.innerHTML = lista.map(function(a){
-    var svcTxt = (a.agendamento_servicos || []).map(function(s){ return s.servicos && s.servicos.nome; }).filter(Boolean).join(', ') || '—';
-    return '<tr onclick="abrirDetalhesAgendamento(\'' + a.id + '\')" style="cursor:pointer">' +
-      '<td><strong>' + fhr(a.data_hora) + '</strong></td>' +
-      '<td><strong>' + esc(a.clientes && a.clientes.nome || '—') + '</strong></td>' +
-      '<td style="color:var(--t2)">' + esc(svcTxt) + '</td>' +
-      '<td>' + esc(a.profissionais && a.profissionais.nome || '—') + '</td>' +
-      '<td><strong>' + brl(a.valor_total) + '</strong></td>' +
-      '<td><span class="badge ' + (SC[a.status]||'bg2') + '">' + (SL[a.status]||a.status) + '</span></td>' +
-      '<td style="color:var(--t3)">›</td>' +
-    '</tr>';
+  var grid = document.getElementById('cmd-grid');
+  if (!lista.length) { grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Nenhuma comanda encontrada com esse filtro.</div>'; return; }
+
+  grid.innerHTML = lista.map(function(a){
+    var svcTxt = (a.agendamento_servicos || []).map(function(s){ return s.servicos && s.servicos.nome; }).filter(Boolean).join(', ') || 'Sem serviço';
+    var ehFiadoPendente = a.status === 'concluido' && !a.forma_pgto;
+    var statusHtml = ehFiadoPendente
+      ? '<span class="badge bw" style="font-size:.62rem">🧾 Fiado</span>'
+      : '<span class="badge ' + (SC[a.status]||'bg2') + '" style="font-size:.62rem">' + (SL[a.status]||a.status) + '</span>';
+    return '<div class="card" style="cursor:pointer;padding:14px;transition:transform .1s" onclick="abrirDetalhesAgendamento(\'' + a.id + '\')" onmouseover="this.style.borderColor=\'var(--ac)\'" onmouseout="this.style.borderColor=\'\'">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">' +
+        '<div style="min-width:0">' +
+          '<div style="font-weight:700;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(a.clientes && a.clientes.nome || 'Cliente') + '</div>' +
+          '<div style="font-size:.68rem;color:var(--t3)">' + fhr(a.data_hora) + ' · ' + esc(a.profissionais && a.profissionais.nome || '—') + '</div>' +
+        '</div>' +
+        statusHtml +
+      '</div>' +
+      '<div style="font-size:.74rem;color:var(--t2);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(svcTxt) + '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--bd2)">' +
+        '<span style="font-size:.66rem;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">Total</span>' +
+        '<strong style="font-size:1.05rem;color:var(--ac)">' + brl(a.valor_total) + '</strong>' +
+      '</div>' +
+    '</div>';
   }).join('');
 }
 
