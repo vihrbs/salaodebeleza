@@ -241,7 +241,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.0.2-corrige-corte-clientes' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.1.0-comandas-produto-olho-senha' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1338,6 +1338,22 @@ app.put('/api/agendamento-servicos/:id', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Produtos vendidos DENTRO de uma comanda específica (usado no modal de
+// Detalhes do Atendimento) — não exige permissão de financeiro porque é
+// acessado a partir da Agenda, não da tela de Financeiro.
+app.get('/api/agendamentos/:id/produtos', auth, async (req, res) => {
+  try {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select('id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!ag) return res.status(404).json({ error: 'Agendamento não encontrado' });
+
+    const { data } = await supabase.from('lancamentos')
+      .select('id, descricao, valor, pago')
+      .eq('agendamento_id', req.params.id).eq('categoria', 'Produto');
+    res.json(data || []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── AGENDAMENTO RECORRENTE ────────────────────────────
 // Soma um intervalo (semanal/quinzenal/mensal) a uma data "YYYY-MM-DD" e
 // retorna a próxima data no mesmo formato.
@@ -2184,7 +2200,7 @@ app.post('/api/estoque/:id/consumir', auth, requirePermissao('estoque'), async (
 // de verdade, vinculado ao cliente (entra no relatório de Fiado se marcado
 // como pendente).
 app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque'), async (req, res) => {
-  const { cliente_id, profissional_id, quantidade, valor, forma_pgto, pago, data } = req.body;
+  const { cliente_id, profissional_id, quantidade, valor, forma_pgto, pago, data, agendamento_id } = req.body;
   if (!cliente_id || !quantidade || Number(quantidade) <= 0) {
     return res.status(422).json({ error: 'cliente_id e quantidade (maior que zero) são obrigatórios' });
   }
@@ -2202,8 +2218,22 @@ app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque'), async (re
 
   await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
 
+  // Se veio um agendamento_id, é uma venda feita DENTRO da comanda de um
+  // atendimento que já está aberto (pedido explícito: "vender produto já
+  // na comanda do cliente") — nesse caso, soma o valor no valor_total do
+  // agendamento também, pra aparecer certinho no resumo daquele atendimento.
+  let novoValorTotalAgendamento = null;
+  if (agendamento_id) {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select('valor_total').eq('id', agendamento_id).eq('salao_id', req.salao_id).single();
+    if (ag) {
+      novoValorTotalAgendamento = Number(ag.valor_total || 0) + valorFinal;
+      await supabase.from('agendamentos').update({ valor_total: novoValorTotalAgendamento }).eq('id', agendamento_id);
+    }
+  }
+
   const { data: lancamento } = await supabase.from('lancamentos').insert({
-    salao_id: req.salao_id, cliente_id, tipo: 'entrada', categoria: 'Produto',
+    salao_id: req.salao_id, cliente_id, agendamento_id: agendamento_id || null, tipo: 'entrada', categoria: 'Produto',
     descricao: 'Venda: ' + prod.nome + ' (' + quantidade + 'x)',
     valor: valorFinal, data: dataFinal, forma_pgto, pago: pagoFinal
   }).select().single();
@@ -2214,7 +2244,11 @@ app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque'), async (re
     usuario_id: req.user.id, lancamento_id: lancamento ? lancamento.id : null
   });
 
-  res.json({ nova_quantidade: nova, produto: prod.nome, valor: valorFinal, lancamento_id: lancamento ? lancamento.id : null });
+  res.json({
+    nova_quantidade: nova, produto: prod.nome, valor: valorFinal,
+    lancamento_id: lancamento ? lancamento.id : null,
+    novo_valor_total_agendamento: novoValorTotalAgendamento
+  });
 });
 
 // Histórico de movimentação de estoque — quem deu baixa em quê e quando.
