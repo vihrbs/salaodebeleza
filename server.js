@@ -264,7 +264,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.2.0-caixinha-gorjeta' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.2.1-comissao-profissional-prioridade' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1458,9 +1458,13 @@ async function criarAgendamentoUnico({
   // profissional continua recebendo normalmente mesmo quando o cliente já
   // pagou pelo pacote antes. Só a cobrança do cliente (lançamento) é que
   // não se repete.
+  //
+  // Prioridade da % de comissão: a do PROFISSIONAL manda — é o combinado
+  // real entre o salão e ele. A % do serviço só entra como reserva, pro
+  // caso (raro) do profissional não ter comissão nenhuma configurada.
   const linhas = servicosInfo.map(sv => {
     const precoDoServicoNesseDia = precoEfetivoServico(sv, dataHora);
-    const cpct = sv.comissao_pct ?? profComissaoPct ?? 40;
+    const cpct = profComissaoPct ?? sv.comissao_pct ?? 40;
     const pacoteClienteId = pacotePorServico[sv.id] || null;
     return {
       agendamento_id: ag.id, servico_id: sv.id, preco: precoDoServicoNesseDia,
@@ -3025,8 +3029,10 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
 
     if (error) throw error;
 
-    // Cria registro em agendamento_servicos
-    const cpct = servico.comissao_pct ?? prof?.comissao_pct ?? 40;
+    // Cria registro em agendamento_servicos — a % do PROFISSIONAL manda
+    // (mesma regra do agendamento criado pelo painel admin), serviço só
+    // entra como reserva se ele não tiver comissão configurada.
+    const cpct = prof?.comissao_pct ?? servico.comissao_pct ?? 40;
     await supabase.from('agendamento_servicos').insert({
       agendamento_id: agendamento.id, servico_id: servico.id,
       preco: precoEfetivo, comissao_pct: cpct,
