@@ -54,6 +54,10 @@ input,select,textarea{font-family:inherit}
 .l-pane{display:none}.l-pane.on{display:block}
 .lbl{display:block;font-size:.71rem;font-weight:600;color:var(--t2);margin-bottom:5px;margin-top:14px;letter-spacing:.02em;text-transform:uppercase}
 .inp{width:100%;padding:10px 14px;border:1.5px solid var(--bd);border-radius:var(--rs);font-size:.85rem;color:var(--tx);outline:none;transition:border-color .2s;background:var(--bg3)}
+.senha-wrap{position:relative}
+.senha-wrap .inp,.senha-wrap .fc{padding-right:38px}
+.senha-olho{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:.95rem;padding:4px;line-height:1;opacity:.75}
+.senha-olho:hover{opacity:1}
 .inp:focus{border-color:var(--ac)}
 .inp::placeholder{color:var(--t3)}
 .l-err{background:rgba(248,113,113,.1);color:#F87171;border:1px solid rgba(248,113,113,.2);padding:10px 13px;border-radius:var(--rs);font-size:.78rem;margin-bottom:12px;display:none}
@@ -377,7 +381,7 @@ select.fc option{background:var(--bg2)}
         <label class="lbl" style="margin-top:0">E-mail</label>
         <input class="inp" type="email" id="in-email" placeholder="seu@email.com"/>
         <label class="lbl">Senha</label>
-        <input class="inp" type="password" id="in-pw" placeholder="••••••"/>
+        <div class="senha-wrap"><input class="inp" type="password" id="in-pw" placeholder="••••••"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('in-pw',this)" tabindex="-1">👁️</button></div>
         <input type="hidden" id="in-api" value=""/>
         <button class="l-btn" id="btn-in" onclick="doLogin()">Entrar no Painel</button>
         <div style="text-align:center;margin-top:10px">
@@ -398,7 +402,7 @@ select.fc option{background:var(--bg2)}
         <label class="lbl">E-mail*</label>
         <input class="inp" type="email" id="up-email" placeholder="contato@seusalao.com"/>
         <label class="lbl">Senha* (mín. 6 caracteres)</label>
-        <input class="inp" type="password" id="up-pw" placeholder="••••••"/>
+        <div class="senha-wrap"><input class="inp" type="password" id="up-pw" placeholder="••••••"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('up-pw',this)" tabindex="-1">👁️</button></div>
         <button class="l-btn" id="btn-up" onclick="doRegister()">Criar Conta Grátis</button>
       </div>
     </div>
@@ -423,8 +427,8 @@ select.fc option{background:var(--bg2)}
     <div class="mh"><span class="mt">🔐 Escolher Nova Senha</span></div>
     <div class="mb">
       <input type="hidden" id="red-token"/>
-      <div class="fg"><label class="fl">Nova senha (mín. 6 caracteres)</label><input class="fc" type="password" id="red-senha" placeholder="••••••"/></div>
-      <div class="fg"><label class="fl">Confirmar nova senha</label><input class="fc" type="password" id="red-senha2" placeholder="••••••"/></div>
+      <div class="fg"><label class="fl">Nova senha (mín. 6 caracteres)</label><div class="senha-wrap"><input class="fc" type="password" id="red-senha" placeholder="••••••"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('red-senha',this)" tabindex="-1">👁️</button></div></div>
+      <div class="fg"><label class="fl">Confirmar nova senha</label><div class="senha-wrap"><input class="fc" type="password" id="red-senha2" placeholder="••••••"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('red-senha2',this)" tabindex="-1">👁️</button></div></div>
     </div>
     <div class="mf"><button class="btn btnp" style="width:100%" onclick="confirmarRedefinicaoSenha()">Salvar Nova Senha</button></div>
   </div>
@@ -435,9 +439,9 @@ select.fc option{background:var(--bg2)}
   <div class="mbox md">
     <div class="mh"><span class="mt">🔑 Alterar Senha</span><button class="mx" onclick="closeM('m-alterar-senha')">✕</button></div>
     <div class="mb">
-      <div class="fg"><label class="fl">Senha atual</label><input class="fc" type="password" id="alt-senha-atual" placeholder="••••••"/></div>
-      <div class="fg"><label class="fl">Nova senha (mín. 6 caracteres)</label><input class="fc" type="password" id="alt-senha-nova" placeholder="••••••"/></div>
-      <div class="fg"><label class="fl">Confirmar nova senha</label><input class="fc" type="password" id="alt-senha-nova2" placeholder="••••••"/></div>
+      <div class="fg"><label class="fl">Senha atual</label><div class="senha-wrap"><input class="fc" type="password" id="alt-senha-atual" placeholder="••••••"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('alt-senha-atual',this)" tabindex="-1">👁️</button></div></div>
+      <div class="fg"><label class="fl">Nova senha (mín. 6 caracteres)</label><div class="senha-wrap"><input class="fc" type="password" id="alt-senha-nova" placeholder="••••••"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('alt-senha-nova',this)" tabindex="-1">👁️</button></div></div>
+      <div class="fg"><label class="fl">Confirmar nova senha</label><div class="senha-wrap"><input class="fc" type="password" id="alt-senha-nova2" placeholder="••••••"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('alt-senha-nova2',this)" tabindex="-1">👁️</button></div></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-alterar-senha')">Cancelar</button><button class="btn btnp" onclick="confirmarAlterarSenha()">Salvar Nova Senha</button></div>
   </div>
@@ -461,6 +465,7 @@ select.fc option{background:var(--bg2)}
         <div class="sb-section">Principal</div>
         <button class="sb-item on" data-page="dashboard" onclick="nav('dashboard',this)"><span class="sb-ic">🏠</span>Dashboard</button>
         <button class="sb-item" data-page="agenda" onclick="nav('agenda',this)"><span class="sb-ic">📅</span>Agenda<span class="sb-badge" id="nbag" style="display:none">0</span></button>
+        <button class="sb-item" data-page="comandas" onclick="nav('comandas',this)"><span class="sb-ic">🧾</span>Comandas</button>
         <button class="sb-item" data-page="clientes" onclick="nav('clientes',this)"><span class="sb-ic">👥</span>Clientes</button>
         <div class="sb-section">Financeiro</div>
         <button class="sb-item" data-page="fiado" onclick="nav('fiado',this)"><span class="sb-ic">💳</span>Fiado<span class="sb-badge" id="nbfiado" style="display:none">0</span></button>
@@ -585,6 +590,23 @@ select.fc option{background:var(--bg2)}
       <div class="card">
         <div class="tw"><table><thead><tr><th>Cliente</th><th>Telefone</th><th>Visitas</th><th>Última visita</th><th>Total gasto</th><th>Status</th><th>Ações</th></tr></thead>
         <tbody id="cli-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- COMANDAS -->
+    <div class="page" id="page-comandas">
+      <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
+        <input type="date" class="fc" id="cmd-data" style="max-width:170px" onchange="loadComandas()"/>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="cmd-filtros">
+          <button class="btn btnp btnsm" data-status="" onclick="filtrarComandasPorStatus('')">Todas</button>
+          <button class="btn btns btnsm" data-status="a_concluir" onclick="filtrarComandasPorStatus('a_concluir')">A Concluir</button>
+          <button class="btn btns btnsm" data-status="concluido" onclick="filtrarComandasPorStatus('concluido')">Concluídas</button>
+          <button class="btn btns btnsm" data-status="cancelado" onclick="filtrarComandasPorStatus('cancelado')">Canceladas</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tw"><table><thead><tr><th>Hora</th><th>Cliente</th><th>Serviço(s)</th><th>Profissional</th><th>Valor</th><th>Status</th><th></th></tr></thead>
+        <tbody id="cmd-tb"><tr><td colspan="7" class="lc"><div class="spin"></div></td></tr></tbody></table></div>
       </div>
     </div>
 
@@ -874,6 +896,16 @@ function today(){
 }
 function deb(fn,ms){ var t; return function(){ clearTimeout(t); t = setTimeout(fn, ms); }; }
 
+// Botão de "olhinho" pra mostrar/esconder a senha digitada — troca o
+// type do campo entre password/text e o ícone do botão junto
+function toggleSenhaVisivel(inputId, btnEl) {
+  var input = document.getElementById(inputId);
+  if (!input) return;
+  var estaEscondida = input.type === 'password';
+  input.type = estaEscondida ? 'text' : 'password';
+  btnEl.textContent = estaEscondida ? '🙈' : '👁️';
+}
+
 // Escapa texto vindo de qualquer fonte de dado do usuário (nome de cliente,
 // produto, observação, etc.) antes de colocar no innerHTML — sem isso,
 // alguém poderia cadastrar um nome com uma tag de script embutida (inclusive
@@ -1147,7 +1179,7 @@ function nav(page, el) {
   // "Fiado" usa a MESMA permissão de "Financeiro" (não criei uma permissão
   // separada só pra ela) — precisa mapear aqui pra bater com o que o
   // backend já exige em /api/financeiro/fiado.
-  var moduloPermissaoNecessaria = page === 'fiado' ? 'financeiro' : page;
+  var moduloPermissaoNecessaria = (page === 'fiado') ? 'financeiro' : (page === 'comandas') ? 'agenda' : page;
   if (USER_PERFIL !== 'admin' && MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) >= 0 && USER_PERMISSOES.indexOf(moduloPermissaoNecessaria) < 0) {
     toast('Você não tem permissão para acessar essa área. Fale com o administrador.', 'er');
     return;
@@ -1167,12 +1199,13 @@ function nav(page, el) {
   });
 
   // Título da topbar
-  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
+  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',comandas:'Comandas',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
   var tbTitle = document.getElementById('tb-page-title');
   if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
 
   // Ações especiais por página
   if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
+  if (page==='comandas') { loadComandas(); }
 
   // Reavalia as sombras de rolagem das tabelas da página que acabou de abrir
   // (pega o caso de conteúdo já carregado antes, em cache)
@@ -1423,7 +1456,9 @@ function renderDetalhesAgendamento(ag) {
     '</div>' +
     '<div style="background:var(--bg3);border-radius:var(--rs);padding:10px 12px;margin-bottom:14px">' +
       linhasServicos +
-      '<div style="display:flex;justify-content:space-between;padding-top:8px;font-weight:800">' +
+      '<div id="det-ag-produtos"></div>' +
+      '<button class="btn btns btnsm" style="width:100%;margin-top:8px" onclick="abrirVenderProdutoNaComanda(\'' + ag.id + '\',\'' + (cliente.id||'') + '\',\'' + escAttr(cliente.nome||'') + '\')">🛒 + Adicionar Produto</button>' +
+      '<div style="display:flex;justify-content:space-between;padding-top:10px;font-weight:800">' +
         '<span>Total</span><span id="det-ag-total">' + brl(ag.valor_total) + '</span>' +
       '</div>' +
       (ag.forma_pgto ? '<div style="font-size:.7rem;color:var(--t3);margin-top:2px">Pago via ' + esc(ag.forma_pgto) + '</div>' : '') +
@@ -1434,6 +1469,28 @@ function renderDetalhesAgendamento(ag) {
       '<button class="btn btns btnsm" onclick="closeM(\'m-detalhes-ag\');abrirEditarClientePorId(\'' + (cliente.id||'') + '\')">✏️ Editar Cliente</button>' +
       (podeCancelar ? '<button class="btn btns btnsm" style="color:var(--er)" onclick="cancelarAgendamentoDetalhes(\'' + ag.id + '\')">🗑️ Cancelar Agendamento</button>' : '') +
     '</div>';
+
+  // Produtos vendidos nessa comanda vêm separado (outra requisição), pra
+  // não travar a renderização inicial do modal esperando isso carregar
+  carregarProdutosDaComanda(ag.id);
+}
+
+// Busca e mostra os produtos já vendidos dentro dessa comanda — aparecem
+// junto dos serviços, mas sem o lápis de editar preço (isso já foi
+// definido na hora da venda, editar aqui abriria outra frente de
+// inconsistência com o estoque já descontado)
+function carregarProdutosDaComanda(agendamentoId) {
+  var container = document.getElementById('det-ag-produtos');
+  if (!container) return;
+  apiFetch('/api/agendamentos/' + agendamentoId + '/produtos').then(function(lista){
+    if (!lista || !lista.length) { container.innerHTML = ''; return; }
+    container.innerHTML = lista.map(function(p){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bd2)">' +
+        '<span style="font-size:.82rem">🛒 ' + esc(p.descricao || 'Produto') + (p.pago ? '' : ' <span class="badge bw" style="font-size:.6rem">pendente</span>') + '</span>' +
+        '<span style="font-weight:700">' + brl(p.valor) + '</span>' +
+      '</div>';
+    }).join('');
+  }).catch(function(){ /* silencioso — não é crítico se não carregar */ });
 }
 
 // Edição rápida do preço de um serviço, direto na comanda — troca o texto
@@ -1767,6 +1824,58 @@ var CFG_HORARIO_FECHA = '19:00';
 var AGENDA_ULTIMA_LISTA = [];
 var AGENDA_ULTIMA_AGRUPADA = false;
 var DETALHES_AG_ATUAL = null; // guarda o agendamento aberto no modal de Detalhes
+
+// ── COMANDAS (lista do dia, com filtro por status) ────
+var COMANDAS_TODAS_DO_DIA = [];
+var COMANDAS_FILTRO_ATUAL = '';
+
+function loadComandas() {
+  var campoData = document.getElementById('cmd-data');
+  if (!campoData.value) campoData.value = today();
+  var data = campoData.value;
+  document.getElementById('cmd-tb').innerHTML = '<tr><td colspan="7" class="lc"><div class="spin"></div></td></tr>';
+  apiFetch('/api/agendamentos?data=' + data).then(function(lista){
+    COMANDAS_TODAS_DO_DIA = lista || [];
+    renderComandas();
+  }).catch(function(){
+    document.getElementById('cmd-tb').innerHTML = '<tr><td colspan="7"><div class="empty">Erro ao carregar as comandas.</div></td></tr>';
+  });
+}
+
+function filtrarComandasPorStatus(status) {
+  COMANDAS_FILTRO_ATUAL = status;
+  document.querySelectorAll('#cmd-filtros button').forEach(function(b){
+    b.className = 'btn btnsm ' + (b.dataset.status === status ? 'btnp' : 'btns');
+  });
+  renderComandas();
+}
+
+// "A Concluir" não é um status único no banco — é qualquer atendimento que
+// ainda não terminou (nem concluído, cancelado ou não-compareceu)
+var STATUS_A_CONCLUIR = ['agendado', 'confirmado', 'em_atendimento'];
+
+function renderComandas() {
+  var lista = COMANDAS_TODAS_DO_DIA;
+  if (COMANDAS_FILTRO_ATUAL === 'a_concluir') {
+    lista = lista.filter(function(a){ return STATUS_A_CONCLUIR.indexOf(a.status) >= 0; });
+  } else if (COMANDAS_FILTRO_ATUAL) {
+    lista = lista.filter(function(a){ return a.status === COMANDAS_FILTRO_ATUAL; });
+  }
+  var tb = document.getElementById('cmd-tb');
+  if (!lista.length) { tb.innerHTML = '<tr><td colspan="7"><div class="empty">Nenhuma comanda encontrada com esse filtro.</div></td></tr>'; return; }
+  tb.innerHTML = lista.map(function(a){
+    var svcTxt = (a.agendamento_servicos || []).map(function(s){ return s.servicos && s.servicos.nome; }).filter(Boolean).join(', ') || '—';
+    return '<tr onclick="abrirDetalhesAgendamento(\'' + a.id + '\')" style="cursor:pointer">' +
+      '<td><strong>' + fhr(a.data_hora) + '</strong></td>' +
+      '<td><strong>' + esc(a.clientes && a.clientes.nome || '—') + '</strong></td>' +
+      '<td style="color:var(--t2)">' + esc(svcTxt) + '</td>' +
+      '<td>' + esc(a.profissionais && a.profissionais.nome || '—') + '</td>' +
+      '<td><strong>' + brl(a.valor_total) + '</strong></td>' +
+      '<td><span class="badge ' + (SC[a.status]||'bg2') + '">' + (SL[a.status]||a.status) + '</span></td>' +
+      '<td style="color:var(--t3)">›</td>' +
+    '</tr>';
+  }).join('');
+}
 
 function loadAgenda() {
   var data = document.getElementById('ag-dt').value;
@@ -3425,7 +3534,10 @@ function selecionarStatusVendaProduto(pago) {
 
 function abrirVenderProduto(id, nome, precoVenda) {
   document.getElementById('venda-prod-id').value = id;
+  document.getElementById('venda-agendamento-id').value = '';
   document.getElementById('venda-prod-nome').textContent = nome;
+  document.getElementById('venda-prod-nome').style.display = '';
+  document.getElementById('venda-prod-picker-wrap').style.display = 'none';
   document.getElementById('venda-qtd').value = '1';
   document.getElementById('venda-valor').value = precoVenda || '';
   if (!precoVenda) {
@@ -3434,6 +3546,7 @@ function abrirVenderProduto(id, nome, precoVenda) {
     document.getElementById('venda-valor-aviso').textContent = '';
   }
   var selCli = document.getElementById('venda-cli');
+  selCli.disabled = false;
   selCli.innerHTML = '<option value="">Selecionar cliente...</option>' +
     (CLIS || []).map(function(c){ return '<option value="' + c.id + '">' + esc(c.nome) + '</option>'; }).join('');
   var selProf = document.getElementById('venda-prof');
@@ -3443,13 +3556,66 @@ function abrirVenderProduto(id, nome, precoVenda) {
   openM('m-venda-produto');
 }
 
+// Vender produto direto de dentro da comanda de um atendimento que já está
+// aberto — igual o pedido: "colocar um produto do estoque como venda já na
+// comanda do cliente que está aberto". Diferença pro fluxo normal: aqui
+// ainda não sabemos QUAL produto (mostra um seletor), mas já sabemos QUAL
+// cliente e QUAL atendimento (vêm prontos e travados).
+function abrirVenderProdutoNaComanda(agendamentoId, clienteId, clienteNome) {
+  document.getElementById('venda-prod-id').value = '';
+  document.getElementById('venda-agendamento-id').value = agendamentoId;
+  document.getElementById('venda-prod-nome').style.display = 'none';
+  document.getElementById('venda-prod-picker-wrap').style.display = 'block';
+  document.getElementById('venda-qtd').value = '1';
+  document.getElementById('venda-valor').value = '';
+  document.getElementById('venda-valor-aviso').textContent = '';
+
+  var selCli = document.getElementById('venda-cli');
+  selCli.innerHTML = '<option value="' + clienteId + '">' + esc(clienteNome) + '</option>';
+  selCli.value = clienteId;
+  selCli.disabled = true; // já sabemos o cliente — trava pra não mudar por engano
+
+  var selProf = document.getElementById('venda-prof');
+  selProf.innerHTML = '<option value="">Sem profissional vinculado</option>' +
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
+
+  var picker = document.getElementById('venda-prod-picker');
+  picker.innerHTML = '<option value="">Carregando produtos...</option>';
+  selecionarStatusVendaProduto(true);
+  openM('m-venda-produto');
+
+  apiFetch('/api/estoque').then(function(r){
+    window._estoqueCache = r || [];
+    picker.innerHTML = '<option value="">Selecionar produto...</option>' +
+      window._estoqueCache.filter(function(p){ return p.qtd_atual > 0; })
+        .map(function(p){ return '<option value="' + p.id + '" data-preco="' + (p.preco_venda||0) + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+  }).catch(function(){
+    picker.innerHTML = '<option value="">Erro ao carregar produtos</option>';
+  });
+}
+
+// Ao escolher um produto no seletor (fluxo da comanda), preenche o valor
+// automaticamente com o preço de venda cadastrado — mesma lógica que já
+// existia pro fluxo normal, só que ali o preço vinha por parâmetro direto
+function onEscolherProdutoNaComanda() {
+  var picker = document.getElementById('venda-prod-picker');
+  var opcao = picker.options[picker.selectedIndex];
+  var preco = opcao ? Number(opcao.dataset.preco || 0) : 0;
+  document.getElementById('venda-valor').value = preco || '';
+  document.getElementById('venda-valor-aviso').textContent = preco ? '' : '⚠️ Esse produto não tem preço de venda cadastrado — preencha o valor manualmente.';
+}
+
 function salvarVendaProduto() {
-  var id = document.getElementById('venda-prod-id').value;
+  var agendamentoId = document.getElementById('venda-agendamento-id').value || undefined;
+  // No fluxo da comanda o produto vem do seletor; no fluxo normal (a partir
+  // da tela de Estoque) já vem pronto no campo escondido
+  var id = agendamentoId ? document.getElementById('venda-prod-picker').value : document.getElementById('venda-prod-id').value;
   var cliId = document.getElementById('venda-cli').value;
   var profId = document.getElementById('venda-prof').value || undefined;
   var qtd = parseFloat(document.getElementById('venda-qtd').value);
   var valor = parseFloat(document.getElementById('venda-valor').value);
   var fpg = document.getElementById('venda-fpg').value;
+  if (!id) { toast('Selecione o produto','er'); return; }
   if (!cliId) { toast('Selecione o cliente','er'); return; }
   if (!qtd || qtd <= 0) { toast('Informe uma quantidade válida','er'); return; }
   if (!valor || valor <= 0) { toast('Informe o valor da venda','er'); return; }
@@ -3457,11 +3623,18 @@ function salvarVendaProduto() {
   btn.disabled = true; btn.textContent = 'Salvando...';
   apiFetch('/api/estoque/' + id + '/vender', { method: 'POST', body: {
     cliente_id: cliId, profissional_id: profId, quantidade: qtd, valor: valor,
-    forma_pgto: fpg, pago: VENDER_PROD_PAGO
+    forma_pgto: fpg, pago: VENDER_PROD_PAGO, agendamento_id: agendamentoId
   }})
-    .then(function(){
+    .then(function(r){
       toast(VENDER_PROD_PAGO ? 'Venda registrada! ✅' : 'Venda registrada como fiado 🧾', 'ok');
       closeM('m-venda-produto'); loadEst(); loadFiado();
+      // Se veio da comanda, recarrega o modal de detalhes pra já mostrar o produto novo
+      if (agendamentoId && DETALHES_AG_ATUAL && DETALHES_AG_ATUAL.id === agendamentoId) {
+        if (r && r.novo_valor_total_agendamento !== null && r.novo_valor_total_agendamento !== undefined) {
+          DETALHES_AG_ATUAL.valor_total = r.novo_valor_total_agendamento;
+        }
+        abrirDetalhesAgendamento(agendamentoId);
+      }
     })
     .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda'; });
@@ -4397,7 +4570,7 @@ function aplicarPermissoes() {
       // "Fiado" usa a mesma permissão de "Financeiro" (não existe uma
       // permissão separada só pra ela) — sem esse mapeamento, o item nunca
       // seria escondido de quem não tem acesso a financeiro.
-      var moduloPermissaoNecessaria = pagina === 'fiado' ? 'financeiro' : pagina;
+      var moduloPermissaoNecessaria = (pagina === 'fiado') ? 'financeiro' : (pagina === 'comandas') ? 'agenda' : pagina;
       if (MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) < 0) return;
       btn.style.display = permitidos.indexOf(moduloPermissaoNecessaria) >= 0 ? '' : 'none';
     });
@@ -5296,7 +5469,7 @@ function dispensarBannerPWA() {
         <div class="fg"><label class="fl">Cargo</label><input class="fc" id="nu-cargo" placeholder="Ex: Recepcionista"/></div>
       </div>
       <div class="fg"><label class="fl">E-mail*</label><input class="fc" type="email" id="nu-email" placeholder="email@seusalao.com"/></div>
-      <div class="fg"><label class="fl">Senha*</label><input class="fc" type="password" id="nu-senha" placeholder="Mínimo 6 caracteres"/></div>
+      <div class="fg"><label class="fl">Senha*</label><div class="senha-wrap"><input class="fc" type="password" id="nu-senha" placeholder="Mínimo 6 caracteres"/><button type="button" class="senha-olho" onclick="toggleSenhaVisivel('nu-senha',this)" tabindex="-1">👁️</button></div></div>
       <div class="fg">
         <label class="fl">Tipo de acesso</label>
         <div style="display:flex;gap:10px;margin-top:6px">
@@ -5495,7 +5668,12 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">💰 Vender Produto</span><button class="mx" onclick="closeM('m-venda-produto')">✕</button></div>
     <div class="mb">
       <input type="hidden" id="venda-prod-id"/>
+      <input type="hidden" id="venda-agendamento-id"/>
       <div style="font-size:.85rem;font-weight:700;margin-bottom:16px" id="venda-prod-nome">—</div>
+      <div class="fg" id="venda-prod-picker-wrap" style="display:none">
+        <label class="fl">Produto*</label>
+        <select class="fc" id="venda-prod-picker" onchange="onEscolherProdutoNaComanda()"><option value="">Selecionar produto...</option></select>
+      </div>
       <div class="fg"><label class="fl">Cliente*</label><select class="fc" id="venda-cli"><option value="">Selecionar cliente...</option></select></div>
       <div class="fg"><label class="fl">Profissional (opcional)</label><select class="fc" id="venda-prof"><option value="">Sem profissional vinculado</option></select></div>
       <div class="fr">
