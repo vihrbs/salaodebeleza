@@ -2718,7 +2718,7 @@ function fillSelects() {
   Promise.allSettled([
     apiFetch('/api/profissionais'),
     apiFetch('/api/servicos'),
-    apiFetch('/api/clientes?limit=200')
+    apiFetch('/api/clientes?limit=5000')
   ]).then(function(results){
     var pros  = (results[0].status==='fulfilled' && results[0].value && results[0].value.length) ? results[0].value : D.pros;
     var svcs  = (results[1].status==='fulfilled' && results[1].value && results[1].value.length) ? results[1].value : D.svcs;
@@ -2775,29 +2775,41 @@ function abrirNovoAgendamento() {
 }
 
 // Autocomplete de cliente — mostra uma lista clicável com o resultado da
-// busca, direto abaixo do campo, em vez de exigir abrir um <select> à
-// parte (que no celular obrigava dois toques: buscar E depois abrir o
-// menu pra ver o resultado filtrado).
+// busca, direto abaixo do campo. Busca DIRETO NO SERVIDOR a cada
+// digitação (com um pequeno atraso, pra não disparar uma requisição a
+// cada letra) — não depende de ter todo mundo pré-carregado na memória,
+// então funciona certinho não importa se o salão tem 50 ou 5.000 clientes.
+var TIMER_BUSCA_CLIENTE_AGENDAMENTO = null;
 function filtrarClientesAgendamento(termo) {
-  var termoNorm = (termo || '').trim().toLowerCase();
+  clearTimeout(TIMER_BUSCA_CLIENTE_AGENDAMENTO);
+  var termoNorm = (termo || '').trim();
   var resultados = document.getElementById('ag-cli-resultados');
   if (!resultados) return;
 
   if (!termoNorm) { resultados.style.display = 'none'; resultados.innerHTML = ''; return; }
 
-  var filtrados = (CLIS || []).filter(function(c) {
-    var nome = (c.nome || '').toLowerCase();
-    var tel = (c.telefone || '').toLowerCase();
-    return nome.indexOf(termoNorm) >= 0 || tel.indexOf(termoNorm) >= 0;
-  }).slice(0, 30); // não trava a tela se o salão tiver milhares de clientes
+  TIMER_BUSCA_CLIENTE_AGENDAMENTO = setTimeout(function() {
+    apiFetch('/api/clientes?q=' + encodeURIComponent(termoNorm) + '&limit=30')
+      .then(function(r) {
+        var lista = (r && r.data) || (Array.isArray(r) ? r : []);
+        renderResultadosClienteAgendamento(lista);
+      })
+      .catch(function() {
+        resultados.innerHTML = '<div style="padding:12px;font-size:.8rem;color:var(--er)">Erro ao buscar. Tenta de novo.</div>';
+        resultados.style.display = 'block';
+      });
+  }, 300);
+}
 
-  if (!filtrados.length) {
+function renderResultadosClienteAgendamento(lista) {
+  var resultados = document.getElementById('ag-cli-resultados');
+  if (!resultados) return;
+  if (!lista.length) {
     resultados.innerHTML = '<div style="padding:12px;font-size:.8rem;color:var(--t3)">Nenhum cliente encontrado.</div>';
     resultados.style.display = 'block';
     return;
   }
-
-  resultados.innerHTML = filtrados.map(function(c) {
+  resultados.innerHTML = lista.map(function(c) {
     return '<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bd2)" ' +
       'onmousedown="selecionarClienteAgendamento(\'' + c.id + '\',\'' + escAttr(c.nome) + '\')">' +
       '<div style="font-weight:600;font-size:.84rem">' + esc(c.nome) + '</div>' +
