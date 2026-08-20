@@ -2733,7 +2733,9 @@ function fillSelects() {
     }
     fillSel('ag-prf', pros);
     fillSel('ag-pro', pros);
-    fillSel('ag-cli', clis);
+    // ag-cli não é mais um <select> — virou busca com resultado clicável
+    // (autocomplete), preenchida sob demanda em filtrarClientesAgendamento()
+    // direto a partir do array CLIS já atualizado acima.
 
     var sw = document.getElementById('ag-svcs');
     if (sw) sw.innerHTML = svcs.map(function(s){
@@ -2759,6 +2761,8 @@ function abrirNovoAgendamento() {
   if (buscaServico) { buscaServico.value = ''; filtrarServicosAgendamento(''); }
   var buscaCliente = document.getElementById('ag-cli-busca');
   if (buscaCliente) { buscaCliente.value = ''; filtrarClientesAgendamento(''); }
+  var cliOculto = document.getElementById('ag-cli');
+  if (cliOculto) cliOculto.value = '';
   openM('m-ag');
   // Sempre recalcula as sessões de pacote disponíveis, os horários livres, E
   // os preços dos serviços (podem variar por dia da semana) ao abrir o
@@ -2770,30 +2774,54 @@ function abrirNovoAgendamento() {
   atualizarPrecosPillsServico();
 }
 
-// Reconstrói as opções do <select> de cliente com base na busca — não dá
-// pra simplesmente esconder <option> existentes porque o suporte a isso é
-// inconsistente entre navegadores/celulares, principalmente no seletor
-// nativo do iOS/Android.
+// Autocomplete de cliente — mostra uma lista clicável com o resultado da
+// busca, direto abaixo do campo, em vez de exigir abrir um <select> à
+// parte (que no celular obrigava dois toques: buscar E depois abrir o
+// menu pra ver o resultado filtrado).
 function filtrarClientesAgendamento(termo) {
   var termoNorm = (termo || '').trim().toLowerCase();
-  var sel = document.getElementById('ag-cli');
-  if (!sel) return;
-  var valorAtual = sel.value;
+  var resultados = document.getElementById('ag-cli-resultados');
+  if (!resultados) return;
+
+  if (!termoNorm) { resultados.style.display = 'none'; resultados.innerHTML = ''; return; }
+
   var filtrados = (CLIS || []).filter(function(c) {
-    if (!termoNorm) return true;
     var nome = (c.nome || '').toLowerCase();
     var tel = (c.telefone || '').toLowerCase();
     return nome.indexOf(termoNorm) >= 0 || tel.indexOf(termoNorm) >= 0;
-  });
-  sel.innerHTML = '<option value="">Selecionar...</option>' +
-    filtrados.map(function(c) {
-      return '<option value="' + c.id + '">' + esc(c.nome) + (c.telefone ? ' — ' + esc(c.telefone) : '') + '</option>';
-    }).join('');
-  // Mantém a seleção anterior se o cliente escolhido ainda estiver na lista filtrada
-  if (filtrados.some(function(c){ return c.id === valorAtual; })) sel.value = valorAtual;
+  }).slice(0, 30); // não trava a tela se o salão tiver milhares de clientes
+
+  if (!filtrados.length) {
+    resultados.innerHTML = '<div style="padding:12px;font-size:.8rem;color:var(--t3)">Nenhum cliente encontrado.</div>';
+    resultados.style.display = 'block';
+    return;
+  }
+
+  resultados.innerHTML = filtrados.map(function(c) {
+    return '<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bd2)" ' +
+      'onmousedown="selecionarClienteAgendamento(\'' + c.id + '\',\'' + escAttr(c.nome) + '\')">' +
+      '<div style="font-weight:600;font-size:.84rem">' + esc(c.nome) + '</div>' +
+      (c.telefone ? '<div style="font-size:.72rem;color:var(--t3)">' + esc(c.telefone) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  resultados.style.display = 'block';
 }
 
-function filtrarServicosAgendamento(termo) {  var termoNorm = (termo || '').trim().toLowerCase();
+// Escolhe um cliente da lista de resultados — usa "onmousedown" em vez de
+// "onclick" no HTML acima de propósito: o campo de busca perde o foco
+// (blur) antes do clique terminar, e se a lista fosse escondida no blur
+// ANTES do clique registrar, o clique nunca chegaria a acontecer.
+function selecionarClienteAgendamento(id, nome) {
+  document.getElementById('ag-cli').value = id;
+  document.getElementById('ag-cli-busca').value = nome;
+  var resultados = document.getElementById('ag-cli-resultados');
+  resultados.style.display = 'none';
+  resultados.innerHTML = '';
+  atualizarPacotesDisponiveis();
+}
+
+function filtrarServicosAgendamento(termo) {
+  var termoNorm = (termo || '').trim().toLowerCase();
   var pills = document.querySelectorAll('#ag-svcs .svc-pill');
   var algumVisivel = false;
   pills.forEach(function(pill) {
@@ -4871,10 +4899,13 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">Novo Agendamento</span><button class="mx" onclick="closeM('m-ag')">✕</button></div>
     <div class="mb">
       <div class="fr">
-        <div class="fg">
+        <div class="fg" style="position:relative">
           <label class="fl">Cliente*</label>
-          <input class="fc" id="ag-cli-busca" placeholder="🔍 Buscar por nome ou telefone..." oninput="filtrarClientesAgendamento(this.value)" style="margin-bottom:6px"/>
-          <select class="fc" id="ag-cli" onchange="atualizarPacotesDisponiveis()"><option value="">Selecionar...</option></select>
+          <input class="fc" id="ag-cli-busca" placeholder="🔍 Buscar por nome ou telefone..." autocomplete="off"
+            oninput="filtrarClientesAgendamento(this.value)" onfocus="filtrarClientesAgendamento(this.value)"
+            onblur="setTimeout(function(){ var r=document.getElementById('ag-cli-resultados'); if(r) r.style.display='none'; }, 150)"/>
+          <input type="hidden" id="ag-cli"/>
+          <div id="ag-cli-resultados" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:4px;background:var(--card,#1e1e24);border:1px solid var(--bd);border-radius:var(--rs);max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)"></div>
         </div>
         <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="ag-pro" onchange="onSelecaoAgendamentoMudou()"><option value="">Selecionar...</option></select></div>
       </div>
