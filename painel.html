@@ -1590,6 +1590,7 @@ function abrirModalConcluir(id) {
   document.getElementById('btn-concluir-ok').textContent = 'Confirmar pagamento ✅';
   document.getElementById('desc-input').value = '';
   document.getElementById('desc-resumo').textContent = '';
+  document.getElementById('caixinha-input').value = '';
   selecionarTipoDesconto('pct');
   openM('m-concluir');
 }
@@ -1647,13 +1648,15 @@ function confirmarConclusao() {
   var fpg = fpgBtn.dataset.val;
   var ehFiado = fpg === 'fiado';
   var desconto = calcularDescontoEmReais();
+  var caixinha = parseFloat(document.getElementById('caixinha-input').value) || 0;
 
   var btn = document.getElementById('btn-concluir-ok');
   btn.disabled = true; btn.textContent = 'Salvando...';
 
   apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{
     status:'concluido', forma_pgto: ehFiado ? undefined : fpg, pago: !ehFiado,
-    desconto: desconto > 0 ? desconto : undefined
+    desconto: desconto > 0 ? desconto : undefined,
+    caixinha: (!ehFiado && caixinha > 0) ? caixinha : undefined
   }})
     .then(function(r){
       closeM('m-concluir');
@@ -1663,6 +1666,12 @@ function confirmarConclusao() {
       }
       if (r && r.taxa_maquininha && r.taxa_maquininha.taxa_profissional > 0) {
         toast('Taxa da maquininha: ' + brl(r.taxa_maquininha.taxa_total) + ' (profissional absorveu ' + brl(r.taxa_maquininha.taxa_profissional) + ')', 'inf');
+      }
+      if (r && r.caixinha && r.caixinha.bruta > 0) {
+        var msgCaixinha = r.caixinha.taxa > 0
+          ? 'Caixinha de ' + brl(r.caixinha.bruta) + ' — profissional recebe ' + brl(r.caixinha.liquida) + ' (descontada a taxa da maquininha)'
+          : 'Caixinha de ' + brl(r.caixinha.liquida) + ' — 100% pro profissional 🎁';
+        toast(msgCaixinha, 'inf');
       }
       loadDashTl(); loadAgenda(); loadKPIs(); loadCom(); loadFiado();
       if (r && r.whatsapp_link) mostrarToastWhatsapp(r.whatsapp_link);
@@ -2425,15 +2434,19 @@ function renderCom(list) {
       foiPago: foiPago,
       servicos: foiPago ? (p.fechamento.total_servicos||0) : p.total_servicos,
       bruto:    foiPago ? (p.fechamento.total_bruto||0)    : p.total_bruto,
-      comissao: foiPago ? (p.fechamento.total_comissao||0) : p.total_comissao
+      comissao: foiPago ? (p.fechamento.total_comissao||0) : p.total_comissao,
+      // Caixinha é 100% do profissional, mas entra JUNTO no valor pago no
+      // fechamento — por isso soma no total a pagar, mesmo aparecendo
+      // separada visualmente
+      caixinhas: foiPago ? (p.fechamento.total_caixinhas||0) : (p.total_caixinhas||0)
     };
   }
 
   var totalGeral = 0, totalPago = 0;
   list.forEach(function(p){
     var v = valoresExibir(p);
-    totalGeral += v.comissao;
-    if (v.foiPago) totalPago += v.comissao;
+    totalGeral += v.comissao + v.caixinhas;
+    if (v.foiPago) totalPago += v.comissao + v.caixinhas;
   });
 
   document.getElementById('ct1').textContent = brl(totalGeral);
@@ -2443,30 +2456,32 @@ function renderCom(list) {
 
   document.getElementById('com-lst').innerHTML = list.map(function(p){
     var v = valoresExibir(p);
+    var totalAPagar = v.comissao + v.caixinhas;
     var acaoBtn = v.foiPago
       ? '<button class="btnic btn btnsm" style="color:var(--t3)" data-fid="'+p.fechamento.id+'" data-nome="'+escAttr(p.nome)+'" onclick="reabrirFechamento(this.dataset.fid,this.dataset.nome)" title="Reabrir caso tenha pago por engano">↩️</button>'
-      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + escAttr(p.nome) + '\',' + p.total_comissao + ')">Pagar ' + brl(p.total_comissao) + '</button>';
+      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + escAttr(p.nome) + '\',' + totalAPagar + ')">Pagar ' + brl(totalAPagar) + '</button>';
     var comprasPendentes = p.compras_pendentes_total || 0;
     var avisoCompras = comprasPendentes > 0
       ? '<div style="font-size:.68rem;color:var(--warn);margin-top:2px;cursor:pointer" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')" title="Ver e quitar parcelas">🛒 ' + brl(comprasPendentes) + ' em compras pendentes — clique pra descontar</div>'
       : '';
-    return '<div style="display:flex;align-items:center;gap:13px;padding:13px;background:var(--wh);border-radius:var(--r);border:1.5px solid var(--bd);margin-bottom:7px">' +
+    return '<div style="display:flex;align-items:center;gap:13px;padding:13px;background:var(--wh);border-radius:var(--r);border:1.5px solid var(--bd);margin-bottom:7px;flex-wrap:wrap">' +
       '<div class="pro-av" style="background:' + (p.cor||COLS[0]) + '">' + esc(p.nome[0]) + '</div>' +
       '<div><div style="font-weight:700;font-size:.85rem">' + esc(p.nome) + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div>' + avisoCompras + '</div>' +
       '<div style="display:flex;gap:18px;margin-left:auto;text-align:center">' +
       '<div><div style="font-size:.88rem;font-weight:800">' + v.servicos + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.88rem;font-weight:800">' + brl(v.bruto) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div>' +
       '<div><div style="font-size:.88rem;font-weight:800;color:var(--ac)">' + brl(v.comissao) + '</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
+      (v.caixinhas > 0 ? '<div><div style="font-size:.88rem;font-weight:800;color:var(--gold,#c9a96e)">' + brl(v.caixinhas) + '</div><div style="font-size:.62rem;color:var(--t3)">🎁 Caixinha</div></div>' : '') +
       '</div>' +
       (v.foiPago ? '<span class="badge bs">✅ Pago</span>' : '') +
       acaoBtn +
       '</div>';
   }).join('');
 
-  document.getElementById('fcom-t').innerHTML = '<table><thead><tr><th>Profissional</th><th>Serviços</th><th>Comissão</th><th>Status</th></tr></thead><tbody>' +
+  document.getElementById('fcom-t').innerHTML = '<table><thead><tr><th>Profissional</th><th>Serviços</th><th>Comissão</th><th>Caixinha</th><th>Status</th></tr></thead><tbody>' +
     list.map(function(p){
       var v = valoresExibir(p);
-      return '<tr><td>' + esc(p.nome) + '</td><td>' + v.servicos + '</td><td><strong>' + brl(v.comissao) + '</strong></td><td><span class="badge ' + (v.foiPago?'bs':'bw') + '">' + (v.foiPago?'Pago':'A pagar') + '</span></td></tr>';
+      return '<tr><td>' + esc(p.nome) + '</td><td>' + v.servicos + '</td><td><strong>' + brl(v.comissao) + '</strong></td><td>' + (v.caixinhas > 0 ? brl(v.caixinhas) : '—') + '</td><td><span class="badge ' + (v.foiPago?'bs':'bw') + '">' + (v.foiPago?'Pago':'A pagar') + '</span></td></tr>';
     }).join('') +
     '</tbody></table>';
 }
@@ -5199,6 +5214,12 @@ function dispensarBannerPWA() {
           <input type="number" class="fc" id="desc-input" step="0.01" min="0" placeholder="0" oninput="recalcularDesconto()" style="flex:1"/>
         </div>
         <div style="font-size:.74rem;margin-top:6px" id="desc-resumo"></div>
+      </div>
+
+      <div class="fg">
+        <label class="fl">🎁 Caixinha / Gorjeta (opcional)</label>
+        <input type="number" class="fc" id="caixinha-input" step="0.01" min="0" placeholder="0,00"/>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Vai 100% pro profissional. Se pagar no cartão, só desconta a taxa da maquininha — o salão não fica com nada dela.</div>
       </div>
 
       <div class="fg">
