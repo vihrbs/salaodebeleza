@@ -213,6 +213,29 @@ async function aplicarTaxaMaquininha(agendamentoId, salaoId, valorTotal, formaPg
   return { taxa_total: taxaTotal, taxa_profissional: taxaProfissional };
 }
 
+// Calcula o valor líquido de uma caixinha (gorjeta) — diferente da taxa de
+// maquininha normal (que é dividida meio a meio entre salão e
+// profissional), aqui o desconto da taxa sai TODO da caixinha, porque o
+// salão não fica com nada dela — é 100% do profissional, a taxa só existe
+// porque o dinheiro passou pelo cartão.
+async function calcularCaixinhaLiquida(salaoId, caixinhaValor, formaPgto) {
+  if (!caixinhaValor || caixinhaValor <= 0) return { bruta: 0, taxa: 0, liquida: 0 };
+  if (!FORMAS_PAGAMENTO_CARTAO.has(formaPgto)) return { bruta: caixinhaValor, taxa: 0, liquida: caixinhaValor };
+
+  const { data: salao } = await supabase.from('saloes').select('configuracoes').eq('id', salaoId).single();
+  const cfg = salao?.configuracoes || {};
+  const ehDebito = formaPgto === 'Cartão Débito';
+  const pct = Number(ehDebito
+    ? (cfg.taxa_maquininha_debito_pct ?? cfg.taxa_maquininha_pct ?? 0)
+    : (cfg.taxa_maquininha_credito_pct ?? cfg.taxa_maquininha_pct ?? 0));
+
+  if (!pct || pct <= 0) return { bruta: caixinhaValor, taxa: 0, liquida: caixinhaValor };
+
+  const taxa = Math.round(caixinhaValor * pct / 100 * 100) / 100;
+  const liquida = Math.round((caixinhaValor - taxa) * 100) / 100;
+  return { bruta: caixinhaValor, taxa, liquida };
+}
+
 // ── PARCELAMENTO DE PRODUTO PRO PROFISSIONAL ─────────
 // Divide um valor total em N parcelas mensais. A última parcela absorve
 // qualquer diferença de arredondamento, garantindo que a soma bate exatamente
@@ -241,7 +264,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.1.1-comandas-em-cards' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.2.0-caixinha-gorjeta' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1639,6 +1662,7 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
 
   let whatsapp_link = null;
   let infoTaxaMaquininha = { taxa_total: 0, taxa_profissional: 0 };
+  let infoCaixinha = { bruta: 0, taxa: 0, liquida: 0 };
 
   if (status === 'concluido') {
     // Desconto opcional aplicado na hora de concluir — desconta tanto do
@@ -1691,6 +1715,21 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
           req.params.id, req.salao_id, Number(data.valor_total || 0), forma_pgto
         );
       } catch(e) { console.error('Erro ao aplicar taxa maquininha:', e.message); }
+    }
+
+    // Caixinha (gorjeta) opcional — vai 100% pro profissional, só descontando
+    // a taxa CHEIA da maquininha (não dividida como na comissão normal, já
+    // que o salão não fica com nada dessa parte). Guarda bruto e líquido
+    // separados, pra ficar claro no fechamento quanto foi serviço e quanto
+    // foi gorjeta.
+    const caixinhaValor = Number(req.body.caixinha || 0);
+    if (marcarComoPago && caixinhaValor > 0) {
+      try {
+        infoCaixinha = await calcularCaixinhaLiquida(req.salao_id, caixinhaValor, forma_pgto);
+        await supabase.from('agendamentos').update({
+          caixinha_valor: infoCaixinha.bruta, caixinha_liquida: infoCaixinha.liquida
+        }).eq('id', req.params.id);
+      } catch(e) { console.error('Erro ao calcular caixinha:', e.message); }
     }
 
     // Atualiza estatísticas do cliente automaticamente
@@ -1770,7 +1809,7 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     }
   }
 
-  res.json({ ...data, whatsapp_link, taxa_maquininha: infoTaxaMaquininha });
+  res.json({ ...data, whatsapp_link, taxa_maquininha: infoTaxaMaquininha, caixinha: infoCaixinha });
 });
 
 // ═══════════════════════════════════════════════════
@@ -2343,7 +2382,7 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
 
     // Se já está pago, mostra zerado (já foi quitado, não soma de novo)
     if (fechamento && fechamento.status === 'pago') {
-      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, fechamento, compras_pendentes_total };
+      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, total_caixinhas: 0, fechamento, compras_pendentes_total };
     }
 
     // Senão, calcula normalmente a partir dos agendamentos concluídos
@@ -2355,7 +2394,18 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
       .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
     const total_bruto    = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
     const total_comissao = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
-    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao, fechamento, compras_pendentes_total };
+
+    // Caixinhas (gorjetas) desse profissional no período — somadas à parte,
+    // porque são 100% dele, não fazem parte do cálculo normal de comissão
+    // (que é uma % do serviço). Fica separado no fechamento de propósito,
+    // pra ficar claro pro dono e pro profissional quanto foi cada coisa.
+    const { data: agsComCaixinha } = await supabase.from('agendamentos')
+      .select('caixinha_liquida')
+      .eq('profissional_id', p.id).eq('status', 'concluido').eq('salao_id', req.salao_id)
+      .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
+    const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
+
+    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao, total_caixinhas, fechamento, compras_pendentes_total };
   }));
   res.json(resultado);
 });
@@ -2394,7 +2444,17 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 
     const total_servicos = svcs?.length || 0;
     const total_bruto     = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
-    const total_comissao  = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+    const total_comissao_servicos = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+
+    // Caixinhas (gorjetas) do período entram no valor pago também — são
+    // 100% do profissional, então na hora de fechar/pagar precisam somar
+    // junto com a comissão normal dos serviços.
+    const { data: agsComCaixinha } = await supabase.from('agendamentos')
+      .select('caixinha_liquida')
+      .eq('profissional_id', profissional_id).eq('status', 'concluido').eq('salao_id', req.salao_id)
+      .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
+    const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
+    const total_comissao = total_comissao_servicos + total_caixinhas;
 
     if (total_servicos === 0) {
       return res.status(400).json({ error: 'Nenhum serviço concluído neste período para fechar.' });
@@ -2414,7 +2474,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       // Atualiza o existente
       ({ data, error } = await supabase.from('fechamentos_comissao')
         .update({
-          total_comissao, total_bruto, total_servicos,
+          total_comissao, total_bruto, total_servicos, total_caixinhas,
           status: 'pago', pago_em: new Date(), periodo_fim: fim
         })
         .eq('id', existing.id).select().single());
@@ -2423,7 +2483,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       ({ data, error } = await supabase.from('fechamentos_comissao')
         .insert({
           salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
-          total_comissao, total_bruto, total_servicos,
+          total_comissao, total_bruto, total_servicos, total_caixinhas,
           status: 'pago', pago_em: new Date()
         })
         .select().single());
