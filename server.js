@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.4.0-almoco-e-link-com-nome' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.6.0-agendar-completo' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2786,6 +2786,119 @@ app.put('/api/saloes/meu', auth, async (req, res) => {
   res.json(data);
 });
 
+// Máximo de fotos que um salão pode ter na galeria — evita alguém subir
+// centenas de imagens sem querer e estourar o armazenamento do plano
+const MAX_FOTOS_SALAO = 12;
+
+// Recebe a foto em base64 (o front já lê o arquivo e converte antes de
+// mandar), sobe pro Supabase Storage, e adiciona a URL na lista de fotos
+// do salão. Não precisa de nenhuma biblioteca de upload (multer etc) —
+// o limite de 15mb do express.json() já dá folga suficiente pra fotos.
+app.post('/api/saloes/fotos', auth, async (req, res) => {
+  const { imagem_base64, nome_arquivo } = req.body;
+  if (!imagem_base64) return res.status(422).json({ error: 'Envie a imagem em base64' });
+
+  try {
+    const { data: salaoAtual } = await supabase.from('saloes')
+      .select('fotos').eq('id', req.salao_id).single();
+    const fotosAtuais = salaoAtual?.fotos || [];
+    if (fotosAtuais.length >= MAX_FOTOS_SALAO) {
+      return res.status(422).json({ error: 'Limite de ' + MAX_FOTOS_SALAO + ' fotos atingido. Remova alguma antes de adicionar outra.' });
+    }
+
+    // Separa o cabeçalho "data:image/jpeg;base64," do conteúdo de verdade
+    const match = imagem_base64.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (!match) return res.status(422).json({ error: 'Formato de imagem inválido' });
+    const tipoMime = match[1];
+    const extensao = tipoMime.split('/')[1] || 'jpg';
+    const buffer = Buffer.from(match[2], 'base64');
+
+    if (buffer.length > 8 * 1024 * 1024) {
+      return res.status(422).json({ error: 'Imagem muito grande (máximo 8MB). Tente comprimir antes de enviar.' });
+    }
+
+    const caminho = req.salao_id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + extensao;
+    const { error: erroUpload } = await supabase.storage
+      .from('fotos-salao').upload(caminho, buffer, { contentType: tipoMime, upsert: false });
+    if (erroUpload) throw erroUpload;
+
+    const { data: urlPublica } = supabase.storage.from('fotos-salao').getPublicUrl(caminho);
+    const novaLista = [...fotosAtuais, { url: urlPublica.publicUrl, caminho, nome: nome_arquivo || null }];
+
+    await supabase.from('saloes').update({ fotos: novaLista }).eq('id', req.salao_id);
+    res.status(201).json({ fotos: novaLista });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Remove uma foto específica da galeria (e do Storage também, não deixa lixo pra trás)
+app.delete('/api/saloes/fotos', auth, async (req, res) => {
+  const { caminho } = req.body;
+  if (!caminho) return res.status(422).json({ error: 'Informe o caminho da foto a remover' });
+  try {
+    const { data: salaoAtual } = await supabase.from('saloes')
+      .select('fotos').eq('id', req.salao_id).single();
+    const fotosAtuais = salaoAtual?.fotos || [];
+    const novaLista = fotosAtuais.filter(f => f.caminho !== caminho);
+
+    await supabase.storage.from('fotos-salao').remove([caminho]);
+    await supabase.from('saloes').update({ fotos: novaLista }).eq('id', req.salao_id);
+    res.json({ fotos: novaLista });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Foto de perfil do profissional — mesmo bucket das fotos do salão, só que
+// UMA foto por profissional (não uma galeria), guardada num campo próprio
+// (profissionais.foto_url), pra aparecer no lugar da bolinha com a inicial
+// tanto no painel quanto no link público de agendamento.
+app.post('/api/profissionais/:id/foto', auth, requirePermissao('profissionais'), async (req, res) => {
+  const { imagem_base64 } = req.body;
+  if (!imagem_base64) return res.status(422).json({ error: 'Envie a imagem em base64' });
+  try {
+    const { data: prof } = await supabase.from('profissionais')
+      .select('id, foto_url, foto_caminho').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
+
+    const match = imagem_base64.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (!match) return res.status(422).json({ error: 'Formato de imagem inválido' });
+    const tipoMime = match[1];
+    const extensao = tipoMime.split('/')[1] || 'jpg';
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length > 8 * 1024 * 1024) {
+      return res.status(422).json({ error: 'Imagem muito grande (máximo 8MB). Tente comprimir antes de enviar.' });
+    }
+
+    // Substitui a foto antiga (se tinha) — não deixa lixo acumulando no Storage
+    if (prof.foto_caminho) {
+      try { await supabase.storage.from('fotos-salao').remove([prof.foto_caminho]); } catch(e) {}
+    }
+
+    const caminho = 'profissionais/' + req.params.id + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + extensao;
+    const { error: erroUpload } = await supabase.storage
+      .from('fotos-salao').upload(caminho, buffer, { contentType: tipoMime, upsert: false });
+    if (erroUpload) throw erroUpload;
+
+    const { data: urlPublica } = supabase.storage.from('fotos-salao').getPublicUrl(caminho);
+    await supabase.from('profissionais')
+      .update({ foto_url: urlPublica.publicUrl, foto_caminho: caminho }).eq('id', req.params.id);
+
+    res.status(201).json({ foto_url: urlPublica.publicUrl });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/profissionais/:id/foto', auth, requirePermissao('profissionais'), async (req, res) => {
+  try {
+    const { data: prof } = await supabase.from('profissionais')
+      .select('foto_caminho').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
+
+    if (prof.foto_caminho) {
+      try { await supabase.storage.from('fotos-salao').remove([prof.foto_caminho]); } catch(e) {}
+    }
+    await supabase.from('profissionais').update({ foto_url: null, foto_caminho: null }).eq('id', req.params.id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════
 // MERCADO PAGO
 // ═══════════════════════════════════════════════════
@@ -2904,7 +3017,7 @@ app.get('/api/pagamento/status', auth, async (req, res) => {
 app.get('/api/publico/salao/:slug', async (req, res) => {
   try {
     const { data, error } = await supabase.from('saloes')
-      .select('id, nome, slug, telefone, endereco, cidade')
+      .select('id, nome, slug, telefone, endereco, cidade, fotos, configuracoes')
       .or(`id.eq.${req.params.slug},slug.eq.${req.params.slug}`).single();
     if (error || !data) return res.status(404).json({ error: 'Salão não encontrado' });
     res.json(data);
@@ -2983,7 +3096,7 @@ app.get('/api/publico/servicos/:salaoId', async (req, res) => {
 app.get('/api/publico/profissionais/:salaoId', async (req, res) => {
   try {
     const { data, error } = await supabase.from('profissionais')
-      .select('id, nome, especialidade, cor_agenda')
+      .select('id, nome, especialidade, cor_agenda, foto_url')
       .eq('salao_id', req.params.salaoId).eq('ativo', true).order('nome');
     if (error) throw error;
     res.json(data || []);
