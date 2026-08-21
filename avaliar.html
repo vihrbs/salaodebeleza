@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avalie seu atendimento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C1A17; --paper:#FAF7F2; --card:#FFFFFF;
+  --line:#E8E2D8; --line2:#DDD5C8;
+  --accent:#9A5B3F; --accent-deep:#7A4530; --accent-soft:#F0E3D8;
+  --ok:#3F7A5C; --ok-soft:#E3F0E9;
+  --er:#B0463C; --er-soft:#FAE5E2;
+  --gold:#D9A441;
+  --muted:#8A8276;
+  --r:18px; --rs:12px;
+  --shadow:0 1px 2px rgba(28,26,23,.04), 0 8px 24px -8px rgba(28,26,23,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased}
+@media(prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
+.wrap{max-width:480px;margin:0 auto;padding:40px 20px 60px}
+header{text-align:center;margin-bottom:24px}
+.eyebrow{font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.title{font-family:'Fraunces',serif;font-size:1.6rem;font-weight:600;margin-bottom:8px;line-height:1.25}
+.sub{font-size:.86rem;color:var(--muted);line-height:1.5}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:26px 22px;text-align:center}
+
+.stars{display:flex;justify-content:center;gap:6px;margin:20px 0 6px}
+.star{
+  font-size:2.3rem; cursor:pointer; color:var(--line2);
+  transition:transform .15s, color .15s; user-select:none; line-height:1;
+}
+.star:hover{transform:scale(1.12)}
+.star.on{color:var(--gold)}
+.star-label{font-size:.8rem;font-weight:600;color:var(--muted);min-height:20px;margin-bottom:18px}
+
+.coment-area{text-align:left;display:none}
+.coment-area textarea{
+  width:100%;min-height:90px;padding:13px 14px;border:1.5px solid var(--line);
+  border-radius:var(--rs);font-family:inherit;font-size:.88rem;resize:vertical;
+  background:var(--paper);
+}
+.coment-area textarea:focus{outline:none;border-color:var(--accent);background:#fff}
+.coment-area label{display:block;font-size:.74rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:14px 0 6px}
+
+.btn{width:100%;padding:15px;border:none;border-radius:50px;font-family:inherit;font-size:.92rem;font-weight:700;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff;margin-top:20px}
+.btn-primary:hover{background:var(--accent-deep);transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.btn-google{background:#fff;border:1.5px solid var(--line);color:var(--ink);display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;margin-top:12px}
+.btn-google:hover{border-color:var(--accent)}
+.btn-ghost{background:transparent;color:var(--muted);margin-top:10px;font-weight:600;text-decoration:none;display:block}
+
+.result-icon{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:1.9rem;animation:pop .5s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+
+.err-box{background:var(--er-soft);color:var(--er);border-radius:var(--rs);padding:12px 14px;font-size:.82rem;font-weight:600;margin:14px 0;display:none}
+footer{text-align:center;padding:24px 0 0;font-size:.72rem;color:var(--muted)}
+footer a{color:var(--accent);text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="tela">
+    <header><div class="eyebrow">Carregando...</div></header>
+    <div class="card"></div>
+  </div>
+  <footer>Avaliação via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a></footer>
+</div>
+
+<script>
+var API = 'https://salaodebeleza-production-8eaa.up.railway.app';
+var AG_ID = new URLSearchParams(window.location.search).get('ag') || '';
+var CONTEXTO = null;
+var NOTA_ESCOLHIDA = 0;
+
+var LABELS_NOTA = { 1:'Muito ruim', 2:'Ruim', 3:'Ok', 4:'Bom', 5:'Excelente!' };
+
+function init() {
+  if (!AG_ID) { renderErro('Link inválido.'); return; }
+  fetch(API + '/api/publico/avaliacao/' + AG_ID)
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+    .then(function(ctx){
+      CONTEXTO = ctx;
+      if (ctx.ja_avaliado) { renderJaAvaliado(); return; }
+      renderFormulario();
+    })
+    .catch(function(){ renderErro('Não foi possível carregar essa avaliação.'); });
+}
+
+function renderErro(msg) {
+  document.getElementById('tela').innerHTML =
+    '<header><div class="eyebrow">Ops</div></header>' +
+    '<div class="card"><div class="err-box" style="display:block">' + msg + '</div></div>';
+}
+
+function renderJaAvaliado() {
+  document.getElementById('tela').innerHTML =
+    '<header><div class="eyebrow">' + esc(CONTEXTO.salao_nome) + '</div></header>' +
+    '<div class="card">' +
+    '<div class="result-icon" style="background:var(--ok-soft);color:var(--ok)">✓</div>' +
+    '<div class="title">Você já avaliou esse atendimento</div>' +
+    '<div class="sub">Obrigado por compartilhar sua experiência com a gente!</div>' +
+    '</div>';
+}
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+function renderFormulario() {
+  var svcTxt = (CONTEXTO.servicos || []).join(', ');
+  document.getElementById('tela').innerHTML =
+    '<header>' +
+      '<div class="eyebrow">' + esc(CONTEXTO.salao_nome) + '</div>' +
+      '<div class="title">Como foi seu atendimento' + (CONTEXTO.profissional_nome ? ' com ' + esc(CONTEXTO.profissional_nome) : '') + '?</div>' +
+      '<div class="sub">' + (svcTxt ? esc(svcTxt) : 'Sua opinião ajuda a gente a melhorar.') + '</div>' +
+    '</header>' +
+    '<div class="card">' +
+      '<div class="stars" id="stars">' +
+        [1,2,3,4,5].map(function(n){ return '<span class="star" data-n="'+n+'" onclick="escolherNota('+n+')">★</span>'; }).join('') +
+      '</div>' +
+      '<div class="star-label" id="star-label">&nbsp;</div>' +
+      '<div class="coment-area" id="coment-area">' +
+        '<label>Quer contar mais? (opcional)</label>' +
+        '<textarea id="comentario" placeholder="Conta como foi sua experiência..."></textarea>' +
+      '</div>' +
+      '<div class="err-box" id="form-err"></div>' +
+      '<button class="btn btn-primary" id="btn-enviar" onclick="enviarAvaliacao()" disabled>Enviar avaliação</button>' +
+    '</div>';
+}
+
+function escolherNota(n) {
+  NOTA_ESCOLHIDA = n;
+  document.querySelectorAll('.star').forEach(function(s){
+    s.classList.toggle('on', parseInt(s.dataset.n) <= n);
+  });
+  document.getElementById('star-label').textContent = LABELS_NOTA[n];
+  document.getElementById('coment-area').style.display = 'block';
+  document.getElementById('btn-enviar').disabled = false;
+}
+
+function enviarAvaliacao() {
+  var err = document.getElementById('form-err');
+  err.style.display = 'none';
+  if (!NOTA_ESCOLHIDA) { err.textContent = 'Escolha quantas estrelas quer dar.'; err.style.display='block'; return; }
+
+  var comentario = document.getElementById('comentario').value.trim();
+  var btn = document.getElementById('btn-enviar');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  fetch(API + '/api/publico/avaliacao/' + AG_ID, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ nota: NOTA_ESCOLHIDA, comentario: comentario || undefined })
+  })
+  .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||'Erro ao enviar'); return d; }); })
+  .then(function(){ renderAgradecimento(); })
+  .catch(function(e){
+    err.textContent = e.message; err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Enviar avaliação';
+  });
+}
+
+// Depois de enviar: se a nota foi alta (4 ou 5), convida a repetir a
+// avaliação no Google também — é o momento certo de pedir, o cliente já
+// demonstrou que gostou. Nota baixa não empurra pro Google: o feedback já
+// chegou pro salão, e não faz sentido incentivar uma crítica pública
+// quando o problema pode ainda ser resolvido diretamente.
+function renderAgradecimento() {
+  var notaAlta = NOTA_ESCOLHIDA >= 4;
+  var html =
+    '<header><div class="eyebrow">' + esc(CONTEXTO.salao_nome) + '</div></header>' +
+    '<div class="card">' +
+    '<div class="result-icon" style="background:var(--ok-soft);color:var(--ok)">✓</div>' +
+    '<div class="title">Obrigado pela avaliação!</div>';
+
+  if (notaAlta && CONTEXTO.google_review_link) {
+    html += '<div class="sub">Que bom que você gostou! Se puder, deixar essa mesma nota no Google ajuda muito o nosso trabalho a ser encontrado por mais gente. 🙏</div>' +
+      '<a class="btn btn-google" href="' + CONTEXTO.google_review_link + '" target="_blank">' +
+      '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.5-5.2l-6.2-5.3C29.3 35.4 26.8 36 24 36c-5.2 0-9.7-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.2 5.3C40.5 36.2 44 30.7 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>' +
+      'Avaliar no Google também</a>';
+  } else {
+    html += '<div class="sub">Seu feedback foi enviado direto pra equipe do salão. Valeu por dedicar esse minutinho!</div>';
+  }
+  html += '</div>';
+  document.getElementById('tela').innerHTML = html;
+}
+
+init();
+</script>
+</body>
+</html>
