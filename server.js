@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.6.0-agendar-completo' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.6.1-corrige-link-por-nome' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -3016,9 +3016,18 @@ app.get('/api/pagamento/status', auth, async (req, res) => {
 // "studio-rezende", pra deixar o link mais bonito e fácil de reconhecer)
 app.get('/api/publico/salao/:slug', async (req, res) => {
   try {
-    const { data, error } = await supabase.from('saloes')
-      .select('id, nome, slug, telefone, endereco, cidade, fotos, configuracoes')
-      .or(`id.eq.${req.params.slug},slug.eq.${req.params.slug}`).single();
+    const parametro = req.params.slug;
+    // "id" é UUID no banco — comparar um valor que não tem cara de UUID
+    // (tipo um slug "barbearia-rbs") contra essa coluna trava a consulta
+    // INTEIRA com erro de tipo, não só ignora aquele lado do "ou". Por
+    // isso só inclui a comparação por id quando o valor realmente parece
+    // um UUID; senão, busca só pelo slug.
+    const pareceUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parametro);
+    const query = supabase.from('saloes')
+      .select('id, nome, slug, telefone, endereco, cidade, fotos, configuracoes');
+    const { data, error } = pareceUuid
+      ? await query.or(`id.eq.${parametro},slug.eq.${parametro}`).single()
+      : await query.eq('slug', parametro).single();
     if (error || !data) return res.status(404).json({ error: 'Salão não encontrado' });
     res.json(data);
   } catch(e) { res.status(500).json({ error: e.message }); }
