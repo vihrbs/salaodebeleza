@@ -527,7 +527,7 @@ select.fc option{background:var(--bg2)}
         <div class="kc c1"><div class="ki c1">📅</div><div><div class="kv" id="k1">—</div><div class="kl">Agendamentos hoje</div></div><span class="kd" id="k1d">...</span></div>
         <div class="kc c2"><div class="ki c2">💰</div><div><div class="kv" id="k2">—</div><div class="kl">Faturamento hoje</div></div><span class="kd" id="k2d">...</span></div>
         <div class="kc c3"><div class="ki c3">👥</div><div><div class="kv" id="k3">—</div><div class="kl">Clientes ativos</div></div><span class="kd" id="k3d">...</span></div>
-        <div class="kc c4"><div class="ki c4">⭐</div><div><div class="kv">4.9</div><div class="kl">Avaliação média</div></div><span class="kd">48 avaliações</span></div>
+        <div class="kc c4"><div class="ki c4">⭐</div><div><div class="kv" id="k4">—</div><div class="kl">Avaliação média</div></div><span class="kd" id="k4d">...</span></div>
       </div>
       <div class="g31" style="margin-bottom:14px">
         <div class="card">
@@ -542,6 +542,10 @@ select.fc option{background:var(--bg2)}
       <div class="g2">
         <div class="card"><div class="crow"><span class="ch">Faturamento — 7 dias</span><strong id="fat7" style="color:var(--ac3)">—</strong></div><div class="bc" id="dash-bc"></div></div>
         <div class="card"><div class="ct">Top Serviços do Mês</div><div id="top-svc"><div class="lc"><div class="spin"></div></div></div></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="ct">💬 Avaliações Recentes</div>
+        <div id="dash-avaliacoes"><div class="lc"><div class="spin"></div></div></div>
       </div>
     </div>
 
@@ -739,6 +743,9 @@ select.fc option{background:var(--bg2)}
           </div>
           <label class="fl">E-mail</label><input class="fc fg" id="cfg-email"/>
           <label class="fl">Endereço</label><input class="fc fg" id="cfg-end"/>
+          <label class="fl">Link de avaliação do Google</label>
+          <input class="fc fg" id="cfg-google-review" placeholder="https://g.page/r/.../review"/>
+          <div style="font-size:.68rem;color:var(--t3);margin-top:-8px;margin-bottom:12px">Depois que o cliente avalia bem dentro do app, a gente já convida ele a repetir a nota no Google. <a href="https://support.google.com/business/answer/7035772" target="_blank" style="color:var(--ac)">Como pegar esse link</a></div>
           <button class="btn btnp" onclick="saveConfig()">Salvar Alterações</button>
         </div>
         <div class="card" id="card-api-integracao">
@@ -1294,7 +1301,7 @@ var D = {
 
 // ── LOAD ALL ────────────────────────────────────────────
 function loadAll() {
-  loadKPIs(); loadDashTl(); loadTopSvc(); loadAlertas();
+  loadKPIs(); loadDashTl(); loadTopSvc(); loadAlertas(); loadAvaliacoes();
   loadAgenda(); loadClientes(); loadFin(); loadEst();
   loadCom(); loadPros(); loadSvcs(); loadPacotes();
   renderCal(); renderDashChart();
@@ -1345,6 +1352,43 @@ function loadKPIs() {
     badgeAgenda.textContent = d.agendamentos_hoje;
     badgeAgenda.style.display = d.agendamentos_hoje > 0 ? '' : 'none';
   }).catch(function(){ /* use demo */ });
+}
+
+// Estrelinhas — pra nota média (pode ter meia estrela) e pra cada avaliação
+// individual (nota sempre inteira, de 1 a 5)
+function renderEstrelas(nota) {
+  var cheias = Math.round(nota);
+  var html = '';
+  for (var i = 1; i <= 5; i++) html += i <= cheias ? '★' : '☆';
+  return html;
+}
+
+function loadAvaliacoes() {
+  apiFetch('/api/avaliacoes').then(function(r){
+    var d = r || { media: 0, total: 0, avaliacoes: [] };
+    document.getElementById('k4').textContent = d.total > 0 ? d.media.toFixed(1) : '—';
+    document.getElementById('k4d').textContent = d.total + (d.total === 1 ? ' avaliação' : ' avaliações');
+
+    var container = document.getElementById('dash-avaliacoes');
+    if (!container) return;
+    if (!d.avaliacoes.length) {
+      container.innerHTML = '<div class="empty">Nenhuma avaliação recebida ainda.</div>';
+      return;
+    }
+    container.innerHTML = d.avaliacoes.slice(0, 6).map(function(a){
+      return '<div style="padding:10px 0;border-bottom:1px solid var(--bd2)">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<strong style="font-size:.82rem">' + esc(a.cliente_nome) + '</strong>' +
+          '<span style="color:var(--gold,#c9a96e);letter-spacing:1px">' + renderEstrelas(a.nota) + '</span>' +
+        '</div>' +
+        (a.comentario ? '<div style="font-size:.78rem;color:var(--t2);margin-top:4px">"' + esc(a.comentario) + '"</div>' : '') +
+        (a.profissional_nome ? '<div style="font-size:.68rem;color:var(--t3);margin-top:3px">Atendido por ' + esc(a.profissional_nome) + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }).catch(function(){
+    var container = document.getElementById('dash-avaliacoes');
+    if (container) container.innerHTML = '<div class="empty">Erro ao carregar avaliações.</div>';
+  });
 }
 
 function loadDashTl() {
@@ -3331,7 +3375,8 @@ function saveConfig() {
     telefone: document.getElementById('cfg-tel').value,
     whatsapp: document.getElementById('cfg-wpp').value,
     email:    document.getElementById('cfg-email').value,
-    endereco: document.getElementById('cfg-end').value
+    endereco: document.getElementById('cfg-end').value,
+    configuracoes: { google_review_link: document.getElementById('cfg-google-review').value.trim() || null }
   };
   apiFetch('/api/saloes/meu',{method:'PUT',body:body})
   .then(function(r){
@@ -3368,7 +3413,17 @@ function saveHorarioFuncionamento() {
 
 function carregarHorarioFuncionamento() {
   apiFetch('/api/saloes/meu').then(function(r){
-    if (!r || !r.configuracoes) return;
+    if (!r) return;
+    // Dados básicos do salão — o campo cfg-nome etc já vem de outro carregamento
+    // inicial em alguns fluxos, mas garantimos aqui também pra Config nunca
+    // abrir vazio se a pessoa entrar direto nessa página.
+    if (document.getElementById('cfg-nome') && !document.getElementById('cfg-nome').value) document.getElementById('cfg-nome').value = r.nome || '';
+    if (document.getElementById('cfg-tel') && !document.getElementById('cfg-tel').value) document.getElementById('cfg-tel').value = r.telefone || '';
+    if (document.getElementById('cfg-wpp') && !document.getElementById('cfg-wpp').value) document.getElementById('cfg-wpp').value = r.whatsapp || '';
+    if (document.getElementById('cfg-email') && !document.getElementById('cfg-email').value) document.getElementById('cfg-email').value = r.email || '';
+    if (document.getElementById('cfg-end') && !document.getElementById('cfg-end').value) document.getElementById('cfg-end').value = r.endereco || '';
+
+    if (!r.configuracoes) return;
     var cfg = r.configuracoes;
     if (cfg.horario_abre)  { document.getElementById('cfg-h-abre').value  = cfg.horario_abre;  CFG_HORARIO_ABRE  = cfg.horario_abre; }
     if (cfg.horario_fecha) { document.getElementById('cfg-h-fecha').value = cfg.horario_fecha; CFG_HORARIO_FECHA = cfg.horario_fecha; }
@@ -3382,6 +3437,7 @@ function carregarHorarioFuncionamento() {
     var credito = cfg.taxa_maquininha_credito_pct !== undefined && cfg.taxa_maquininha_credito_pct !== null ? cfg.taxa_maquininha_credito_pct : cfg.taxa_maquininha_pct;
     if (debito  !== undefined && debito  !== null) document.getElementById('cfg-taxa-debito').value  = debito;
     if (credito !== undefined && credito !== null) document.getElementById('cfg-taxa-credito').value = credito;
+    if (cfg.google_review_link) document.getElementById('cfg-google-review').value = cfg.google_review_link;
     atualizarPreviewTaxaMaquininha();
   }).catch(function(){});
 }
@@ -3724,6 +3780,8 @@ function editPro(btn) {
   document.getElementById('epr-t').value  = p.telefone || '';
   document.getElementById('epr-email').value = p.email || '';
   document.getElementById('epr-c').value  = p.comissao_pct || 40;
+  document.getElementById('epr-almoco-ini').value = p.horario_almoco_inicio || '';
+  document.getElementById('epr-almoco-fim').value = p.horario_almoco_fim || '';
   document.getElementById('epr-cor').value = p.cor_agenda || '#6C63FF';
   // Marca cor selecionada
   document.querySelectorAll('#epr-cor-wrap div[data-cor]').forEach(function(el){
@@ -3736,6 +3794,14 @@ function updatePro() {
   var id = document.getElementById('epr-id').value;
   var nome = document.getElementById('epr-n').value.trim();
   if (!nome) { toast('Nome obrigatório','er'); return; }
+  var almocoIni = document.getElementById('epr-almoco-ini').value || null;
+  var almocoFim = document.getElementById('epr-almoco-fim').value || null;
+  if ((almocoIni && !almocoFim) || (!almocoIni && almocoFim)) {
+    toast('Preencha início E fim do almoço, ou deixe os dois em branco','er'); return;
+  }
+  if (almocoIni && almocoFim && almocoFim <= almocoIni) {
+    toast('O fim do almoço precisa ser depois do início','er'); return;
+  }
   var btn = document.querySelector('#m-edit-pro .btnp');
   btn.disabled=true; btn.textContent='Salvando...';
   apiFetch('/api/profissionais/'+id, {method:'PUT', body:{
@@ -3744,6 +3810,8 @@ function updatePro() {
     telefone: document.getElementById('epr-t').value,
     email: document.getElementById('epr-email').value.trim() || null,
     comissao_pct: parseFloat(document.getElementById('epr-c').value)||40,
+    horario_almoco_inicio: almocoIni,
+    horario_almoco_fim: almocoFim,
     cor_agenda: document.getElementById('epr-cor').value
   }})
   .then(function(){ toast('Profissional atualizado! ✅','ok'); closeM('m-edit-pro'); loadPros(); fillSelects(); })
@@ -4411,7 +4479,12 @@ function preencherLinkAgendamento() {
   var el = document.getElementById('link-agendamento');
   if (!el) return;
   var salaoId = localStorage.getItem('bpro_salao_id') || '';
+  // Provisório com o ID enquanto busca o nome legível (slug) — troca assim
+  // que a resposta chegar, pra não deixar o campo vazio na espera
   el.value = 'https://belezaprooficial.com.br/agendar.html?salao=' + salaoId;
+  apiFetch('/api/saloes/meu').then(function(r){
+    if (r && r.slug) el.value = 'https://belezaprooficial.com.br/agendar.html?salao=' + r.slug;
+  }).catch(function(){});
 }
 
 function copiarLinkAgendamento() {
@@ -5369,6 +5442,14 @@ function dispensarBannerPWA() {
       <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
       <div class="fg"><label class="fl">E-mail (opcional)</label><input class="fc" type="email" id="epr-email" placeholder="para@enviar.notificacoes.com"/>
         <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Se preenchido, ele recebe um e-mail automático a cada agendamento novo e quando a comissão dele é fechada.</div>
+      </div>
+      <div class="fg">
+        <label class="fl">Horário de almoço (opcional)</label>
+        <div class="fr">
+          <div><input type="time" class="fc" id="epr-almoco-ini"/></div>
+          <div><input type="time" class="fc" id="epr-almoco-fim"/></div>
+        </div>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Ninguém consegue agendar com ele nesse intervalo — nem pelo painel, nem pelo link público. Deixa os dois em branco se ele não tiver horário de almoço fixo.</div>
       </div>
       <div class="fg"><label class="fl">Cor na agenda</label>
         <div style="display:flex;gap:8px;margin-top:5px" id="epr-cor-wrap">
