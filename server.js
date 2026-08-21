@@ -42,6 +42,20 @@ function utcParaMinutosBrasil(dataHoraUTC) {
   return totalMinBrasil;
 }
 
+// Se o profissional tiver horário de almoço configurado, devolve o
+// intervalo [inicioMin, fimMin] pra ser tratado como "ocupado" — igual
+// bloquear um horário nesse intervalo. Se não tiver configurado, devolve
+// null (não bloqueia nada, comportamento de antes preservado).
+function janelaAlmocoMinutos(profissional) {
+  if (!profissional || !profissional.horario_almoco_inicio || !profissional.horario_almoco_fim) return null;
+  const [hIni, mIni] = profissional.horario_almoco_inicio.split(':').map(Number);
+  const [hFim, mFim] = profissional.horario_almoco_fim.split(':').map(Number);
+  const inicioMin = hIni * 60 + (mIni || 0);
+  const fimMin = hFim * 60 + (mFim || 0);
+  if (isNaN(inicioMin) || isNaN(fimMin) || fimMin <= inicioMin) return null;
+  return [inicioMin, fimMin];
+}
+
 function adicionarDia(dataISO) {
   var d = new Date(dataISO + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() + 1);
@@ -264,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.2.1-comissao-profissional-prioridade' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.4.0-almoco-e-link-com-nome' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1442,6 +1456,15 @@ async function criarAgendamentoUnico({
 
   if (conflito) return { status: 'conflito', data_hora: data_hora_final };
 
+  // Horário de almoço do profissional também bloqueia — mesma checagem de
+  // sobreposição usada pra outros agendamentos
+  const { data: profDadosAlmoco } = await supabase.from('profissionais')
+    .select('horario_almoco_inicio, horario_almoco_fim').eq('id', profissionalId).single();
+  const janelaAlmocoAg = janelaAlmocoMinutos(profDadosAlmoco);
+  if (janelaAlmocoAg && novoInicioMin < janelaAlmocoAg[1] && novoFimMin > janelaAlmocoAg[0]) {
+    return { status: 'conflito', data_hora: data_hora_final, motivo: 'almoco' };
+  }
+
   const insertPayload = {
     salao_id: salaoId, cliente_id: clienteId, profissional_id: profissionalId,
     data_hora: data_hora_final, duracao_min: duracao_total, valor_total,
@@ -1574,7 +1597,10 @@ app.post('/api/agendamentos', auth, async (req, res) => {
         observacoes, origem, pacotePorServico
       });
       if (resultado.status === 'conflito') {
-        return res.status(409).json({ error: 'Este profissional já tem um agendamento nesse horário. Escolha outro horário ou profissional.' });
+        const msg = resultado.motivo === 'almoco'
+          ? 'Esse horário está dentro do intervalo de almoço do profissional. Escolha outro horário.'
+          : 'Este profissional já tem um agendamento nesse horário. Escolha outro horário ou profissional.';
+        return res.status(409).json({ error: msg });
       }
 
       // Agendamento criado com sucesso — agora sim debita as sessões usadas
@@ -1667,6 +1693,7 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
   let whatsapp_link = null;
   let infoTaxaMaquininha = { taxa_total: 0, taxa_profissional: 0 };
   let infoCaixinha = { bruta: 0, taxa: 0, liquida: 0 };
+  let infoAvaliacao = { link: null };
 
   if (status === 'concluido') {
     // Desconto opcional aplicado na hora de concluir — desconta tanto do
@@ -1764,22 +1791,24 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
       } catch(e) { console.error('Erro ao atualizar stats cliente:', e.message); }
     }
 
-    // Gera link de WhatsApp para pedir avaliação e convidar retorno
+    // Gera link de WhatsApp convidando o cliente a avaliar o atendimento
+    // (linka pra nossa própria tela de avaliação — de lá, se a nota for
+    // boa, a gente ainda convida a repetir no Google também)
     try {
       const { data: cliente } = await supabase.from('clientes')
         .select('nome, telefone').eq('id', data.cliente_id).single();
       const { data: salao } = await supabase.from('saloes')
         .select('nome').eq('id', req.salao_id).single();
 
+      const linkAvaliar = 'https://belezaprooficial.com.br/avaliar.html?ag=' + data.id;
       if (cliente && cliente.telefone) {
         const telLimpo = cliente.telefone.replace(/\D/g, '');
         const telComPais = telLimpo.length === 11 ? '55' + telLimpo : telLimpo;
-        const linkAgendar = 'https://belezaprooficial.com.br/agendar.html?salao=' + req.salao_id;
         const msg = 'Oi ' + cliente.nome.split(' ')[0] + '! Foi um prazer te atender hoje na ' +
-          (salao?.nome || 'nossa loja') + '. Como foi sua experiência? ' +
-          'Quando quiser marcar seu próximo horário, é só acessar: ' + linkAgendar;
+          (salao?.nome || 'nossa loja') + '. Como foi sua experiência? Conta pra gente: ' + linkAvaliar;
         whatsapp_link = 'https://wa.me/' + telComPais + '?text=' + encodeURIComponent(msg);
       }
+      infoAvaliacao.link = linkAvaliar;
     } catch(e) { console.error('Erro ao gerar link WhatsApp:', e.message); }
   }
 
@@ -1813,12 +1842,31 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     }
   }
 
-  res.json({ ...data, whatsapp_link, taxa_maquininha: infoTaxaMaquininha, caixinha: infoCaixinha });
+  res.json({ ...data, whatsapp_link, taxa_maquininha: infoTaxaMaquininha, caixinha: infoCaixinha, avaliacao: infoAvaliacao });
 });
 
 // ═══════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════
+// Avaliações recebidas — pro dono ver o feedback dos clientes dentro do
+// próprio app (não exige ir atrás no Google pra saber como está indo)
+app.get('/api/avaliacoes', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('avaliacoes')
+      .select(`id, nota, comentario, created_at,
+               clientes(nome), profissionais(nome)`)
+      .eq('salao_id', req.salao_id).order('created_at', { ascending: false }).limit(200);
+    if (error) throw error;
+
+    const lista = (data || []).map(a => ({
+      id: a.id, nota: a.nota, comentario: a.comentario, created_at: a.created_at,
+      cliente_nome: a.clientes?.nome || 'Cliente', profissional_nome: a.profissionais?.nome || null
+    }));
+    const media = lista.length ? lista.reduce((s, a) => s + a.nota, 0) / lista.length : 0;
+    res.json({ avaliacoes: lista, media: Number(media.toFixed(1)), total: lista.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/dashboard/kpis', auth, async (req, res) => {
   const hoje = dataAtualBrasil();
   const inicioMes = hoje.slice(0, 7) + '-01';
@@ -2850,13 +2898,73 @@ app.get('/api/pagamento/status', auth, async (req, res) => {
 // AGENDAMENTO PÚBLICO (sem autenticação)
 // ═══════════════════════════════════════════════════
 
-// Busca dados públicos do salão (nome, logo)
+// Busca dados públicos do salão (nome, logo) — aceita tanto o ID (UUID,
+// links antigos continuam funcionando) quanto o slug legível (tipo
+// "studio-rezende", pra deixar o link mais bonito e fácil de reconhecer)
 app.get('/api/publico/salao/:slug', async (req, res) => {
   try {
     const { data, error } = await supabase.from('saloes')
-      .select('id, nome, telefone, endereco, cidade').eq('id', req.params.slug).single();
+      .select('id, nome, slug, telefone, endereco, cidade')
+      .or(`id.eq.${req.params.slug},slug.eq.${req.params.slug}`).single();
     if (error || !data) return res.status(404).json({ error: 'Salão não encontrado' });
     res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── AVALIAÇÃO DO CLIENTE (avaliar.html) ───────────────
+// Busca o contexto do atendimento pra montar a tela de avaliação (nome do
+// salão, serviço, profissional) — não exige login, é o cliente acessando
+// pelo link que recebe depois do atendimento.
+app.get('/api/publico/avaliacao/:agendamentoId', async (req, res) => {
+  try {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select(`id, status, salao_id,
+               clientes(nome),
+               profissionais(nome),
+               agendamento_servicos(servicos(nome))`)
+      .eq('id', req.params.agendamentoId).single();
+    if (!ag) return res.status(404).json({ error: 'Atendimento não encontrado' });
+
+    const { data: salao } = await supabase.from('saloes')
+      .select('nome, configuracoes').eq('id', ag.salao_id).single();
+
+    const { data: avaliacaoExistente } = await supabase.from('avaliacoes')
+      .select('id').eq('agendamento_id', req.params.agendamentoId).maybeSingle();
+
+    res.json({
+      salao_nome: salao?.nome || '',
+      cliente_nome: ag.clientes?.nome || '',
+      profissional_nome: ag.profissionais?.nome || '',
+      servicos: (ag.agendamento_servicos || []).map(s => s.servicos?.nome).filter(Boolean),
+      google_review_link: salao?.configuracoes?.google_review_link || null,
+      ja_avaliado: !!avaliacaoExistente
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Registra a avaliação — nota de 1 a 5 + comentário opcional. Uma nota por
+// atendimento (não deixa avaliar o mesmo duas vezes, evita gente girando o
+// link e inflando as próprias notas).
+app.post('/api/publico/avaliacao/:agendamentoId', async (req, res) => {
+  const { nota, comentario } = req.body;
+  const notaNum = Number(nota);
+  if (!notaNum || notaNum < 1 || notaNum > 5) {
+    return res.status(422).json({ error: 'Informe uma nota de 1 a 5' });
+  }
+  try {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select('id, salao_id, cliente_id, profissional_id').eq('id', req.params.agendamentoId).single();
+    if (!ag) return res.status(404).json({ error: 'Atendimento não encontrado' });
+
+    const { data: existente } = await supabase.from('avaliacoes')
+      .select('id').eq('agendamento_id', req.params.agendamentoId).maybeSingle();
+    if (existente) return res.status(409).json({ error: 'Esse atendimento já foi avaliado' });
+
+    await supabase.from('avaliacoes').insert({
+      salao_id: ag.salao_id, cliente_id: ag.cliente_id, profissional_id: ag.profissional_id,
+      agendamento_id: ag.id, nota: notaNum, comentario: comentario || null
+    });
+    res.status(201).json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2921,6 +3029,13 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
       var fimMin = inicioMin + (ag.duracao_min || 60);
       return [inicioMin, fimMin];
     });
+
+    // Horário de almoço do profissional também conta como bloqueado —
+    // ninguém consegue agendar em cima disso
+    const { data: profDados } = await supabase.from('profissionais')
+      .select('horario_almoco_inicio, horario_almoco_fim').eq('id', profissional_id).single();
+    const janelaAlmoco = janelaAlmocoMinutos(profDados);
+    if (janelaAlmoco) ocupadosMin.push(janelaAlmoco);
 
     // Gera slots de horário dentro do funcionamento configurado, intervalos de 30min
     const slots = [];
