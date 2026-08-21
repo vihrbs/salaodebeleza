@@ -489,7 +489,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v3.9.1-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.6.0-frontend</div>
       </div>
     </div>
 
@@ -747,6 +747,15 @@ select.fc option{background:var(--bg2)}
           <input class="fc fg" id="cfg-google-review" placeholder="https://g.page/r/.../review"/>
           <div style="font-size:.68rem;color:var(--t3);margin-top:-8px;margin-bottom:12px">Depois que o cliente avalia bem dentro do app, a gente já convida ele a repetir a nota no Google. <a href="https://support.google.com/business/answer/7035772" target="_blank" style="color:var(--ac)">Como pegar esse link</a></div>
           <button class="btn btnp" onclick="saveConfig()">Salvar Alterações</button>
+        </div>
+        <div class="card">
+          <div class="ct">📸 Fotos do Salão</div>
+          <div style="font-size:.72rem;color:var(--t3);margin-bottom:12px">Aparecem pros clientes na tela de agendamento. Até 12 fotos, 8MB cada.</div>
+          <input type="file" id="cfg-foto-input" accept="image/*" style="display:none" onchange="enviarFotoSalao(this)"/>
+          <button class="btn btns" style="width:100%;margin-bottom:12px" onclick="document.getElementById('cfg-foto-input').click()">+ Adicionar Foto</button>
+          <div id="cfg-fotos-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+            <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
+          </div>
         </div>
         <div class="card" id="card-api-integracao">
           <div class="ct">API & Integração</div>
@@ -3411,6 +3420,49 @@ function saveHorarioFuncionamento() {
   .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Horário'; });
 }
 
+// ── FOTOS DO SALÃO ────────────────────────────────────
+function renderFotosGrid(fotos) {
+  var grid = document.getElementById('cfg-fotos-grid');
+  if (!grid) return;
+  if (!fotos.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;font-size:.78rem;color:var(--t3);text-align:center;padding:16px 0">Nenhuma foto ainda. Adiciona a fachada, o interior, os cortes que vocês fazem...</div>';
+    return;
+  }
+  grid.innerHTML = fotos.map(function(f, i){
+    return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--bd)">' +
+      '<img src="' + escAttr(f.url) + '" style="width:100%;height:100%;object-fit:cover" loading="lazy"/>' +
+      '<button onclick="removerFotoSalao(\'' + escAttr(f.caminho) + '\')" title="Remover" ' +
+      'style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.7rem;line-height:1">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+function enviarFotoSalao(inputEl) {
+  var arquivo = inputEl.files && inputEl.files[0];
+  if (!arquivo) return;
+  if (arquivo.size > 8 * 1024 * 1024) { toast('Imagem muito grande (máximo 8MB)','er'); inputEl.value=''; return; }
+
+  var leitor = new FileReader();
+  leitor.onload = function(){
+    apiFetch('/api/saloes/fotos', { method:'POST', body:{ imagem_base64: leitor.result, nome_arquivo: arquivo.name } })
+      .then(function(r){
+        toast('Foto adicionada! 📸','ok');
+        renderFotosGrid(r.fotos || []);
+      })
+      .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+      .finally(function(){ inputEl.value=''; });
+  };
+  leitor.onerror = function(){ toast('Erro ao ler o arquivo','er'); inputEl.value=''; };
+  leitor.readAsDataURL(arquivo);
+}
+
+function removerFotoSalao(caminho) {
+  if (!confirm('Remover essa foto?')) return;
+  apiFetch('/api/saloes/fotos', { method:'DELETE', body:{ caminho: caminho } })
+    .then(function(r){ toast('Foto removida','ok'); renderFotosGrid(r.fotos || []); })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+}
+
 function carregarHorarioFuncionamento() {
   apiFetch('/api/saloes/meu').then(function(r){
     if (!r) return;
@@ -3422,6 +3474,7 @@ function carregarHorarioFuncionamento() {
     if (document.getElementById('cfg-wpp') && !document.getElementById('cfg-wpp').value) document.getElementById('cfg-wpp').value = r.whatsapp || '';
     if (document.getElementById('cfg-email') && !document.getElementById('cfg-email').value) document.getElementById('cfg-email').value = r.email || '';
     if (document.getElementById('cfg-end') && !document.getElementById('cfg-end').value) document.getElementById('cfg-end').value = r.endereco || '';
+    renderFotosGrid(r.fotos || []);
 
     if (!r.configuracoes) return;
     var cfg = r.configuracoes;
@@ -3783,11 +3836,58 @@ function editPro(btn) {
   document.getElementById('epr-almoco-ini').value = p.horario_almoco_inicio || '';
   document.getElementById('epr-almoco-fim').value = p.horario_almoco_fim || '';
   document.getElementById('epr-cor').value = p.cor_agenda || '#6C63FF';
+  renderFotoProfissionalPreview(p.foto_url || null);
   // Marca cor selecionada
   document.querySelectorAll('#epr-cor-wrap div[data-cor]').forEach(function(el){
     el.style.border = el.dataset.cor === (p.cor_agenda||'#6C63FF') ? '3px solid '+el.dataset.cor : 'none';
   });
   openM('m-edit-pro');
+}
+
+function renderFotoProfissionalPreview(fotoUrl) {
+  var preview = document.getElementById('epr-foto-preview');
+  var btnRemover = document.getElementById('epr-foto-remover');
+  if (fotoUrl) {
+    preview.innerHTML = '<img src="' + fotoUrl + '" style="width:100%;height:100%;object-fit:cover"/>';
+    btnRemover.style.display = 'inline-block';
+  } else {
+    preview.innerHTML = '👤';
+    btnRemover.style.display = 'none';
+  }
+}
+
+function enviarFotoProfissional(inputEl) {
+  var id = document.getElementById('epr-id').value;
+  var arquivo = inputEl.files && inputEl.files[0];
+  if (!arquivo) return;
+  if (!id) { toast('Salva o profissional antes de adicionar foto','er'); inputEl.value=''; return; }
+  if (arquivo.size > 8 * 1024 * 1024) { toast('Imagem muito grande (máximo 8MB)','er'); inputEl.value=''; return; }
+
+  var leitor = new FileReader();
+  leitor.onload = function(){
+    apiFetch('/api/profissionais/' + id + '/foto', { method:'POST', body:{ imagem_base64: leitor.result } })
+      .then(function(r){
+        toast('Foto atualizada! 📸','ok');
+        renderFotoProfissionalPreview(r.foto_url);
+        loadPros(); fillSelects();
+      })
+      .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+      .finally(function(){ inputEl.value=''; });
+  };
+  leitor.onerror = function(){ toast('Erro ao ler o arquivo','er'); inputEl.value=''; };
+  leitor.readAsDataURL(arquivo);
+}
+
+function removerFotoProfissional() {
+  var id = document.getElementById('epr-id').value;
+  if (!id || !confirm('Remover a foto desse profissional?')) return;
+  apiFetch('/api/profissionais/' + id + '/foto', { method:'DELETE' })
+    .then(function(){
+      toast('Foto removida','ok');
+      renderFotoProfissionalPreview(null);
+      loadPros(); fillSelects();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 function updatePro() {
@@ -5438,6 +5538,12 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">Editar Profissional</span><button class="mx" onclick="closeM('m-edit-pro')">✕</button></div>
     <div class="mb">
       <input type="hidden" id="epr-id"/>
+      <div class="fg" style="text-align:center">
+        <div id="epr-foto-preview" style="width:80px;height:80px;border-radius:50%;margin:0 auto 10px;background:var(--bg3);border:1.5px solid var(--bd);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:1.6rem;color:var(--t3)">👤</div>
+        <input type="file" id="epr-foto-input" accept="image/*" style="display:none" onchange="enviarFotoProfissional(this)"/>
+        <button type="button" class="btn btns btnsm" onclick="document.getElementById('epr-foto-input').click()">📸 Trocar Foto</button>
+        <button type="button" class="btn btns btnsm" id="epr-foto-remover" style="display:none;color:var(--er)" onclick="removerFotoProfissional()">Remover Foto</button>
+      </div>
       <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="epr-n"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="epr-e"/></div></div>
       <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
       <div class="fg"><label class="fl">E-mail (opcional)</label><input class="fc" type="email" id="epr-email" placeholder="para@enviar.notificacoes.com"/>
