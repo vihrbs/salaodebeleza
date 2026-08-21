@@ -358,6 +358,11 @@ function init() {
   fetch(API + '/api/publico/salao/' + SALAO_ID)
     .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
     .then(function(salao){
+      // O link pode ter vindo com o nome legível do salão (slug) em vez do
+      // ID de verdade — a partir daqui já troca pro ID real, porque as
+      // outras rotas (serviços, profissionais, horários) só entendem o ID.
+      SALAO_ID = salao.id;
+
       document.getElementById('salon-name').textContent = salao.nome;
       document.getElementById('salon-sub').textContent = 'Agende seu horário em poucos cliques';
 
