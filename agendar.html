@@ -57,6 +57,17 @@ header{
 .salon-meta span{display:inline-flex; align-items:center; gap:4px}
 @keyframes riseIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)}}
 
+/* GALERIA DE FOTOS DO SALÃO */
+.galeria-scroll{
+  display:flex; gap:8px; overflow-x:auto; padding:2px 2px 20px;
+  scrollbar-width:none; opacity:0; animation:riseIn .6s ease-out .45s forwards;
+}
+.galeria-scroll::-webkit-scrollbar{display:none}
+.galeria-foto{
+  flex:0 0 auto; width:104px; height:104px; border-radius:var(--rs);
+  object-fit:cover; border:1px solid var(--line); cursor:pointer;
+}
+
 /* STEPS INDICATOR */
 .steps-ind{
   display:flex; align-items:center; justify-content:center;
@@ -231,6 +242,30 @@ header{
 .success-title{font-family:'Fraunces',serif; font-size:1.5rem; font-weight:600; margin-bottom:8px}
 .success-sub{font-size:.88rem; color:var(--muted); margin-bottom:24px; line-height:1.5}
 
+/* RECIBO DE CONFIRMAÇÃO */
+.recibo{
+  background:var(--paper); border:1.5px dashed var(--line2);
+  border-radius:var(--rs); padding:20px; text-align:left; margin-bottom:18px;
+  position:relative;
+}
+.recibo-codigo{
+  text-align:center; font-family:'Fraunces',serif; font-size:.68rem;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--accent);
+  padding-bottom:14px; margin-bottom:14px;
+  border-bottom:1.5px dashed var(--line2);
+}
+.recibo-codigo strong{display:block; font-size:1rem; letter-spacing:.06em; color:var(--accent-deep); margin-top:2px}
+.recibo-row{display:flex; justify-content:space-between; align-items:baseline; font-size:.84rem; padding:7px 0}
+.recibo-label{color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.02em}
+.recibo-val{font-weight:700; text-align:right}
+.recibo-perfuracao{
+  height:1px; margin:12px 0;
+  background-image:repeating-linear-gradient(90deg, var(--line2) 0 6px, transparent 6px 12px);
+}
+.recibo-total{display:flex; justify-content:space-between; align-items:baseline; padding-top:6px}
+.recibo-total .recibo-label{font-size:.78rem}
+.recibo-total .recibo-val{font-family:'Fraunces',serif; font-size:1.3rem; color:var(--accent-deep)}
+
 /* SKELETON LOADING */
 .skel{background:linear-gradient(90deg, var(--line) 25%, var(--line2) 37%, var(--line) 63%); background-size:400% 100%; animation:skelShine 1.4s ease infinite; border-radius:8px}
 @keyframes skelShine{0%{background-position:100% 50%} 100%{background-position:0 50%}}
@@ -275,6 +310,8 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     <div class="salon-meta" id="salon-meta"></div>
   </header>
 
+  <div class="galeria-scroll" id="galeria-fotos" style="display:none"></div>
+
   <div class="steps-ind" id="steps-ind">
     <div class="step-dot on" data-s="1"></div>
     <div class="step-dot" data-s="2"></div>
@@ -292,7 +329,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     </div>
   </div>
 
-  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a></footer>
+  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.6.0-agendar</div></footer>
 </div>
 
 <a id="wa-fab" class="wa-fab" style="display:none" target="_blank" title="Falar no WhatsApp">
@@ -366,14 +403,30 @@ function init() {
       document.getElementById('salon-name').textContent = salao.nome;
       document.getElementById('salon-sub').textContent = 'Agende seu horário em poucos cliques';
 
-      // Endereço/cidade, se o salão tiver preenchido
+      // Endereço/cidade, com link pro Google Maps — e horário de funcionamento,
+      // se o salão tiver preenchido cada um desses (ambos opcionais)
       var metaEl = document.getElementById('salon-meta');
       var partesMeta = [];
       if (salao.endereco || salao.cidade) {
         var local = [salao.endereco, salao.cidade].filter(Boolean).join(', ');
-        partesMeta.push('<span>📍 ' + local + '</span>');
+        var linkMaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(local);
+        partesMeta.push('<a href="' + linkMaps + '" target="_blank">📍 ' + local + '</a>');
+      }
+      var horarioAbre = salao.configuracoes && salao.configuracoes.horario_abre;
+      var horarioFecha = salao.configuracoes && salao.configuracoes.horario_fecha;
+      if (horarioAbre && horarioFecha) {
+        partesMeta.push('<span>🕒 ' + horarioAbre + ' às ' + horarioFecha + '</span>');
       }
       metaEl.innerHTML = partesMeta.join('');
+
+      // Galeria de fotos do salão — só aparece se tiver alguma cadastrada
+      if (salao.fotos && salao.fotos.length) {
+        var galeria = document.getElementById('galeria-fotos');
+        galeria.innerHTML = salao.fotos.map(function(f){
+          return '<img class="galeria-foto" src="' + f.url + '" alt="' + (salao.nome||'') + '" loading="lazy"/>';
+        }).join('');
+        galeria.style.display = 'flex';
+      }
 
       // Botão flutuante de WhatsApp, só aparece se o salão tiver telefone cadastrado
       if (salao.telefone) {
@@ -457,8 +510,13 @@ function renderProfissionais(list) {
     html += '<div class="pro-grid">';
     list.forEach(function(p){
       var cor = p.cor_agenda || '#9A5B3F';
+      // Foto de verdade se o profissional tiver, senão continua a
+      // bolinha colorida com a inicial (comportamento de antes preservado)
+      var avatar = p.foto_url
+        ? '<img class="pro-av" src="' + p.foto_url + '" alt="' + p.nome + '" style="object-fit:cover"/>'
+        : '<div class="pro-av" style="background:'+cor+'">' + p.nome[0].toUpperCase() + '</div>';
       html += '<div class="pro-item" onclick="selectProfissional(\''+p.id+'\')">' +
-        '<div class="pro-av" style="background:'+cor+'">' + p.nome[0].toUpperCase() + '</div>' +
+        avatar +
         '<div class="pro-name">' + p.nome + '</div>' +
         '<div class="pro-esp">' + (p.especialidade||'') + '</div></div>';
     });
@@ -653,6 +711,14 @@ function gerarLinkCalendario() {
   return URL.createObjectURL(blob);
 }
 
+// Gera um código curto e legível a partir do ID do agendamento — só
+// visual, pra dar aquela sensação de "número do pedido" de recibo de
+// verdade (não é um código de verificação real, é decorativo)
+function gerarCodigoConfirmacao(agendamentoId) {
+  if (!agendamentoId) return '——————';
+  return agendamentoId.replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
 function showSuccess(res) {
   STATE.agendamentoId = res.agendamento && res.agendamento.id;
   document.getElementById('steps-ind').style.display = 'none';
@@ -660,11 +726,17 @@ function showSuccess(res) {
   html += '<div class="success-icon">✓</div>';
   html += '<div class="success-title">Agendamento confirmado!</div>';
   html += '<div class="success-sub">Te esperamos em ' + formatData(STATE.data) + ' às ' + STATE.hora + ' para o seu ' + STATE.servico.nome.toLowerCase() + '.</div>';
-  html += '<div class="summary" style="text-align:left">';
-  html += '<div class="sum-row"><span class="sum-label">Serviço</span><span class="sum-val">' + STATE.servico.nome + '</span></div>';
-  html += '<div class="sum-row"><span class="sum-label">Profissional</span><span class="sum-val">' + STATE.profissional.nome + '</span></div>';
-  html += '<div class="sum-row"><span class="sum-label">Quando</span><span class="sum-val">' + formatData(STATE.data) + ', ' + STATE.hora + '</span></div>';
+
+  html += '<div class="recibo">';
+  html += '<div class="recibo-codigo">Código do agendamento<strong>' + gerarCodigoConfirmacao(STATE.agendamentoId) + '</strong></div>';
+  html += '<div class="recibo-row"><span class="recibo-label">Serviço</span><span class="recibo-val">' + STATE.servico.nome + '</span></div>';
+  html += '<div class="recibo-row"><span class="recibo-label">Profissional</span><span class="recibo-val">' + STATE.profissional.nome + '</span></div>';
+  html += '<div class="recibo-row"><span class="recibo-label">Data</span><span class="recibo-val">' + formatData(STATE.data) + '</span></div>';
+  html += '<div class="recibo-row"><span class="recibo-label">Horário</span><span class="recibo-val">' + STATE.hora + '</span></div>';
+  html += '<div class="recibo-perfuracao"></div>';
+  html += '<div class="recibo-total"><span class="recibo-label">Total</span><span class="recibo-val">R$ ' + Number(STATE.servico.preco).toFixed(2).replace('.',',') + '</span></div>';
   html += '</div>';
+
   html += '<a class="btn btn-outline" download="agendamento.ics" id="link-calendario" style="display:block;text-decoration:none;box-sizing:border-box">📅 Adicionar ao calendário</a>';
   html += '<button class="btn btn-primary" style="margin-top:10px" onclick="location.reload()">Fazer novo agendamento</button>';
   if (STATE.agendamentoId) {
