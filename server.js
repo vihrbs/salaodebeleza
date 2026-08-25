@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.6.2-corrige-comanda-errada' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.7.0-comissoes-periodo-customizado' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2405,17 +2405,26 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
     profissionais = profissionais.filter(p => p.id === filtroObrigatorio);
   }
 
-  // Aceita ?mes=2026-06 para navegar entre meses; padrão é o mês atual
-  let ano, mesNum;
-  if (req.query.mes && /^\d{4}-\d{2}$/.test(req.query.mes)) {
-    [ano, mesNum] = req.query.mes.split('-').map(Number);
+  // Aceita um período customizado (?data_inicio=X&data_fim=Y — pra fechar
+  // semanal, quinzenal, ou qualquer intervalo) OU o navegador por mês
+  // inteiro (?mes=2026-06, comportamento de antes). Sem nenhum dos dois,
+  // usa o mês atual como padrão.
+  let ini, fim;
+  if (req.query.data_inicio && req.query.data_fim) {
+    ini = req.query.data_inicio;
+    fim = req.query.data_fim;
   } else {
-    const now = new Date();
-    ano = now.getFullYear();
-    mesNum = now.getMonth() + 1;
+    let ano, mesNum;
+    if (req.query.mes && /^\d{4}-\d{2}$/.test(req.query.mes)) {
+      [ano, mesNum] = req.query.mes.split('-').map(Number);
+    } else {
+      const now = new Date();
+      ano = now.getFullYear();
+      mesNum = now.getMonth() + 1;
+    }
+    ini = `${ano}-${String(mesNum).padStart(2,'0')}-01`;
+    fim = new Date(ano, mesNum, 0).toISOString().split('T')[0];
   }
-  const ini = `${ano}-${String(mesNum).padStart(2,'0')}-01`;
-  const fim = new Date(ano, mesNum, 0).toISOString().split('T')[0];
 
   const resultado = await Promise.all(profissionais.map(async p => {
     // Verifica se este período já foi fechado/pago para este profissional
