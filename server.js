@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.6.1-corrige-link-por-nome' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.6.2-corrige-comanda-errada' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1332,6 +1332,11 @@ app.get('/api/agendamentos', auth, async (req, res) => {
 
   if (status)          q = q.eq('status', status);
   if (req.query.cliente_id) q = q.eq('cliente_id', req.query.cliente_id);
+  // Bug real corrigido: essa rota ignorava completamente o ?id=X — sempre
+  // devolvia a lista inteira do salão, e quem chamava pegava só o primeiro
+  // item (data_hora mais cedo), mostrando o cliente/valor ERRADO na tela de
+  // Concluir Atendimento (não o que a pessoa realmente clicou).
+  if (req.query.id) q = q.eq('id', req.query.id);
 
   const { data: rows, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
