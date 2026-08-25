@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.7.0-comissoes-periodo-customizado' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.7.1-corrige-duplicacao-periodo' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2427,11 +2427,14 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
   }
 
   const resultado = await Promise.all(profissionais.map(async p => {
-    // Verifica se este período já foi fechado/pago para este profissional
+    // Verifica se ESSE PERÍODO EXATO já foi fechado/pago (início E fim
+    // precisam bater — só o início não basta, senão "mês inteiro" que
+    // começa no mesmo dia 1 de uma "semana" já paga seria confundido com
+    // ela, escondendo o resto do mês que ainda está pendente)
     const { data: fechamento } = await supabase.from('fechamentos_comissao')
       .select('id, status, pago_em, total_comissao, total_bruto, total_servicos')
       .eq('salao_id', req.salao_id)
-      .eq('profissional_id', p.id).eq('periodo_inicio', ini).maybeSingle();
+      .eq('profissional_id', p.id).eq('periodo_inicio', ini).eq('periodo_fim', fim).maybeSingle();
 
     // Soma as parcelas de compras parceladas ainda pendentes desse profissional
     // (ex: produto que ele comprou parcelado) — pra ficar visível na hora de
@@ -2452,12 +2455,17 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
     }
 
     // Senão, calcula normalmente a partir dos agendamentos concluídos
-    const { data: svcs } = await supabase.from('agendamento_servicos')
+    const { data: svcsBrutos } = await supabase.from('agendamento_servicos')
       .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
       .eq('agendamentos.profissional_id', p.id)
       .eq('agendamentos.status', 'concluido')
       .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
       .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
+    // Mesma proteção contra período sobreposto que existe no fechamento de
+    // verdade — pra tela de visualização já mostrar o valor certo, sem
+    // contar de novo o que já foi pago num período anterior que se cruza
+    const periodosPagos = await periodosJaPagos(req.salao_id, p.id);
+    const svcs = (svcsBrutos || []).filter(sv => !servicoJaPago(sv.agendamentos.data_hora, periodosPagos));
     const total_bruto    = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
     const total_comissao = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
 
@@ -2465,10 +2473,11 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
     // porque são 100% dele, não fazem parte do cálculo normal de comissão
     // (que é uma % do serviço). Fica separado no fechamento de propósito,
     // pra ficar claro pro dono e pro profissional quanto foi cada coisa.
-    const { data: agsComCaixinha } = await supabase.from('agendamentos')
-      .select('caixinha_liquida')
+    const { data: agsComCaixinhaBrutos } = await supabase.from('agendamentos')
+      .select('data_hora, caixinha_liquida')
       .eq('profissional_id', p.id).eq('status', 'concluido').eq('salao_id', req.salao_id)
       .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
+    const agsComCaixinha = (agsComCaixinhaBrutos || []).filter(a => !servicoJaPago(a.data_hora, periodosPagos));
     const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
 
     return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao, total_caixinhas, fechamento, compras_pendentes_total };
@@ -2487,6 +2496,23 @@ async function podeFecharComissao(user) {
   return permissoes.includes('fechar_comissao');
 }
 
+// Protege contra pagar a mesma comissão duas vezes quando os períodos se
+// sobrepõem — por exemplo: fecha a "Semana atual" (dia 1 a 7), e depois
+// sem perceber fecha o "Mês atual" (dia 1 a 31), que inclui aquela mesma
+// semana. Sem essa checagem, os serviços da semana já paga entrariam de
+// novo no cálculo do mês, duplicando o valor pago ao profissional.
+async function periodosJaPagos(salaoId, profissionalId) {
+  const { data } = await supabase.from('fechamentos_comissao')
+    .select('periodo_inicio, periodo_fim')
+    .eq('salao_id', salaoId).eq('profissional_id', profissionalId).eq('status', 'pago');
+  return data || [];
+}
+
+function servicoJaPago(dataHoraISO, periodosPagos) {
+  const dataSimples = dataHoraISO.split('T')[0];
+  return periodosPagos.some(p => dataSimples >= p.periodo_inicio && dataSimples <= p.periodo_fim);
+}
+
 app.post('/api/comissoes/fechar', auth, async (req, res) => {
   const { profissional_id, periodo_inicio, periodo_fim } = req.body;
 
@@ -2501,12 +2527,19 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
   try {
     // Calcula os totais reais a partir dos agendamentos concluídos do período
     // (não confia em valor mandado pelo frontend — sempre recalcula no servidor)
-    const { data: svcs } = await supabase.from('agendamento_servicos')
+    const { data: svcsBrutos } = await supabase.from('agendamento_servicos')
       .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
       .eq('agendamentos.profissional_id', profissional_id)
       .eq('agendamentos.status', 'concluido')
       .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
       .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
+
+    // Tira do cálculo qualquer serviço cuja data já caiu num período
+    // ANTERIOR que já foi pago — evita pagar a mesma comissão duas vezes
+    // quando alguém fecha períodos que se sobrepõem (ex.: fechou a semana,
+    // depois fecha o mês inteiro por cima)
+    const periodosPagos = await periodosJaPagos(req.salao_id, profissional_id);
+    const svcs = (svcsBrutos || []).filter(sv => !servicoJaPago(sv.agendamentos.data_hora, periodosPagos));
 
     const total_servicos = svcs?.length || 0;
     const total_bruto     = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
@@ -2514,22 +2547,25 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 
     // Caixinhas (gorjetas) do período entram no valor pago também — são
     // 100% do profissional, então na hora de fechar/pagar precisam somar
-    // junto com a comissão normal dos serviços.
-    const { data: agsComCaixinha } = await supabase.from('agendamentos')
-      .select('caixinha_liquida')
+    // junto com a comissão normal dos serviços. Mesma proteção contra
+    // sobreposição de período aplicada aqui também.
+    const { data: agsComCaixintaBrutos } = await supabase.from('agendamentos')
+      .select('data_hora, caixinha_liquida')
       .eq('profissional_id', profissional_id).eq('status', 'concluido').eq('salao_id', req.salao_id)
       .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
+    const agsComCaixinha = (agsComCaixintaBrutos || []).filter(a => !servicoJaPago(a.data_hora, periodosPagos));
     const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
     const total_comissao = total_comissao_servicos + total_caixinhas;
 
     if (total_servicos === 0) {
-      return res.status(400).json({ error: 'Nenhum serviço concluído neste período para fechar.' });
+      return res.status(400).json({ error: 'Nenhum serviço novo pra fechar neste período (pode já ter sido pago num fechamento anterior que se sobrepõe a essas datas).' });
     }
 
-    // Verifica se já existe fechamento para este período
+    // Verifica se já existe fechamento pra ESSE PERÍODO EXATO (início E fim
+    // precisam bater — mesma correção da tela de visualização)
     const { data: existing } = await supabase.from('fechamentos_comissao')
       .select('id, status').eq('salao_id', req.salao_id)
-      .eq('profissional_id', profissional_id).eq('periodo_inicio', ini).maybeSingle();
+      .eq('profissional_id', profissional_id).eq('periodo_inicio', ini).eq('periodo_fim', fim).maybeSingle();
 
     if (existing && existing.status === 'pago') {
       return res.status(409).json({ error: 'Este período já foi fechado e pago anteriormente.' });
