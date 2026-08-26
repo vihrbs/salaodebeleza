@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.9.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.10.0-frontend</div>
       </div>
     </div>
 
@@ -749,6 +749,7 @@ select.fc option{background:var(--bg2)}
         <div><label class="fl" style="margin-bottom:2px">De</label><input type="date" class="fc" id="com-data-ini" onchange="loadComPeriodoCustom()" style="width:auto"/></div>
         <div><label class="fl" style="margin-bottom:2px">Até</label><input type="date" class="fc" id="com-data-fim" onchange="loadComPeriodoCustom()" style="width:auto"/></div>
         <button class="btn btnp" style="margin-left:auto" onclick="abrirFecharComissoesPeriodo()">💸 Fechar Comissões</button>
+        <button class="btn btns" onclick="abrirHistoricoComissoes()">📜 Histórico de Pagamentos</button>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
         <button class="btn btns btnsm" onclick="aplicarPeriodoComRapido('semana')">Semana atual</button>
@@ -2745,6 +2746,54 @@ function fecharCom(){
     }
     loadCom();
   });
+}
+
+// ── HISTÓRICO DE COMISSÕES JÁ PAGAS ──────────────────
+function abrirHistoricoComissoes() {
+  var sel = document.getElementById('hcom-filtro-prof');
+  sel.innerHTML = '<option value="">Todos os profissionais</option>' +
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
+  openM('m-historico-com');
+  loadHistoricoComissoes();
+}
+
+function loadHistoricoComissoes() {
+  var filtroProf = document.getElementById('hcom-filtro-prof').value;
+  document.getElementById('hcom-lista').innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  var url = '/api/comissoes/historico' + (filtroProf ? '?profissional_id=' + filtroProf : '');
+  apiFetch(url).then(function(r){
+    renderHistoricoComissoes(r || { historico: [], total_geral_pago: 0, total_pagamentos: 0 });
+  }).catch(function(){
+    document.getElementById('hcom-lista').innerHTML = '<div class="empty">Erro ao carregar o histórico.</div>';
+  });
+}
+
+function renderHistoricoComissoes(dados) {
+  var lista = dados.historico || [];
+  document.getElementById('hcom-resumo').innerHTML =
+    '<strong>' + brl(dados.total_geral_pago) + '</strong> pagos ao todo, em <strong>' + dados.total_pagamentos + '</strong> ' + (dados.total_pagamentos === 1 ? 'pagamento' : 'pagamentos') + '.';
+
+  var container = document.getElementById('hcom-lista');
+  if (!lista.length) {
+    container.innerHTML = '<div class="empty">Nenhum pagamento de comissão registrado ainda.</div>';
+    return;
+  }
+
+  container.innerHTML = lista.map(function(h){
+    var dataPagamento = h.pago_em ? new Date(h.pago_em).toLocaleDateString('pt-BR') : '—';
+    var detalhes = [];
+    if (h.total_caixinhas > 0) detalhes.push('inclui ' + brl(h.total_caixinhas) + ' de caixinha');
+    if (h.valor_parcelas_descontado > 0) detalhes.push('descontou ' + brl(h.valor_parcelas_descontado) + ' de compra pendente');
+    return '<div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--bd2)">' +
+      '<div class="pro-av" style="width:36px;height:36px;font-size:.8rem;background:' + (h.profissional_cor||'#9A5B3F') + '">' + esc((h.profissional_nome||'?')[0]) + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:700;font-size:.84rem">' + esc(h.profissional_nome) + '</div>' +
+        '<div style="font-size:.72rem;color:var(--t3)">' + fmtDataCurta(h.periodo_inicio) + ' a ' + fmtDataCurta(h.periodo_fim) + ' · pago em ' + dataPagamento + '</div>' +
+        (detalhes.length ? '<div style="font-size:.68rem;color:var(--t3)">' + detalhes.join(' · ') + '</div>' : '') +
+      '</div>' +
+      '<strong style="font-size:.92rem;color:var(--ac)">' + brl(h.total_comissao) + '</strong>' +
+    '</div>';
+  }).join('');
 }
 
 // ── PROFISSIONAIS ───────────────────────────────────────
@@ -5939,6 +5988,20 @@ function dispensarBannerPWA() {
       <div id="fcom-t"></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-fcom')">Cancelar</button><button class="btn btnp" onclick="fecharCom()">Confirmar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-historico-com">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">📜 Histórico de Pagamentos</span><button class="mx" onclick="closeM('m-historico-com')">✕</button></div>
+    <div class="mb">
+      <select class="fc" id="hcom-filtro-prof" onchange="loadHistoricoComissoes()" style="margin-bottom:12px">
+        <option value="">Todos os profissionais</option>
+      </select>
+      <div id="hcom-resumo" style="background:var(--bg3);border-radius:var(--rs);padding:10px 12px;margin-bottom:12px;font-size:.82rem"></div>
+      <div id="hcom-lista"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-historico-com')">Fechar</button></div>
   </div>
 </div>
 
