@@ -466,6 +466,7 @@ select.fc option{background:var(--bg2)}
         <button class="sb-item on" data-page="dashboard" onclick="nav('dashboard',this)"><span class="sb-ic">🏠</span>Dashboard</button>
         <button class="sb-item" data-page="agenda" onclick="nav('agenda',this)"><span class="sb-ic">📅</span>Agenda<span class="sb-badge" id="nbag" style="display:none">0</span></button>
         <button class="sb-item" data-page="comandas" onclick="nav('comandas',this)"><span class="sb-ic">🧾</span>Comandas</button>
+        <button class="sb-item" data-page="venda-avulsa" onclick="nav('venda-avulsa',this)"><span class="sb-ic">🛒</span>Venda Avulsa</button>
         <button class="sb-item" data-page="clientes" onclick="nav('clientes',this)"><span class="sb-ic">👥</span>Clientes</button>
         <div class="sb-section">Financeiro</div>
         <button class="sb-item" data-page="fiado" onclick="nav('fiado',this)"><span class="sb-ic">💳</span>Fiado<span class="sb-badge" id="nbfiado" style="display:none">0</span></button>
@@ -489,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.7.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.9.0-frontend</div>
       </div>
     </div>
 
@@ -610,6 +611,69 @@ select.fc option{background:var(--bg2)}
       </div>
       <div id="cmd-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
         <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
+      </div>
+    </div>
+
+    <!-- VENDA AVULSA -->
+    <div class="page" id="page-venda-avulsa">
+      <div class="card" style="max-width:620px">
+        <div class="ct">🛒 Venda Avulsa</div>
+        <div style="font-size:.74rem;color:var(--t3);margin-bottom:14px">Pra quando não precisa agendar antes — já registra e conclui na hora.</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:18px">
+          <button class="btn btnp btnsm" id="va-tab-cliente" style="flex:1" onclick="alternarTipoVendaAvulsa('cliente')">👤 Vender pra Cliente</button>
+          <button class="btn btns btnsm" id="va-tab-profissional" style="flex:1" onclick="alternarTipoVendaAvulsa('profissional')">✂️ Vender pra Profissional</button>
+        </div>
+
+        <!-- Venda pra Cliente -->
+        <div id="va-secao-cliente">
+          <div class="fg" style="position:relative">
+            <label class="fl">Cliente*</label>
+            <input class="fc" id="va-cli-busca" placeholder="🔍 Buscar por nome ou telefone..." autocomplete="off"
+              oninput="filtrarClientesVendaAvulsa(this.value)" onfocus="filtrarClientesVendaAvulsa(this.value)"
+              onblur="setTimeout(function(){ var r=document.getElementById('va-cli-resultados'); if(r) r.style.display='none'; }, 150)"/>
+            <input type="hidden" id="va-cli-id"/>
+            <div id="va-cli-resultados" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rs);max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)"></div>
+          </div>
+          <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="va-prof"><option value="">Selecionar...</option></select></div>
+
+          <div class="fg">
+            <label class="fl">Serviços (opcional)</label>
+            <input class="fc" id="va-svc-busca" placeholder="🔍 Buscar serviço..." oninput="filtrarServicosVendaAvulsa(this.value)" style="margin-bottom:8px"/>
+            <div id="va-svcs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+
+          <div class="fg">
+            <label class="fl">Produtos (opcional)</label>
+            <select class="fc" id="va-produto-select" onchange="adicionarProdutoVendaAvulsa()"><option value="">+ Adicionar produto do estoque...</option></select>
+            <div id="va-produtos-lista" style="margin-top:8px"></div>
+          </div>
+
+          <div class="fg">
+            <label class="fl">Forma de pagamento</label>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="va-fpg-options">
+              <button type="button" class="fpg-btn" data-val="PIX" onclick="selecionarFpgVendaAvulsa(this)">💠 PIX</button>
+              <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpgVendaAvulsa(this)">💵 Dinheiro</button>
+              <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpgVendaAvulsa(this)">💳 Débito</button>
+              <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpgVendaAvulsa(this)">💳 Crédito</button>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px dashed var(--bd);margin-top:6px">
+            <span style="font-size:.85rem;color:var(--t3)">Total</span>
+            <strong style="font-size:1.3rem" id="va-total">R$ 0,00</strong>
+          </div>
+          <button class="btn btnp" id="va-btn-confirmar" onclick="confirmarVendaAvulsa()">Confirmar Venda ✅</button>
+        </div>
+
+        <!-- Venda pra Profissional -->
+        <div id="va-secao-profissional" style="display:none">
+          <div class="fg"><label class="fl">Profissional*</label>
+            <select class="fc" id="va-prof-comprador"><option value="">Selecionar...</option></select>
+          </div>
+          <div style="font-size:.72rem;color:var(--t3);margin-bottom:14px">Vai abrir a venda de produto pro profissional — pode ser à vista (1 parcela) ou parcelado, e já entra como débito que dá pra descontar da comissão dele depois.</div>
+          <button class="btn btnp" onclick="continuarVendaAvulsaProfissional()">Continuar 🛒</button>
+        </div>
       </div>
     </div>
 
@@ -1198,7 +1262,7 @@ function nav(page, el) {
   // "Fiado" usa a MESMA permissão de "Financeiro" (não criei uma permissão
   // separada só pra ela) — precisa mapear aqui pra bater com o que o
   // backend já exige em /api/financeiro/fiado.
-  var moduloPermissaoNecessaria = (page === 'fiado') ? 'financeiro' : (page === 'comandas') ? 'agenda' : page;
+  var moduloPermissaoNecessaria = (page === 'fiado') ? 'financeiro' : (page === 'comandas' || page === 'venda-avulsa') ? 'agenda' : page;
   if (USER_PERFIL !== 'admin' && MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) >= 0 && USER_PERMISSOES.indexOf(moduloPermissaoNecessaria) < 0) {
     toast('Você não tem permissão para acessar essa área. Fale com o administrador.', 'er');
     return;
@@ -1218,13 +1282,14 @@ function nav(page, el) {
   });
 
   // Título da topbar
-  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',comandas:'Comandas',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
+  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',comandas:'Comandas','venda-avulsa':'Venda Avulsa',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
   var tbTitle = document.getElementById('tb-page-title');
   if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
 
   // Ações especiais por página
   if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
   if (page==='comandas') { loadComandas(); }
+  if (page==='venda-avulsa') { carregarPaginaVendaAvulsa(); }
 
   // Reavalia as sombras de rolagem das tabelas da página que acabou de abrir
   // (pega o caso de conteúdo já carregado antes, em cache)
@@ -2557,10 +2622,10 @@ function renderCom(list) {
   document.getElementById('com-lst').innerHTML = list.map(function(p){
     var v = valoresExibir(p);
     var totalAPagar = v.comissao + v.caixinhas;
+    var comprasPendentes = p.compras_pendentes_total || 0;
     var acaoBtn = v.foiPago
       ? '<button class="btnic btn btnsm" style="color:var(--t3)" data-fid="'+p.fechamento.id+'" data-nome="'+escAttr(p.nome)+'" onclick="reabrirFechamento(this.dataset.fid,this.dataset.nome)" title="Reabrir caso tenha pago por engano">↩️</button>'
-      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + escAttr(p.nome) + '\',' + totalAPagar + ')">Pagar ' + brl(totalAPagar) + '</button>';
-    var comprasPendentes = p.compras_pendentes_total || 0;
+      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + escAttr(p.nome) + '\',' + totalAPagar + ',' + comprasPendentes + ')">Pagar ' + brl(totalAPagar) + '</button>';
     var avisoCompras = comprasPendentes > 0
       ? '<div style="font-size:.68rem;color:var(--warn);margin-top:2px;cursor:pointer" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')" title="Ver e quitar parcelas">🛒 ' + brl(comprasPendentes) + ' em compras pendentes — clique pra descontar</div>'
       : '';
@@ -2586,15 +2651,65 @@ function renderCom(list) {
     '</tbody></table>';
 }
 
-function pagarCom(id, nome, val) {
+var PAGAR_COM_ESTADO = null; // guarda os dados do pagamento em andamento nesse modal
+
+function pagarCom(id, nome, val, comprasPendentes) {
+  PAGAR_COM_ESTADO = { id: id, nome: nome, valorBruto: val, comprasPendentes: comprasPendentes || 0 };
   var periodoTexto = fmtDataCurta(COM_PERIODO_ATUAL.inicio) + ' a ' + fmtDataCurta(COM_PERIODO_ATUAL.fim);
-  if (!confirm('Confirmar pagamento de ' + brl(val) + ' para ' + nome + ' — período ' + periodoTexto + '?\n\nEsta ação não pode ser desfeita.')) return;
+
+  document.getElementById('pagar-com-info').innerHTML =
+    '<div style="font-size:.85rem"><strong>' + esc(nome) + '</strong></div>' +
+    '<div style="font-size:.76rem;color:var(--t3);margin-bottom:10px">Período: ' + periodoTexto + '</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:.84rem"><span>Comissão do período</span><strong>' + brl(val) + '</strong></div>';
+
+  var wrapParcela = document.getElementById('pagar-com-parcela-wrap');
+  var chk = document.getElementById('pagar-com-descontar');
+  if (comprasPendentes > 0) {
+    wrapParcela.style.display = 'block';
+    document.getElementById('pagar-com-parcela-texto').textContent =
+      'Descontar ' + brl(comprasPendentes) + ' de compras pendentes desse pagamento?';
+    chk.checked = false;
+    chk.onchange = atualizarValorFinalPagarCom;
+  } else {
+    wrapParcela.style.display = 'none';
+  }
+  atualizarValorFinalPagarCom();
+  openM('m-pagar-com');
+}
+
+function atualizarValorFinalPagarCom() {
+  if (!PAGAR_COM_ESTADO) return;
+  var descontar = document.getElementById('pagar-com-descontar').checked;
+  var valorFinal = descontar
+    ? Math.max(0, PAGAR_COM_ESTADO.valorBruto - PAGAR_COM_ESTADO.comprasPendentes)
+    : PAGAR_COM_ESTADO.valorBruto;
+  var linhaDesconto = descontar
+    ? '<div style="display:flex;justify-content:space-between;font-size:.84rem;color:var(--er)"><span>Desconto de compras</span><strong>- ' + brl(Math.min(PAGAR_COM_ESTADO.comprasPendentes, PAGAR_COM_ESTADO.valorBruto)) + '</strong></div>'
+    : '';
+  document.getElementById('pagar-com-valor-final').innerHTML =
+    linhaDesconto +
+    '<div style="display:flex;justify-content:space-between;font-size:1.05rem;font-weight:800;margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd)"><span>Total a pagar</span><span>' + brl(valorFinal) + '</span></div>';
+}
+
+function confirmarPagamentoCom() {
+  if (!PAGAR_COM_ESTADO) return;
+  var descontar = document.getElementById('pagar-com-descontar').checked;
+  var btn = document.getElementById('pagar-com-btn');
+  btn.disabled = true; btn.textContent = 'Salvando...';
   apiFetch('/api/comissoes/fechar',{method:'POST',body:{
-    profissional_id:id,
-    periodo_inicio: COM_PERIODO_ATUAL.inicio, periodo_fim: COM_PERIODO_ATUAL.fim
+    profissional_id: PAGAR_COM_ESTADO.id,
+    periodo_inicio: COM_PERIODO_ATUAL.inicio, periodo_fim: COM_PERIODO_ATUAL.fim,
+    descontar_parcelas: descontar
   }})
-  .then(function(){ toast('Comissão de '+nome+' paga e zerada! ✅','ok'); loadCom(); })
-  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+  .then(function(r){
+    closeM('m-pagar-com');
+    var msg = 'Comissão de ' + PAGAR_COM_ESTADO.nome + ' paga! ✅';
+    if (r && r.valor_parcelas_descontado > 0) msg += ' (' + brl(r.valor_parcelas_descontado) + ' de compra descontado)';
+    toast(msg, 'ok');
+    loadCom();
+  })
+  .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Pagamento'; });
 }
 
 // Abre o modal de fechar comissões — a tabela (fcom-t) já vem preenchida
@@ -3098,6 +3213,204 @@ function selecionarClienteAgendamento(id, nome) {
   resultados.style.display = 'none';
   resultados.innerHTML = '';
   atualizarPacotesDisponiveis();
+}
+
+// ── VENDA AVULSA ────────────────────────────────────
+var VENDA_AVULSA_PRODUTOS = []; // [{produto_id, nome, quantidade, preco_unit}]
+
+function carregarPaginaVendaAvulsa() {
+  alternarTipoVendaAvulsa('cliente');
+  document.getElementById('va-cli-busca').value = '';
+  document.getElementById('va-cli-id').value = '';
+  document.getElementById('va-svc-busca').value = '';
+  VENDA_AVULSA_PRODUTOS = [];
+  renderProdutosVendaAvulsa();
+  document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+
+  var selProf = document.getElementById('va-prof');
+  var selProfComprador = document.getElementById('va-prof-comprador');
+  var optsHtml = '<option value="">Selecionar...</option>' +
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
+  if (selProf) selProf.innerHTML = optsHtml;
+  if (selProfComprador) selProfComprador.innerHTML = optsHtml;
+
+  var svcsWrap = document.getElementById('va-svcs');
+  if (svcsWrap) {
+    svcsWrap.innerHTML = (SVCS || []).map(function(s){
+      return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');recalcularTotalVendaAvulsa()">' + esc(s.nome) + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
+    }).join('');
+  }
+
+  apiFetch('/api/estoque').then(function(r){
+    window._estoqueCache = r || [];
+    var sel = document.getElementById('va-produto-select');
+    if (sel) {
+      sel.innerHTML = '<option value="">+ Adicionar produto do estoque...</option>' +
+        window._estoqueCache.filter(function(p){ return p.qtd_atual > 0; })
+          .map(function(p){ return '<option value="' + p.id + '" data-preco="' + (p.preco_venda||0) + '" data-nome="' + escAttr(p.nome) + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+    }
+  }).catch(function(){});
+
+  recalcularTotalVendaAvulsa();
+}
+
+function alternarTipoVendaAvulsa(tipo) {
+  var ehCliente = tipo === 'cliente';
+  document.getElementById('va-secao-cliente').style.display = ehCliente ? 'block' : 'none';
+  document.getElementById('va-secao-profissional').style.display = ehCliente ? 'none' : 'block';
+  document.getElementById('va-tab-cliente').className = 'btn btnsm ' + (ehCliente ? 'btnp' : 'btns');
+  document.getElementById('va-tab-profissional').className = 'btn btnsm ' + (ehCliente ? 'btns' : 'btnp');
+}
+
+// Cliente — busca ao vivo no servidor, mesmo padrão do Novo Agendamento
+var TIMER_BUSCA_CLIENTE_VENDA_AVULSA = null;
+function filtrarClientesVendaAvulsa(termo) {
+  clearTimeout(TIMER_BUSCA_CLIENTE_VENDA_AVULSA);
+  var termoNorm = (termo || '').trim();
+  var resultados = document.getElementById('va-cli-resultados');
+  if (!resultados) return;
+  if (!termoNorm) { resultados.style.display = 'none'; resultados.innerHTML = ''; return; }
+
+  TIMER_BUSCA_CLIENTE_VENDA_AVULSA = setTimeout(function() {
+    apiFetch('/api/clientes?q=' + encodeURIComponent(termoNorm) + '&limit=30')
+      .then(function(r) {
+        var lista = (r && r.data) || (Array.isArray(r) ? r : []);
+        renderResultadosClienteVendaAvulsa(lista);
+      })
+      .catch(function() {
+        resultados.innerHTML = '<div style="padding:12px;font-size:.8rem;color:var(--er)">Erro ao buscar. Tenta de novo.</div>';
+        resultados.style.display = 'block';
+      });
+  }, 300);
+}
+
+function renderResultadosClienteVendaAvulsa(lista) {
+  var resultados = document.getElementById('va-cli-resultados');
+  if (!resultados) return;
+  if (!lista.length) {
+    resultados.innerHTML = '<div style="padding:12px;font-size:.8rem;color:var(--t3)">Nenhum cliente encontrado.</div>';
+    resultados.style.display = 'block';
+    return;
+  }
+  resultados.innerHTML = lista.map(function(c) {
+    return '<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bd2)" ' +
+      'onmousedown="selecionarClienteVendaAvulsa(\'' + c.id + '\',\'' + escAttr(c.nome) + '\')">' +
+      '<div style="font-weight:600;font-size:.84rem">' + esc(c.nome) + '</div>' +
+      (c.telefone ? '<div style="font-size:.72rem;color:var(--t3)">' + esc(c.telefone) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  resultados.style.display = 'block';
+}
+
+function selecionarClienteVendaAvulsa(id, nome) {
+  document.getElementById('va-cli-id').value = id;
+  document.getElementById('va-cli-busca').value = nome;
+  var resultados = document.getElementById('va-cli-resultados');
+  resultados.style.display = 'none';
+  resultados.innerHTML = '';
+}
+
+function filtrarServicosVendaAvulsa(termo) {
+  var termoNorm = (termo || '').trim().toLowerCase();
+  document.querySelectorAll('#va-svcs .svc-pill').forEach(function(pill) {
+    var nome = (pill.textContent || '').toLowerCase();
+    pill.style.display = (!termoNorm || nome.indexOf(termoNorm) >= 0) ? '' : 'none';
+  });
+}
+
+function adicionarProdutoVendaAvulsa() {
+  var sel = document.getElementById('va-produto-select');
+  var opcao = sel.options[sel.selectedIndex];
+  var id = sel.value;
+  if (!id) return;
+  if (VENDA_AVULSA_PRODUTOS.some(function(p){ return p.produto_id === id; })) {
+    toast('Esse produto já foi adicionado — ajusta a quantidade na lista','inf');
+    sel.value = '';
+    return;
+  }
+  VENDA_AVULSA_PRODUTOS.push({
+    produto_id: id, nome: opcao.dataset.nome, quantidade: 1, preco_unit: Number(opcao.dataset.preco || 0)
+  });
+  sel.value = '';
+  renderProdutosVendaAvulsa();
+  recalcularTotalVendaAvulsa();
+}
+
+function removerProdutoVendaAvulsa(produtoId) {
+  VENDA_AVULSA_PRODUTOS = VENDA_AVULSA_PRODUTOS.filter(function(p){ return p.produto_id !== produtoId; });
+  renderProdutosVendaAvulsa();
+  recalcularTotalVendaAvulsa();
+}
+
+function atualizarQtdProdutoVendaAvulsa(produtoId, novaQtd) {
+  var item = VENDA_AVULSA_PRODUTOS.find(function(p){ return p.produto_id === produtoId; });
+  if (item) item.quantidade = Math.max(1, parseInt(novaQtd) || 1);
+  recalcularTotalVendaAvulsa();
+}
+
+function renderProdutosVendaAvulsa() {
+  var wrap = document.getElementById('va-produtos-lista');
+  if (!wrap) return;
+  wrap.innerHTML = VENDA_AVULSA_PRODUTOS.map(function(p){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
+      '<span style="flex:1">' + esc(p.nome) + '</span>' +
+      '<input type="number" min="1" value="' + p.quantidade + '" style="width:52px;padding:4px 6px;font-size:.78rem" class="fc" onchange="atualizarQtdProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
+      '<strong style="min-width:60px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoVendaAvulsa(\'' + p.produto_id + '\')">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+function selecionarFpgVendaAvulsa(btn) {
+  document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+}
+
+function recalcularTotalVendaAvulsa() {
+  var totalServicos = 0;
+  document.querySelectorAll('#va-svcs .svc-pill.on').forEach(function(pill){
+    totalServicos += Number(pill.dataset.preco || 0);
+  });
+  var totalProdutos = VENDA_AVULSA_PRODUTOS.reduce(function(s, p){ return s + (p.preco_unit * p.quantidade); }, 0);
+  var totalEl = document.getElementById('va-total');
+  if (totalEl) totalEl.textContent = brl(totalServicos + totalProdutos);
+}
+
+function confirmarVendaAvulsa() {
+  var clienteId = document.getElementById('va-cli-id').value;
+  var profId = document.getElementById('va-prof').value;
+  if (!clienteId) { toast('Selecione o cliente','er'); return; }
+  if (!profId) { toast('Selecione o profissional','er'); return; }
+
+  var servicos = Array.from(document.querySelectorAll('#va-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
+  var produtos = VENDA_AVULSA_PRODUTOS.map(function(p){ return { produto_id: p.produto_id, quantidade: p.quantidade, valor: p.preco_unit * p.quantidade }; });
+  if (!servicos.length && !produtos.length) { toast('Selecione ao menos um serviço ou produto','er'); return; }
+
+  var fpgBtn = document.querySelector('#va-fpg-options .fpg-btn.on');
+  if (!fpgBtn) { toast('Selecione a forma de pagamento','er'); return; }
+
+  var btn = document.getElementById('va-btn-confirmar');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+
+  apiFetch('/api/vendas-avulsas', { method: 'POST', body: {
+    cliente_id: clienteId, profissional_id: profId, servicos: servicos, produtos: produtos,
+    forma_pgto: fpgBtn.dataset.val, pago: true
+  }})
+    .then(function(r){
+      toast('Venda registrada! ✅ Total: ' + brl(r.valor_total), 'ok');
+      carregarPaginaVendaAvulsa();
+      loadDashTl(); loadKPIs(); loadEst();
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message || 'tente novamente'), 'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda ✅'; });
+}
+
+function continuarVendaAvulsaProfissional() {
+  var sel = document.getElementById('va-prof-comprador');
+  var profId = sel.value;
+  if (!profId) { toast('Selecione o profissional','er'); return; }
+  var profNome = sel.options[sel.selectedIndex].textContent;
+  abrirVendaParcelada(profId, profNome);
 }
 
 function filtrarServicosAgendamento(termo) {
@@ -4849,7 +5162,7 @@ function aplicarPermissoes() {
       // "Fiado" usa a mesma permissão de "Financeiro" (não existe uma
       // permissão separada só pra ela) — sem esse mapeamento, o item nunca
       // seria escondido de quem não tem acesso a financeiro.
-      var moduloPermissaoNecessaria = (pagina === 'fiado') ? 'financeiro' : (pagina === 'comandas') ? 'agenda' : pagina;
+      var moduloPermissaoNecessaria = (pagina === 'fiado') ? 'financeiro' : (pagina === 'comandas' || pagina === 'venda-avulsa') ? 'agenda' : pagina;
       if (MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) < 0) return;
       btn.style.display = permitidos.indexOf(moduloPermissaoNecessaria) >= 0 ? '' : 'none';
     });
@@ -5597,6 +5910,23 @@ function dispensarBannerPWA() {
       <div class="fr"><div class="fg"><label class="fl">Preço (R$)*</label><input type="number" class="fc" id="sv-p" step="0.01"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="sv-com" value="40"/></div></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-svc')">Cancelar</button><button class="btn btnp" onclick="saveSvc()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-pagar-com">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">Confirmar Pagamento</span><button class="mx" onclick="closeM('m-pagar-com')">✕</button></div>
+    <div class="mb">
+      <div id="pagar-com-info"></div>
+      <div class="fg" id="pagar-com-parcela-wrap" style="display:none;background:var(--bg3);border-radius:var(--rs);padding:10px;margin-top:8px">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:.8rem">
+          <input type="checkbox" id="pagar-com-descontar" style="margin-top:2px"/>
+          <span id="pagar-com-parcela-texto"></span>
+        </label>
+      </div>
+      <div id="pagar-com-valor-final" style="margin-top:12px"></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-pagar-com')">Cancelar</button><button class="btn btnp" id="pagar-com-btn" onclick="confirmarPagamentoCom()">Confirmar Pagamento</button></div>
   </div>
 </div>
 
