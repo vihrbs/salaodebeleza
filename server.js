@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.7.1-corrige-duplicacao-periodo' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.9.0-venda-avulsa' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1429,7 +1429,7 @@ function gerarDatasRecorrencia(dataInicialISO, frequencia, dataFimISO) {
 // Retorna { status: 'criado', agendamento } ou { status: 'conflito', data_hora }.
 async function criarAgendamentoUnico({
   salaoId, clienteId, profissionalId, dataHora, servicosInfo,
-  profComissaoPct, observacoes, origem, recorrenciaId, pacotePorServico
+  profComissaoPct, observacoes, origem, recorrenciaId, pacotePorServico, pularChecagemConflito
 }) {
   pacotePorServico = pacotePorServico || {}; // { [servico_id]: pacote_cliente_id } — serviços pagos via pacote
 
@@ -1444,30 +1444,36 @@ async function criarAgendamentoUnico({
   const inicioDia = dataParte + 'T03:00:00+00:00';
   const fimDia     = adicionarDia(dataParte) + 'T02:59:59+00:00';
 
-  const { data: existentes } = await supabase.from('agendamentos')
-    .select('id, data_hora, duracao_min')
-    .eq('salao_id', salaoId).eq('profissional_id', profissionalId)
-    .gte('data_hora', inicioDia).lte('data_hora', fimDia)
-    .neq('status', 'cancelado');
+  // Venda avulsa é o REGISTRO de algo que já aconteceu na hora (não uma
+  // reserva de horário futuro) — não faz sentido bloquear por "conflito de
+  // agenda" nesse caso, já que não tá reservando nada, só documentando uma
+  // venda que já foi concluída.
+  if (!pularChecagemConflito) {
+    const { data: existentes } = await supabase.from('agendamentos')
+      .select('id, data_hora, duracao_min')
+      .eq('salao_id', salaoId).eq('profissional_id', profissionalId)
+      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .neq('status', 'cancelado');
 
-  const novoInicioMin = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
-  const novoFimMin    = novoInicioMin + duracao_total;
+    const novoInicioMin = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
+    const novoFimMin    = novoInicioMin + duracao_total;
 
-  const conflito = (existentes || []).find(function(ag) {
-    var agInicio = utcParaMinutosBrasil(ag.data_hora);
-    var agFim = agInicio + (ag.duracao_min || 60);
-    return (novoInicioMin < agFim && novoFimMin > agInicio);
-  });
+    const conflito = (existentes || []).find(function(ag) {
+      var agInicio = utcParaMinutosBrasil(ag.data_hora);
+      var agFim = agInicio + (ag.duracao_min || 60);
+      return (novoInicioMin < agFim && novoFimMin > agInicio);
+    });
 
-  if (conflito) return { status: 'conflito', data_hora: data_hora_final };
+    if (conflito) return { status: 'conflito', data_hora: data_hora_final };
 
-  // Horário de almoço do profissional também bloqueia — mesma checagem de
-  // sobreposição usada pra outros agendamentos
-  const { data: profDadosAlmoco } = await supabase.from('profissionais')
-    .select('horario_almoco_inicio, horario_almoco_fim').eq('id', profissionalId).single();
-  const janelaAlmocoAg = janelaAlmocoMinutos(profDadosAlmoco);
-  if (janelaAlmocoAg && novoInicioMin < janelaAlmocoAg[1] && novoFimMin > janelaAlmocoAg[0]) {
-    return { status: 'conflito', data_hora: data_hora_final, motivo: 'almoco' };
+    // Horário de almoço do profissional também bloqueia — mesma checagem de
+    // sobreposição usada pra outros agendamentos
+    const { data: profDadosAlmoco } = await supabase.from('profissionais')
+      .select('horario_almoco_inicio, horario_almoco_fim').eq('id', profissionalId).single();
+    const janelaAlmocoAg = janelaAlmocoMinutos(profDadosAlmoco);
+    if (janelaAlmocoAg && novoInicioMin < janelaAlmocoAg[1] && novoFimMin > janelaAlmocoAg[0]) {
+      return { status: 'conflito', data_hora: data_hora_final, motivo: 'almoco' };
+    }
   }
 
   const insertPayload = {
@@ -1513,6 +1519,107 @@ async function criarAgendamentoUnico({
 
   return { status: 'criado', agendamento: ag };
 }
+
+// ── VENDA AVULSA ────────────────────────────────────
+// Venda rápida sem precisar agendar antes (cliente chegou, comprou um
+// produto ou já fez o serviço na hora) — cria a comanda já concluída, na
+// hora, com serviços e/ou produtos junto. Reaproveita a mesma lógica de
+// criação de agendamento (pra manter a comissão contando certinho) e a
+// mesma lógica de venda de produto (pra descontar do estoque igual sempre).
+app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, res) => {
+  const { cliente_id, profissional_id, servicos, produtos, forma_pgto, pago } = req.body;
+  const servicosIds = Array.isArray(servicos) ? servicos.filter(Boolean) : [];
+  const produtosLista = Array.isArray(produtos) ? produtos.filter(p => p && p.produto_id) : [];
+
+  if (!cliente_id || !profissional_id) {
+    return res.status(422).json({ error: 'Cliente e profissional são obrigatórios' });
+  }
+  if (!servicosIds.length && !produtosLista.length) {
+    return res.status(422).json({ error: 'Selecione ao menos um serviço ou produto' });
+  }
+
+  try {
+    const { data: prof } = await supabase.from('profissionais')
+      .select('comissao_pct').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
+    if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
+
+    let srvcs = [];
+    if (servicosIds.length) {
+      const { data } = await supabase.from('servicos')
+        .select('id, nome, preco, duracao_min, comissao_pct, precos_por_dia')
+        .in('id', servicosIds).eq('salao_id', req.salao_id);
+      srvcs = data || [];
+      if (!srvcs.length) return res.status(404).json({ error: 'Serviço(s) não encontrado(s)' });
+    }
+
+    const agora = new Date().toISOString();
+    const resultado = await criarAgendamentoUnico({
+      salaoId: req.salao_id, clienteId: cliente_id, profissionalId: profissional_id,
+      dataHora: agora, servicosInfo: srvcs, profComissaoPct: prof?.comissao_pct,
+      origem: 'venda_avulsa', pularChecagemConflito: true
+    });
+    if (resultado.status === 'conflito') {
+      const msg = resultado.motivo === 'almoco'
+        ? 'Esse horário está dentro do intervalo de almoço do profissional.'
+        : 'Este profissional já tem um agendamento nesse horário.';
+      return res.status(409).json({ error: msg });
+    }
+    const agendamentoId = resultado.agendamento.id;
+    let valorTotalAtual = Number(resultado.agendamento.valor_total || 0);
+
+    // Adiciona cada produto vendido — mesma lógica de "vender produto na
+    // comanda": desconta do estoque, gera lançamento vinculado, soma no total
+    const produtosVendidos = [];
+    for (const item of produtosLista) {
+      const { data: prod } = await supabase.from('produtos')
+        .select('qtd_atual, nome, preco_venda').eq('id', item.produto_id).eq('salao_id', req.salao_id).single();
+      if (!prod) continue; // ignora produto que não existe mais, não derruba a venda toda
+      const quantidade = Number(item.quantidade) || 1;
+      const nova = Number(prod.qtd_atual) - quantidade;
+      if (nova < 0) return res.status(422).json({ error: 'Estoque insuficiente pra "' + prod.nome + '". Atual: ' + prod.qtd_atual });
+
+      const valorProduto = (item.valor !== undefined && item.valor !== null && item.valor !== '')
+        ? Number(item.valor) : Number(prod.preco_venda || 0) * quantidade;
+
+      await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', item.produto_id);
+      valorTotalAtual += valorProduto;
+      await supabase.from('agendamentos').update({ valor_total: valorTotalAtual }).eq('id', agendamentoId);
+
+      const { data: lancamento } = await supabase.from('lancamentos').insert({
+        salao_id: req.salao_id, cliente_id, agendamento_id: agendamentoId, tipo: 'entrada', categoria: 'Produto',
+        descricao: 'Venda: ' + prod.nome + ' (' + quantidade + 'x)',
+        valor: valorProduto, data: agora.split('T')[0], forma_pgto, pago: pago !== false
+      }).select().single();
+
+      await supabase.from('movimentacoes_estoque').insert({
+        salao_id: req.salao_id, produto_id: item.produto_id, tipo: 'venda',
+        quantidade, valor: valorProduto, cliente_id, profissional_id,
+        usuario_id: req.user.id, lancamento_id: lancamento ? lancamento.id : null
+      });
+      produtosVendidos.push({ produto_id: item.produto_id, nome: prod.nome, quantidade, valor: valorProduto });
+    }
+
+    // Marca como concluída na hora (já é uma venda que aconteceu agora) e
+    // aplica a taxa de maquininha se foi no cartão, igual concluir atendimento normal
+    const marcarComoPago = pago !== false;
+    await supabase.from('agendamentos').update({ status: 'concluido', forma_pgto }).eq('id', agendamentoId);
+    await supabase.from('lancamentos')
+      .update({ pago: marcarComoPago, forma_pgto, valor: valorTotalAtual - produtosVendidos.reduce((s,p)=>s+p.valor,0) })
+      .eq('agendamento_id', agendamentoId).eq('categoria', 'Serviço');
+
+    let infoTaxaMaquininha = { taxa_total: 0, taxa_profissional: 0 };
+    if (marcarComoPago) {
+      try {
+        infoTaxaMaquininha = await aplicarTaxaMaquininha(agendamentoId, req.salao_id, valorTotalAtual, forma_pgto);
+      } catch(e) { console.error('Erro ao aplicar taxa maquininha (venda avulsa):', e.message); }
+    }
+
+    res.status(201).json({
+      id: agendamentoId, valor_total: valorTotalAtual, status: 'concluido',
+      produtos_vendidos: produtosVendidos, taxa_maquininha: infoTaxaMaquininha
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 app.post('/api/agendamentos', auth, async (req, res) => {
   const { cliente_id, profissional_id, data_hora, servicos, observacoes, origem, recorrencia,
@@ -2514,7 +2621,7 @@ function servicoJaPago(dataHoraISO, periodosPagos) {
 }
 
 app.post('/api/comissoes/fechar', auth, async (req, res) => {
-  const { profissional_id, periodo_inicio, periodo_fim } = req.body;
+  const { profissional_id, periodo_inicio, periodo_fim, descontar_parcelas } = req.body;
 
   if (!(await podeFecharComissao(req.user))) {
     return res.status(403).json({ error: 'Você não tem permissão para fechar comissões' });
@@ -2561,6 +2668,36 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       return res.status(400).json({ error: 'Nenhum serviço novo pra fechar neste período (pode já ter sido pago num fechamento anterior que se sobrepõe a essas datas).' });
     }
 
+    // Desconto opcional das parcelas pendentes (compras parceladas que o
+    // profissional fez) — só acontece se explicitamente pedido no fechamento.
+    // Marca as parcelas descontadas como pagas, já que o valor delas saiu
+    // de dentro da própria comissão nesse momento.
+    let valor_parcelas_descontado = 0;
+    let parcelas_quitadas = [];
+    if (descontar_parcelas) {
+      const { data: parcelasPendentes } = await supabase.from('parcelas_compra_profissional')
+        .select('id, valor, compras_profissional!inner(profissional_id, salao_id)')
+        .eq('compras_profissional.profissional_id', profissional_id)
+        .eq('compras_profissional.salao_id', req.salao_id)
+        .eq('status', 'pendente');
+
+      if (parcelasPendentes && parcelasPendentes.length) {
+        valor_parcelas_descontado = parcelasPendentes.reduce((s, p) => s + Number(p.valor || 0), 0);
+        parcelas_quitadas = parcelasPendentes.map(p => p.id);
+        for (const parcela of parcelasPendentes) {
+          await supabase.from('parcelas_compra_profissional')
+            .update({ status: 'pago', pago_em: new Date() }).eq('id', parcela.id);
+        }
+      }
+    }
+    // Nunca deixa o valor pago ficar negativo — se as parcelas forem
+    // maiores que a comissão do período, o excedente fica pra descontar
+    // no próximo fechamento (as parcelas já foram marcadas como pagas
+    // aqui, então não some — só o VALOR PAGO nesse fechamento não fica
+    // negativo).
+    const total_comissao_bruta = total_comissao;
+    const total_comissao_final = Math.max(0, total_comissao - valor_parcelas_descontado);
+
     // Verifica se já existe fechamento pra ESSE PERÍODO EXATO (início E fim
     // precisam bater — mesma correção da tela de visualização)
     const { data: existing } = await supabase.from('fechamentos_comissao')
@@ -2576,8 +2713,8 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       // Atualiza o existente
       ({ data, error } = await supabase.from('fechamentos_comissao')
         .update({
-          total_comissao, total_bruto, total_servicos, total_caixinhas,
-          status: 'pago', pago_em: new Date(), periodo_fim: fim
+          total_comissao: total_comissao_final, total_bruto, total_servicos, total_caixinhas,
+          valor_parcelas_descontado, status: 'pago', pago_em: new Date(), periodo_fim: fim
         })
         .eq('id', existing.id).select().single());
     } else {
@@ -2585,8 +2722,8 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       ({ data, error } = await supabase.from('fechamentos_comissao')
         .insert({
           salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
-          total_comissao, total_bruto, total_servicos, total_caixinhas,
-          status: 'pago', pago_em: new Date()
+          total_comissao: total_comissao_final, total_bruto, total_servicos, total_caixinhas,
+          valor_parcelas_descontado, status: 'pago', pago_em: new Date()
         })
         .select().single());
     }
@@ -2598,13 +2735,13 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
     const { data: profInfo } = await supabase.from('profissionais')
       .select('nome, email').eq('id', profissional_id).single();
     if (profInfo && profInfo.email) {
-      notificarProfissionalComissaoFechada(profInfo.email, profInfo.nome, total_comissao, ini, fim)
+      notificarProfissionalComissaoFechada(profInfo.email, profInfo.nome, total_comissao_final, ini, fim)
         .then(r => {
           if (!r.enviado) console.error('Notificação de comissão fechada NÃO enviada pro profissional ' + profInfo.email + ': ' + r.motivo);
         }).catch(e => console.error('Erro inesperado ao notificar profissional (comissão):', e.message));
     }
 
-    res.json(data);
+    res.json({ ...data, total_comissao_bruta, valor_parcelas_descontado, parcelas_quitadas: parcelas_quitadas.length });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
