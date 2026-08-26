@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.9.0-venda-avulsa' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.10.0-historico-comissoes' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2501,6 +2501,36 @@ app.get('/api/estoque/movimentacoes', auth, requirePermissao('estoque'), async (
 // ═══════════════════════════════════════════════════
 // COMISSÕES
 // ═══════════════════════════════════════════════════
+
+// Histórico de comissões já pagas — diferente da rota abaixo (que só olha
+// UM período por vez), aqui lista TODOS os pagamentos já feitos, mais
+// recente primeiro. Aceita filtro opcional por profissional.
+app.get('/api/comissoes/historico', auth, requirePermissao('comissoes'), async (req, res) => {
+  try {
+    let query = supabase.from('fechamentos_comissao')
+      .select('id, profissional_id, periodo_inicio, periodo_fim, total_comissao, total_bruto, total_servicos, total_caixinhas, valor_parcelas_descontado, pago_em')
+      .eq('salao_id', req.salao_id).eq('status', 'pago').order('pago_em', { ascending: false });
+    if (req.query.profissional_id) query = query.eq('profissional_id', req.query.profissional_id);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const { data: profissionais } = await supabase.from('profissionais')
+      .select('id, nome, cor_agenda').eq('salao_id', req.salao_id);
+    const nomePorId = {};
+    (profissionais || []).forEach(p => { nomePorId[p.id] = { nome: p.nome, cor: p.cor_agenda }; });
+
+    const lista = (data || []).map(f => ({
+      ...f,
+      profissional_nome: nomePorId[f.profissional_id]?.nome || 'Profissional removido',
+      profissional_cor: nomePorId[f.profissional_id]?.cor || '#9A5B3F'
+    }));
+
+    const total_geral_pago = lista.reduce((s, f) => s + Number(f.total_comissao || 0), 0);
+    res.json({ historico: lista, total_geral_pago, total_pagamentos: lista.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) => {
   let { data: profissionais } = await supabase.from('profissionais')
     .select('id, nome, comissao_pct, cor_agenda').eq('salao_id', req.salao_id).eq('ativo', true);
