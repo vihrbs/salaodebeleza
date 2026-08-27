@@ -489,7 +489,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.12.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.12.1-frontend</div>
       </div>
     </div>
 
@@ -2900,7 +2900,8 @@ function confirmarComandaProfissional() {
 
   var itens = [];
   document.querySelectorAll('#cp-svcs .svc-pill.on').forEach(function(pill){
-    itens.push({ tipo: 'servico', servico_id: pill.dataset.id, nome: pill.textContent.trim(), valor: Number(pill.dataset.preco) });
+    var svc = (SVCS || []).find(function(s){ return s.id === pill.dataset.id; });
+    itens.push({ tipo: 'servico', servico_id: pill.dataset.id, nome: svc ? svc.nome : pill.textContent.trim(), valor: Number(pill.dataset.preco) });
   });
   COMANDA_PROF_PRODUTOS.forEach(function(p){
     itens.push({ tipo: 'produto', produto_id: p.produto_id, nome: p.nome, quantidade: p.quantidade, valor: p.preco_unit * p.quantidade });
