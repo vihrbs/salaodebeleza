@@ -489,7 +489,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.12.1-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.12.2-frontend</div>
       </div>
     </div>
 
@@ -2883,6 +2883,7 @@ function renderProdutosComandaProf() {
 }
 
 function recalcularTotalComandaProf() {
+  var qtdServicos = document.querySelectorAll('#cp-svcs .svc-pill.on').length;
   var totalServicos = 0;
   document.querySelectorAll('#cp-svcs .svc-pill.on').forEach(function(pill){
     totalServicos += Number(pill.dataset.preco || 0);
@@ -2890,6 +2891,16 @@ function recalcularTotalComandaProf() {
   var totalProdutos = COMANDA_PROF_PRODUTOS.reduce(function(s, p){ return s + (p.preco_unit * p.quantidade); }, 0);
   var totalOutros = COMANDA_PROF_OUTROS.reduce(function(s, o){ return s + o.valor; }, 0);
   document.getElementById('cp-total').textContent = brl(totalServicos + totalProdutos + totalOutros);
+
+  var qtdTotal = qtdServicos + COMANDA_PROF_PRODUTOS.length + COMANDA_PROF_OUTROS.length;
+  var qtdEl = document.getElementById('cp-qtd-itens');
+  if (qtdTotal === 0) {
+    qtdEl.textContent = '(nenhum item ainda)';
+    qtdEl.style.color = 'var(--er)';
+  } else {
+    qtdEl.textContent = '(' + qtdTotal + (qtdTotal === 1 ? ' item' : ' itens') + ')';
+    qtdEl.style.color = 'var(--ok)';
+  }
 }
 
 function confirmarComandaProfissional() {
@@ -3438,6 +3449,7 @@ function selecionarFpgVendaAvulsa(btn) {
 }
 
 function recalcularTotalVendaAvulsa() {
+  var qtdServicos = document.querySelectorAll('#va-svcs .svc-pill.on').length;
   var totalServicos = 0;
   document.querySelectorAll('#va-svcs .svc-pill.on').forEach(function(pill){
     totalServicos += Number(pill.dataset.preco || 0);
@@ -3445,6 +3457,18 @@ function recalcularTotalVendaAvulsa() {
   var totalProdutos = VENDA_AVULSA_PRODUTOS.reduce(function(s, p){ return s + (p.preco_unit * p.quantidade); }, 0);
   var totalEl = document.getElementById('va-total');
   if (totalEl) totalEl.textContent = brl(totalServicos + totalProdutos);
+
+  var qtdTotal = qtdServicos + VENDA_AVULSA_PRODUTOS.length;
+  var qtdEl = document.getElementById('va-qtd-itens');
+  if (qtdEl) {
+    if (qtdTotal === 0) {
+      qtdEl.textContent = '(nenhum item ainda)';
+      qtdEl.style.color = 'var(--er)';
+    } else {
+      qtdEl.textContent = '(' + qtdTotal + (qtdTotal === 1 ? ' item' : ' itens') + ')';
+      qtdEl.style.color = 'var(--ok)';
+    }
+  }
 }
 
 function confirmarVendaAvulsa() {
@@ -5863,7 +5887,7 @@ function dispensarBannerPWA() {
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px dashed var(--bd);margin-top:6px">
-        <span style="font-size:.85rem;color:var(--t3)">Total</span>
+        <span style="font-size:.85rem;color:var(--t3)">Total <span id="va-qtd-itens" style="font-size:.68rem"></span></span>
         <strong style="font-size:1.3rem" id="va-total">R$ 0,00</strong>
       </div>
     </div>
@@ -6538,10 +6562,11 @@ function dispensarBannerPWA() {
       <div class="fg" id="cp-outro-wrap">
         <label class="fl">Outro item (opcional)</label>
         <div class="fr">
-          <input class="fc" id="cp-outro-nome" placeholder="Ex.: Kit de tesouras"/>
-          <input type="number" class="fc" id="cp-outro-valor" step="0.01" placeholder="Valor R$" style="max-width:120px"/>
+          <input class="fc" id="cp-outro-nome" placeholder="Ex.: Kit de tesouras" onkeypress="if(event.key==='Enter'){event.preventDefault();document.getElementById('cp-outro-valor').focus();}"/>
+          <input type="number" class="fc" id="cp-outro-valor" step="0.01" placeholder="Valor R$" style="max-width:120px" onkeypress="if(event.key==='Enter'){event.preventDefault();adicionarOutroItemComandaProf();}"/>
         </div>
-        <button type="button" class="btn btns btnsm" style="margin-top:6px" onclick="adicionarOutroItemComandaProf()">+ Adicionar</button>
+        <button type="button" class="btn btnp btnsm" style="margin-top:6px" onclick="adicionarOutroItemComandaProf()">+ Adicionar esse item à comanda</button>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">⚠️ Preencher os campos não basta — clique em "Adicionar" (ou aperte Enter no valor) pra esse item contar no total.</div>
       </div>
 
       <div class="fr">
@@ -6550,7 +6575,7 @@ function dispensarBannerPWA() {
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px dashed var(--bd);margin-top:6px">
-        <span style="font-size:.85rem;color:var(--t3)">Total</span>
+        <span style="font-size:.85rem;color:var(--t3)">Total <span id="cp-qtd-itens" style="font-size:.68rem"></span></span>
         <strong style="font-size:1.3rem" id="cp-total">R$ 0,00</strong>
       </div>
       <div style="font-size:.68rem;color:var(--t3)">1 parcela = à vista. As parcelas vencem mensalmente a partir da data da compra.</div>
