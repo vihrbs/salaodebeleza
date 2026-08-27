@@ -466,7 +466,6 @@ select.fc option{background:var(--bg2)}
         <button class="sb-item on" data-page="dashboard" onclick="nav('dashboard',this)"><span class="sb-ic">🏠</span>Dashboard</button>
         <button class="sb-item" data-page="agenda" onclick="nav('agenda',this)"><span class="sb-ic">📅</span>Agenda<span class="sb-badge" id="nbag" style="display:none">0</span></button>
         <button class="sb-item" data-page="comandas" onclick="nav('comandas',this)"><span class="sb-ic">🧾</span>Comandas</button>
-        <button class="sb-item" data-page="venda-avulsa" onclick="nav('venda-avulsa',this)"><span class="sb-ic">🛒</span>Venda Avulsa</button>
         <button class="sb-item" data-page="clientes" onclick="nav('clientes',this)"><span class="sb-ic">👥</span>Clientes</button>
         <div class="sb-section">Financeiro</div>
         <button class="sb-item" data-page="fiado" onclick="nav('fiado',this)"><span class="sb-ic">💳</span>Fiado<span class="sb-badge" id="nbfiado" style="display:none">0</span></button>
@@ -490,7 +489,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.11.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.12.0-frontend</div>
       </div>
     </div>
 
@@ -608,72 +607,10 @@ select.fc option{background:var(--bg2)}
           <button class="btn btns btnsm" data-status="concluido" onclick="filtrarComandasPorStatus('concluido')">Concluídas</button>
           <button class="btn btns btnsm" data-status="cancelado" onclick="filtrarComandasPorStatus('cancelado')">Canceladas</button>
         </div>
+        <button class="btn btnp" style="margin-left:auto" onclick="abrirNovaComanda()">+ Nova Comanda</button>
       </div>
       <div id="cmd-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
         <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
-      </div>
-    </div>
-
-    <!-- VENDA AVULSA -->
-    <div class="page" id="page-venda-avulsa">
-      <div class="card" style="max-width:620px">
-        <div class="ct">🛒 Venda Avulsa</div>
-        <div style="font-size:.74rem;color:var(--t3);margin-bottom:14px">Pra quando não precisa agendar antes — já registra e conclui na hora.</div>
-
-        <div style="display:flex;gap:8px;margin-bottom:18px">
-          <button class="btn btnp btnsm" id="va-tab-cliente" style="flex:1" onclick="alternarTipoVendaAvulsa('cliente')">👤 Vender pra Cliente</button>
-          <button class="btn btns btnsm" id="va-tab-profissional" style="flex:1" onclick="alternarTipoVendaAvulsa('profissional')">✂️ Vender pra Profissional</button>
-        </div>
-
-        <!-- Venda pra Cliente -->
-        <div id="va-secao-cliente">
-          <div class="fg" style="position:relative">
-            <label class="fl">Cliente*</label>
-            <input class="fc" id="va-cli-busca" placeholder="🔍 Buscar por nome ou telefone..." autocomplete="off"
-              oninput="filtrarClientesVendaAvulsa(this.value)" onfocus="filtrarClientesVendaAvulsa(this.value)"
-              onblur="setTimeout(function(){ var r=document.getElementById('va-cli-resultados'); if(r) r.style.display='none'; }, 150)"/>
-            <input type="hidden" id="va-cli-id"/>
-            <div id="va-cli-resultados" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rs);max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)"></div>
-          </div>
-          <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="va-prof"><option value="">Selecionar...</option></select></div>
-
-          <div class="fg">
-            <label class="fl">Serviços (opcional)</label>
-            <input class="fc" id="va-svc-busca" placeholder="🔍 Buscar serviço..." oninput="filtrarServicosVendaAvulsa(this.value)" style="margin-bottom:8px"/>
-            <div id="va-svcs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-          </div>
-
-          <div class="fg">
-            <label class="fl">Produtos (opcional)</label>
-            <select class="fc" id="va-produto-select" onchange="adicionarProdutoVendaAvulsa()"><option value="">+ Adicionar produto do estoque...</option></select>
-            <div id="va-produtos-lista" style="margin-top:8px"></div>
-          </div>
-
-          <div class="fg">
-            <label class="fl">Forma de pagamento</label>
-            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="va-fpg-options">
-              <button type="button" class="fpg-btn" data-val="PIX" onclick="selecionarFpgVendaAvulsa(this)">💠 PIX</button>
-              <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpgVendaAvulsa(this)">💵 Dinheiro</button>
-              <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpgVendaAvulsa(this)">💳 Débito</button>
-              <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpgVendaAvulsa(this)">💳 Crédito</button>
-            </div>
-          </div>
-
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px dashed var(--bd);margin-top:6px">
-            <span style="font-size:.85rem;color:var(--t3)">Total</span>
-            <strong style="font-size:1.3rem" id="va-total">R$ 0,00</strong>
-          </div>
-          <button class="btn btnp" id="va-btn-confirmar" onclick="confirmarVendaAvulsa()">Confirmar Venda ✅</button>
-        </div>
-
-        <!-- Venda pra Profissional -->
-        <div id="va-secao-profissional" style="display:none">
-          <div class="fg"><label class="fl">Profissional*</label>
-            <select class="fc" id="va-prof-comprador"><option value="">Selecionar...</option></select>
-          </div>
-          <div style="font-size:.72rem;color:var(--t3);margin-bottom:14px">Vai abrir a venda de produto pro profissional — pode ser à vista (1 parcela) ou parcelado, e já entra como débito que dá pra descontar da comissão dele depois.</div>
-          <button class="btn btnp" onclick="continuarVendaAvulsaProfissional()">Continuar 🛒</button>
-        </div>
       </div>
     </div>
 
@@ -1263,7 +1200,7 @@ function nav(page, el) {
   // "Fiado" usa a MESMA permissão de "Financeiro" (não criei uma permissão
   // separada só pra ela) — precisa mapear aqui pra bater com o que o
   // backend já exige em /api/financeiro/fiado.
-  var moduloPermissaoNecessaria = (page === 'fiado') ? 'financeiro' : (page === 'comandas' || page === 'venda-avulsa') ? 'agenda' : page;
+  var moduloPermissaoNecessaria = (page === 'fiado') ? 'financeiro' : (page === 'comandas') ? 'agenda' : page;
   if (USER_PERFIL !== 'admin' && MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) >= 0 && USER_PERMISSOES.indexOf(moduloPermissaoNecessaria) < 0) {
     toast('Você não tem permissão para acessar essa área. Fale com o administrador.', 'er');
     return;
@@ -1283,14 +1220,13 @@ function nav(page, el) {
   });
 
   // Título da topbar
-  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',comandas:'Comandas','venda-avulsa':'Venda Avulsa',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
+  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',comandas:'Comandas',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
   var tbTitle = document.getElementById('tb-page-title');
   if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
 
   // Ações especiais por página
   if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
   if (page==='comandas') { loadComandas(); }
-  if (page==='venda-avulsa') { carregarPaginaVendaAvulsa(); }
 
   // Reavalia as sombras de rolagem das tabelas da página que acabou de abrir
   // (pega o caso de conteúdo já carregado antes, em cache)
@@ -2830,7 +2766,7 @@ function renderPros(list) {
       '<button class="btn btns btnsm" style="flex:1" onclick="abrirNovoAgendamento()">📅 Agendar</button>' +
       '<button class="btn btns btnsm" style="flex:1" onclick="toast(\'WhatsApp...\',\'ok\')">💬 WhatsApp</button></div>' +
       '<div style="display:flex;gap:7px;margin-top:7px">' +
-      '<button class="btn btns btnsm" style="flex:1" onclick="abrirVendaParcelada(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">🛒 Vender parcelado</button>' +
+      '<button class="btn btns btnsm" style="flex:1" onclick="abrirComandaProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">🧾 Nova Comanda</button>' +
       '<button class="btn btns btnsm" style="flex:1" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">📋 Parcelas</button></div></div>';
   }).join('');
 }
@@ -2843,56 +2779,150 @@ function deletarProfissional(id, nome) {
 }
 
 // ── VENDA PARCELADA PRO PROFISSIONAL ─────────────────
-function abrirVendaParcelada(profId, profNome) {
-  document.getElementById('vp-prof-id').value = profId;
-  document.getElementById('vp-prof-nome').textContent = profNome;
-  var sel = document.getElementById('vp-produto');
-  sel.innerHTML = '<option value="">Item avulso (sem produto do estoque)</option>' +
-    (window._estoqueCache || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
-  document.getElementById('vp-descricao').value = '';
-  document.getElementById('vp-descricao-wrap').style.display = 'block';
-  document.getElementById('vp-valor').value = '';
-  document.getElementById('vp-parcelas').value = '1';
-  document.getElementById('vp-data').value = today();
-  openM('m-venda-parcelada');
+var COMANDA_PROF_PRODUTOS = []; // [{produto_id, nome, quantidade, preco_unit}]
+var COMANDA_PROF_OUTROS = []; // [{nome, valor}] — itens avulsos sem produto de estoque
+
+function abrirComandaProfissional(profId, profNome) {
+  document.getElementById('cp-prof-id').value = profId;
+  document.getElementById('cp-prof-nome').textContent = profNome;
+  document.getElementById('cp-parcelas').value = '1';
+  document.getElementById('cp-data').value = today();
+  document.getElementById('cp-outro-nome').value = '';
+  document.getElementById('cp-outro-valor').value = '';
+  COMANDA_PROF_PRODUTOS = [];
+  COMANDA_PROF_OUTROS = [];
+  renderProdutosComandaProf();
+
+  var svcsWrap = document.getElementById('cp-svcs');
+  svcsWrap.innerHTML = (SVCS || []).map(function(s){
+    return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');recalcularTotalComandaProf()">' + esc(s.nome) + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
+  }).join('');
+
+  var sel = document.getElementById('cp-produto-select');
+  sel.innerHTML = '<option value="">+ Adicionar produto do estoque...</option>' +
+    (window._estoqueCache || []).filter(function(p){ return p.qtd_atual > 0; })
+      .map(function(p){ return '<option value="' + p.id + '" data-preco="' + (p.preco_venda||0) + '" data-nome="' + escAttr(p.nome) + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+
+  recalcularTotalComandaProf();
+  openM('m-comanda-prof');
+
   apiFetch('/api/estoque').then(function(r){
     window._estoqueCache = r || [];
-    sel.innerHTML = '<option value="">Item avulso (sem produto do estoque)</option>' +
-      window._estoqueCache.map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+    sel.innerHTML = '<option value="">+ Adicionar produto do estoque...</option>' +
+      window._estoqueCache.filter(function(p){ return p.qtd_atual > 0; })
+        .map(function(p){ return '<option value="' + p.id + '" data-preco="' + (p.preco_venda||0) + '" data-nome="' + escAttr(p.nome) + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
   }).catch(function(){});
 }
 
-function vpProdutoSelecionado() {
-  var sel = document.getElementById('vp-produto');
-  var descWrap = document.getElementById('vp-descricao-wrap');
-  descWrap.style.display = sel.value ? 'none' : 'block';
+function adicionarProdutoComandaProf() {
+  var sel = document.getElementById('cp-produto-select');
+  var opcao = sel.options[sel.selectedIndex];
+  var id = sel.value;
+  if (!id) return;
+  if (COMANDA_PROF_PRODUTOS.some(function(p){ return p.produto_id === id; })) {
+    toast('Esse produto já foi adicionado — ajusta a quantidade na lista','inf');
+    sel.value = '';
+    return;
+  }
+  COMANDA_PROF_PRODUTOS.push({
+    produto_id: id, nome: opcao.dataset.nome, quantidade: 1, preco_unit: Number(opcao.dataset.preco || 0)
+  });
+  sel.value = '';
+  renderProdutosComandaProf();
+  recalcularTotalComandaProf();
 }
 
-function salvarVendaParcelada() {
-  var profId = document.getElementById('vp-prof-id').value;
-  var produtoId = document.getElementById('vp-produto').value;
-  var descricao = document.getElementById('vp-descricao').value.trim();
-  var valor = parseFloat(document.getElementById('vp-valor').value);
-  var parcelas = parseInt(document.getElementById('vp-parcelas').value);
-  var data = document.getElementById('vp-data').value;
+function removerProdutoComandaProf(produtoId) {
+  COMANDA_PROF_PRODUTOS = COMANDA_PROF_PRODUTOS.filter(function(p){ return p.produto_id !== produtoId; });
+  renderProdutosComandaProf();
+  recalcularTotalComandaProf();
+}
 
-  if (!valor || valor <= 0) { toast('Informe um valor total válido','er'); return; }
-  if (!produtoId && !descricao) { toast('Selecione um produto ou descreva o item','er'); return; }
+function atualizarQtdProdutoComandaProf(produtoId, novaQtd) {
+  var item = COMANDA_PROF_PRODUTOS.find(function(p){ return p.produto_id === produtoId; });
+  if (item) item.quantidade = Math.max(1, parseInt(novaQtd) || 1);
+  recalcularTotalComandaProf();
+}
+
+function adicionarOutroItemComandaProf() {
+  var nome = document.getElementById('cp-outro-nome').value.trim();
+  var valor = parseFloat(document.getElementById('cp-outro-valor').value);
+  if (!nome) { toast('Descreva o item','er'); return; }
+  if (!valor || valor <= 0) { toast('Informe um valor válido','er'); return; }
+  COMANDA_PROF_OUTROS.push({ nome: nome, valor: valor });
+  document.getElementById('cp-outro-nome').value = '';
+  document.getElementById('cp-outro-valor').value = '';
+  renderProdutosComandaProf();
+  recalcularTotalComandaProf();
+}
+
+function removerOutroItemComandaProf(idx) {
+  COMANDA_PROF_OUTROS.splice(idx, 1);
+  renderProdutosComandaProf();
+  recalcularTotalComandaProf();
+}
+
+function renderProdutosComandaProf() {
+  var wrap = document.getElementById('cp-produtos-lista');
+  var linhasProdutos = COMANDA_PROF_PRODUTOS.map(function(p){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
+      '<span style="flex:1">' + esc(p.nome) + '</span>' +
+      '<input type="number" min="1" value="' + p.quantidade + '" style="width:52px;padding:4px 6px;font-size:.78rem" class="fc" onchange="atualizarQtdProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
+      '<strong style="min-width:60px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoComandaProf(\'' + p.produto_id + '\')">✕</button>' +
+    '</div>';
+  }).join('');
+  var linhasOutros = COMANDA_PROF_OUTROS.map(function(o, idx){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
+      '<span style="flex:1">' + esc(o.nome) + '</span>' +
+      '<strong style="min-width:60px;text-align:right">' + brl(o.valor) + '</strong>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerOutroItemComandaProf(' + idx + ')">✕</button>' +
+    '</div>';
+  }).join('');
+  wrap.innerHTML = linhasProdutos + linhasOutros;
+}
+
+function recalcularTotalComandaProf() {
+  var totalServicos = 0;
+  document.querySelectorAll('#cp-svcs .svc-pill.on').forEach(function(pill){
+    totalServicos += Number(pill.dataset.preco || 0);
+  });
+  var totalProdutos = COMANDA_PROF_PRODUTOS.reduce(function(s, p){ return s + (p.preco_unit * p.quantidade); }, 0);
+  var totalOutros = COMANDA_PROF_OUTROS.reduce(function(s, o){ return s + o.valor; }, 0);
+  document.getElementById('cp-total').textContent = brl(totalServicos + totalProdutos + totalOutros);
+}
+
+function confirmarComandaProfissional() {
+  var profId = document.getElementById('cp-prof-id').value;
+  var parcelas = parseInt(document.getElementById('cp-parcelas').value);
+  var data = document.getElementById('cp-data').value;
   if (!parcelas || parcelas < 1 || parcelas > 24) { toast('Número de parcelas deve ser entre 1 e 24','er'); return; }
 
-  var btn = document.querySelector('#m-venda-parcelada .btnp');
+  var itens = [];
+  document.querySelectorAll('#cp-svcs .svc-pill.on').forEach(function(pill){
+    itens.push({ tipo: 'servico', servico_id: pill.dataset.id, nome: pill.textContent.trim(), valor: Number(pill.dataset.preco) });
+  });
+  COMANDA_PROF_PRODUTOS.forEach(function(p){
+    itens.push({ tipo: 'produto', produto_id: p.produto_id, nome: p.nome, quantidade: p.quantidade, valor: p.preco_unit * p.quantidade });
+  });
+  COMANDA_PROF_OUTROS.forEach(function(o){
+    itens.push({ tipo: 'outro', nome: o.nome, valor: o.valor });
+  });
+  if (!itens.length) { toast('Adicione ao menos um serviço, produto ou item','er'); return; }
+
+  var btn = document.getElementById('cp-btn-confirmar');
   btn.disabled = true; btn.textContent = 'Salvando...';
   apiFetch('/api/profissionais/' + profId + '/compras', {
     method: 'POST',
-    body: { produto_id: produtoId || null, descricao: descricao || null, valor_total: valor, num_parcelas: parcelas, data_compra: data }
+    body: { itens: itens, num_parcelas: parcelas, data_compra: data }
   })
   .then(function(r){
-    toast('Venda parcelada registrada! ' + parcelas + 'x de ' + brl(valor / parcelas), 'ok');
-    closeM('m-venda-parcelada');
-    loadEst();
+    toast('Comanda registrada! ' + parcelas + 'x de ' + brl(r.valor_total / parcelas), 'ok');
+    closeM('m-comanda-prof');
+    loadEst(); loadPros();
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
-  .finally(function(){ btn.disabled = false; btn.textContent = 'Registrar Venda'; });
+  .finally(function(){ btn.disabled = false; btn.textContent = 'Registrar Comanda'; });
 }
 
 // ── LISTAR / PAGAR PARCELAS DO PROFISSIONAL ──────────
@@ -3273,8 +3303,7 @@ function selecionarClienteAgendamento(id, nome) {
 // ── VENDA AVULSA ────────────────────────────────────
 var VENDA_AVULSA_PRODUTOS = []; // [{produto_id, nome, quantidade, preco_unit}]
 
-function carregarPaginaVendaAvulsa() {
-  alternarTipoVendaAvulsa('cliente');
+function abrirNovaComanda() {
   document.getElementById('va-cli-busca').value = '';
   document.getElementById('va-cli-id').value = '';
   document.getElementById('va-svc-busca').value = '';
@@ -3283,38 +3312,24 @@ function carregarPaginaVendaAvulsa() {
   document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
 
   var selProf = document.getElementById('va-prof');
-  var selProfComprador = document.getElementById('va-prof-comprador');
-  var optsHtml = '<option value="">Selecionar...</option>' +
+  selProf.innerHTML = '<option value="">Selecionar...</option>' +
     (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
-  if (selProf) selProf.innerHTML = optsHtml;
-  if (selProfComprador) selProfComprador.innerHTML = optsHtml;
 
   var svcsWrap = document.getElementById('va-svcs');
-  if (svcsWrap) {
-    svcsWrap.innerHTML = (SVCS || []).map(function(s){
-      return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');recalcularTotalVendaAvulsa()">' + esc(s.nome) + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
-    }).join('');
-  }
+  svcsWrap.innerHTML = (SVCS || []).map(function(s){
+    return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');recalcularTotalVendaAvulsa()">' + esc(s.nome) + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
+  }).join('');
 
   apiFetch('/api/estoque').then(function(r){
     window._estoqueCache = r || [];
     var sel = document.getElementById('va-produto-select');
-    if (sel) {
-      sel.innerHTML = '<option value="">+ Adicionar produto do estoque...</option>' +
-        window._estoqueCache.filter(function(p){ return p.qtd_atual > 0; })
-          .map(function(p){ return '<option value="' + p.id + '" data-preco="' + (p.preco_venda||0) + '" data-nome="' + escAttr(p.nome) + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
-    }
+    sel.innerHTML = '<option value="">+ Adicionar produto do estoque...</option>' +
+      window._estoqueCache.filter(function(p){ return p.qtd_atual > 0; })
+        .map(function(p){ return '<option value="' + p.id + '" data-preco="' + (p.preco_venda||0) + '" data-nome="' + escAttr(p.nome) + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
   }).catch(function(){});
 
   recalcularTotalVendaAvulsa();
-}
-
-function alternarTipoVendaAvulsa(tipo) {
-  var ehCliente = tipo === 'cliente';
-  document.getElementById('va-secao-cliente').style.display = ehCliente ? 'block' : 'none';
-  document.getElementById('va-secao-profissional').style.display = ehCliente ? 'none' : 'block';
-  document.getElementById('va-tab-cliente').className = 'btn btnsm ' + (ehCliente ? 'btnp' : 'btns');
-  document.getElementById('va-tab-profissional').className = 'btn btnsm ' + (ehCliente ? 'btns' : 'btnp');
+  openM('m-nova-comanda');
 }
 
 // Cliente — busca ao vivo no servidor, mesmo padrão do Novo Agendamento
@@ -3452,20 +3467,12 @@ function confirmarVendaAvulsa() {
     forma_pgto: fpgBtn.dataset.val, pago: true
   }})
     .then(function(r){
-      toast('Venda registrada! ✅ Total: ' + brl(r.valor_total), 'ok');
-      carregarPaginaVendaAvulsa();
-      loadDashTl(); loadKPIs(); loadEst();
+      toast('Comanda criada! ✅ Total: ' + brl(r.valor_total), 'ok');
+      closeM('m-nova-comanda');
+      loadComandas(); loadDashTl(); loadKPIs(); loadEst();
     })
     .catch(function(e){ toast('Erro: ' + (e.message || 'tente novamente'), 'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda ✅'; });
-}
-
-function continuarVendaAvulsaProfissional() {
-  var sel = document.getElementById('va-prof-comprador');
-  var profId = sel.value;
-  if (!profId) { toast('Selecione o profissional','er'); return; }
-  var profNome = sel.options[sel.selectedIndex].textContent;
-  abrirVendaParcelada(profId, profNome);
 }
 
 function filtrarServicosAgendamento(termo) {
@@ -5219,7 +5226,7 @@ function aplicarPermissoes() {
       // "Fiado" usa a mesma permissão de "Financeiro" (não existe uma
       // permissão separada só pra ela) — sem esse mapeamento, o item nunca
       // seria escondido de quem não tem acesso a financeiro.
-      var moduloPermissaoNecessaria = (pagina === 'fiado') ? 'financeiro' : (pagina === 'comandas' || pagina === 'venda-avulsa') ? 'agenda' : pagina;
+      var moduloPermissaoNecessaria = (pagina === 'fiado') ? 'financeiro' : (pagina === 'comandas') ? 'agenda' : pagina;
       if (MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) < 0) return;
       btn.style.display = permitidos.indexOf(moduloPermissaoNecessaria) >= 0 ? '' : 'none';
     });
@@ -5817,6 +5824,52 @@ function dispensarBannerPWA() {
 </div>
 
 <!-- Modal de Detalhes do Agendamento (clicar no cliente na agenda) -->
+<div class="mov" id="m-nova-comanda">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">🧾 Nova Comanda</span><button class="mx" onclick="closeM('m-nova-comanda')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.74rem;color:var(--t3);margin-bottom:14px">Pra quando não precisa agendar antes — já registra e conclui na hora.</div>
+      <div class="fg" style="position:relative">
+        <label class="fl">Cliente*</label>
+        <input class="fc" id="va-cli-busca" placeholder="🔍 Buscar por nome ou telefone..." autocomplete="off"
+          oninput="filtrarClientesVendaAvulsa(this.value)" onfocus="filtrarClientesVendaAvulsa(this.value)"
+          onblur="setTimeout(function(){ var r=document.getElementById('va-cli-resultados'); if(r) r.style.display='none'; }, 150)"/>
+        <input type="hidden" id="va-cli-id"/>
+        <div id="va-cli-resultados" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rs);max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)"></div>
+      </div>
+      <div class="fg"><label class="fl">Profissional*</label><select class="fc" id="va-prof"><option value="">Selecionar...</option></select></div>
+
+      <div class="fg">
+        <label class="fl">Serviços (opcional)</label>
+        <input class="fc" id="va-svc-busca" placeholder="🔍 Buscar serviço..." oninput="filtrarServicosVendaAvulsa(this.value)" style="margin-bottom:8px"/>
+        <div id="va-svcs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Produtos (opcional)</label>
+        <select class="fc" id="va-produto-select" onchange="adicionarProdutoVendaAvulsa()"><option value="">+ Adicionar produto do estoque...</option></select>
+        <div id="va-produtos-lista" style="margin-top:8px"></div>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Forma de pagamento</label>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="va-fpg-options">
+          <button type="button" class="fpg-btn" data-val="PIX" onclick="selecionarFpgVendaAvulsa(this)">💠 PIX</button>
+          <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpgVendaAvulsa(this)">💵 Dinheiro</button>
+          <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpgVendaAvulsa(this)">💳 Débito</button>
+          <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpgVendaAvulsa(this)">💳 Crédito</button>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px dashed var(--bd);margin-top:6px">
+        <span style="font-size:.85rem;color:var(--t3)">Total</span>
+        <strong style="font-size:1.3rem" id="va-total">R$ 0,00</strong>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-nova-comanda')">Cancelar</button><button class="btn btnp" id="va-btn-confirmar" onclick="confirmarVendaAvulsa()">Confirmar Venda ✅</button></div>
+  </div>
+</div>
+
 <div class="mov" id="m-detalhes-ag">
   <div class="mbox md">
     <div class="mh"><span class="mt">📋 Detalhes do Atendimento</span><button class="mx" onclick="closeM('m-detalhes-ag')">✕</button></div>
@@ -6462,24 +6515,46 @@ function dispensarBannerPWA() {
 </div>
 
 <!-- Modal Venda Parcelada (produto pro profissional) -->
-<div class="mov" id="m-venda-parcelada">
+<div class="mov" id="m-comanda-prof">
   <div class="mbox md">
-    <div class="mh"><span class="mt">🛒 Vender Produto Parcelado</span><button class="mx" onclick="closeM('m-venda-parcelada')">✕</button></div>
+    <div class="mh"><span class="mt">🧾 Nova Comanda — Profissional</span><button class="mx" onclick="closeM('m-comanda-prof')">✕</button></div>
     <div class="mb">
-      <input type="hidden" id="vp-prof-id"/>
-      <div style="font-size:.85rem;font-weight:700;margin-bottom:14px" id="vp-prof-nome">—</div>
-      <div class="fg"><label class="fl">Produto do estoque (opcional)</label>
-        <select class="fc" id="vp-produto" onchange="vpProdutoSelecionado()"><option value="">Item avulso (sem produto do estoque)</option></select>
+      <input type="hidden" id="cp-prof-id"/>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:14px" id="cp-prof-nome">—</div>
+      <div style="font-size:.72rem;color:var(--t3);margin-bottom:14px">Serviços ou produtos que o profissional está levando/consumindo pra uso próprio — vira um débito que dá pra descontar da comissão dele depois.</div>
+
+      <div class="fg">
+        <label class="fl">Serviços (opcional)</label>
+        <div id="cp-svcs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
       </div>
-      <div class="fg" id="vp-descricao-wrap"><label class="fl">Descrição do item</label><input class="fc" id="vp-descricao" placeholder="Ex.: Kit de tesouras profissional"/></div>
+
+      <div class="fg">
+        <label class="fl">Produtos (opcional)</label>
+        <select class="fc" id="cp-produto-select" onchange="adicionarProdutoComandaProf()"><option value="">+ Adicionar produto do estoque...</option></select>
+        <div id="cp-produtos-lista" style="margin-top:8px"></div>
+      </div>
+
+      <div class="fg" id="cp-outro-wrap">
+        <label class="fl">Outro item (opcional)</label>
+        <div class="fr">
+          <input class="fc" id="cp-outro-nome" placeholder="Ex.: Kit de tesouras"/>
+          <input type="number" class="fc" id="cp-outro-valor" step="0.01" placeholder="Valor R$" style="max-width:120px"/>
+        </div>
+        <button type="button" class="btn btns btnsm" style="margin-top:6px" onclick="adicionarOutroItemComandaProf()">+ Adicionar</button>
+      </div>
+
       <div class="fr">
-        <div class="fg"><label class="fl">Valor total (R$)*</label><input type="number" class="fc" id="vp-valor" step="0.01" placeholder="0,00"/></div>
-        <div class="fg"><label class="fl">Parcelas*</label><input type="number" class="fc" id="vp-parcelas" min="1" max="24" value="1"/></div>
+        <div class="fg"><label class="fl">Parcelas*</label><input type="number" class="fc" id="cp-parcelas" min="1" max="24" value="1"/></div>
+        <div class="fg"><label class="fl">Data da compra</label><input type="date" class="fc" id="cp-data"/></div>
       </div>
-      <div class="fg"><label class="fl">Data da compra</label><input type="date" class="fc" id="vp-data"/></div>
-      <div style="font-size:.7rem;color:var(--t3)">Se escolher um produto do estoque, 1 unidade é debitada automaticamente. As parcelas vencem mensalmente a partir da data da compra.</div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px dashed var(--bd);margin-top:6px">
+        <span style="font-size:.85rem;color:var(--t3)">Total</span>
+        <strong style="font-size:1.3rem" id="cp-total">R$ 0,00</strong>
+      </div>
+      <div style="font-size:.68rem;color:var(--t3)">1 parcela = à vista. As parcelas vencem mensalmente a partir da data da compra.</div>
     </div>
-    <div class="mf"><button class="btn btns" onclick="closeM('m-venda-parcelada')">Cancelar</button><button class="btn btnp" onclick="salvarVendaParcelada()">Registrar Venda</button></div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-comanda-prof')">Cancelar</button><button class="btn btnp" id="cp-btn-confirmar" onclick="confirmarComandaProfissional()">Registrar Comanda</button></div>
   </div>
 </div>
 
