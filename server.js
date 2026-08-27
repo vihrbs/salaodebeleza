@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.10.0-historico-comissoes' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.11.0-permissao-estoque-separada' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2297,7 +2297,7 @@ app.get('/api/estoque/alertas', auth, requirePermissao('estoque'), async (req, r
   res.json(alertas);
 });
 
-app.post('/api/estoque', auth, requirePermissao('estoque'), async (req, res) => {
+app.post('/api/estoque', auth, requirePermissao('estoque_gerenciar'), async (req, res) => {
   const { data, error } = await supabase
     .from('produtos').insert({ ...req.body, salao_id: req.salao_id }).select().single();
   if (error) return res.status(500).json({ error: error.message });
@@ -2305,7 +2305,7 @@ app.post('/api/estoque', auth, requirePermissao('estoque'), async (req, res) => 
 });
 
 // Importa vários produtos de uma vez (importação de outro sistema)
-app.post('/api/estoque/lote', auth, requirePermissao('estoque'), async (req, res) => {
+app.post('/api/estoque/lote', auth, requirePermissao('estoque_gerenciar'), async (req, res) => {
   const { produtos } = req.body;
   if (!Array.isArray(produtos) || !produtos.length) {
     return res.status(422).json({ error: 'Envie uma lista de produtos em "produtos"' });
@@ -2341,7 +2341,7 @@ app.post('/api/estoque/lote', auth, requirePermissao('estoque'), async (req, res
   }
 });
 
-app.put('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, res) => {
+app.put('/api/estoque/:id', auth, requirePermissao('estoque_gerenciar'), async (req, res) => {
   const { data, error } = await supabase.from('produtos').update(req.body)
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
   if (error || !data) return res.status(404).json({ error: 'Não encontrado' });
@@ -2350,14 +2350,14 @@ app.put('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, res) 
 
 // Desativa um produto (soft delete — mantém o histórico de movimentação e
 // de compras parceladas antigas que apontam pra ele)
-app.delete('/api/estoque/:id', auth, requirePermissao('estoque'), async (req, res) => {
+app.delete('/api/estoque/:id', auth, requirePermissao('estoque_gerenciar'), async (req, res) => {
   await supabase.from('produtos').update({ ativo: false })
     .eq('id', req.params.id).eq('salao_id', req.salao_id);
   res.json({ message: 'Produto desativado' });
 });
 
 // Movimentar estoque (reposição manual / ajuste avulso)
-app.post('/api/estoque/:id/movimentar', auth, requirePermissao('estoque'), async (req, res) => {
+app.post('/api/estoque/:id/movimentar', auth, requirePermissao('estoque_gerenciar'), async (req, res) => {
   const { tipo, quantidade, motivo } = req.body;
   const { data: prod } = await supabase.from('produtos')
     .select('qtd_atual, nome').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
@@ -2402,7 +2402,7 @@ app.post('/api/estoque/:id/consumir', auth, requirePermissao('estoque'), async (
 // ele levar pra casa) — desconta do estoque E gera um lançamento financeiro
 // de verdade, vinculado ao cliente (entra no relatório de Fiado se marcado
 // como pendente).
-app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque'), async (req, res) => {
+app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque_gerenciar'), async (req, res) => {
   const { cliente_id, profissional_id, quantidade, valor, forma_pgto, pago, data, agendamento_id } = req.body;
   if (!cliente_id || !quantidade || Number(quantidade) <= 0) {
     return res.status(422).json({ error: 'cliente_id e quantidade (maior que zero) são obrigatórios' });
