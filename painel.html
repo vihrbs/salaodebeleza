@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.10.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.11.0-frontend</div>
       </div>
     </div>
 
@@ -2479,9 +2479,21 @@ function renderEst(list) {
   var lC = {ok:'bs',low:'bw',crit:'bd2'};
   var lF = {ok:'sfok',low:'sflow',crit:'sfcrit'};
   var lT = {ok:'Normal',low:'Baixo',crit:'Crítico'};
+  // Ajustar quantidade na mão, criar/editar/excluir produto e vender pro
+  // cliente exigem a permissão "estoque_gerenciar" — sem ela, a pessoa só
+  // vê os produtos e registra consumo (usado num atendimento).
+  var podeGerenciar = USER_PERFIL === 'admin' || USER_PERMISSOES.indexOf('estoque_gerenciar') >= 0;
   document.getElementById('est-tb').innerHTML = list.map(function(p){
     var pct = Math.min(Math.round((p.qtd_atual/Math.max(p.qtd_minima,1))*100), 100);
     var lvl = p.qtd_atual<=0 ? 'crit' : p.qtd_atual<p.qtd_minima ? 'low' : 'ok';
+    var acoes = '<button class="btnic btn btnsm" title="Registrar consumo (usado em atendimento)" onclick="event.stopPropagation();abrirConsumoProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">💧</button>';
+    if (podeGerenciar) {
+      acoes = '<button class="btnic btn btnsm" title="Repor estoque" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'entrada\')">+</button>' +
+        '<button class="btnic btn btnsm" title="Ajustar/perda" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'saida\')">−</button>' +
+        acoes +
+        '<button class="btnic btn btnsm" title="Vender pro cliente" onclick="event.stopPropagation();abrirVenderProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',' + (p.preco_venda||0) + ')">💰</button>' +
+        '<button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">🗑</button>';
+    }
     return '<tr onclick="toast(\'' + escAttr(p.nome) + '\',\'inf\')">' +
       '<td><strong>' + esc(p.nome) + '</strong></td>' +
       '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + esc(p.categoria) + '</span></td>' +
@@ -2489,13 +2501,7 @@ function renderEst(list) {
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
       '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
-      '<td><div style="display:flex;gap:3px;flex-wrap:wrap">' +
-        '<button class="btnic btn btnsm" title="Repor estoque" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'entrada\')">+</button>' +
-        '<button class="btnic btn btnsm" title="Ajustar/perda" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'saida\')">−</button>' +
-        '<button class="btnic btn btnsm" title="Registrar consumo (usado em atendimento)" onclick="event.stopPropagation();abrirConsumoProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">💧</button>' +
-        '<button class="btnic btn btnsm" title="Vender pro cliente" onclick="event.stopPropagation();abrirVenderProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',' + (p.preco_venda||0) + ')">💰</button>' +
-        '<button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">🗑</button>' +
-      '</div></td>' +
+      '<td><div style="display:flex;gap:3px;flex-wrap:wrap">' + acoes + '</div></td>' +
       '</tr>';
   }).join('');
   setTimeout(iniciarSombrasScroll, 30);
@@ -5114,9 +5120,9 @@ function toggleTipoAcesso() {
       updatePermLabel(cb);
     });
     document.getElementById('nu-fechar-comissao').checked = false;
+    document.getElementById('nu-estoque-gerenciar').checked = false;
   }
 }
-
 function updatePermLabel(cb) {
   var lbl = cb.closest('label');
   lbl.style.borderColor = cb.checked ? 'var(--ac)' : 'var(--bd)';
@@ -5134,6 +5140,7 @@ function abrirNovoUsuario() {
   // Reseta o formulário sempre pro estado "Personalizado" em branco
   document.getElementById('tipo-custom').checked = true;
   document.getElementById('nu-fechar-comissao').checked = false;
+  document.getElementById('nu-estoque-gerenciar').checked = false;
   toggleTipoAcesso();
   openM('m-novo-user');
 }
@@ -5156,10 +5163,11 @@ function criarUsuario() {
       if (permissoes.indexOf(cb.value) < 0) permissoes.push(cb.value);
     });
     if (document.getElementById('nu-fechar-comissao').checked) permissoes.push('fechar_comissao');
+    if (document.getElementById('nu-estoque-gerenciar').checked) permissoes.push('estoque_gerenciar');
     var profSel = document.getElementById('nu-profissional');
     profissionalId = profSel ? profSel.value : '';
   } else {
-    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
+    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','estoque_gerenciar','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
   }
 
   var btn = document.querySelector('#m-novo-user .btnp');
@@ -5222,6 +5230,14 @@ function aplicarPermissoes() {
     document.querySelectorAll('[onclick*="openImport"]').forEach(function(b){ b.style.display='none'; });
   }
 
+  // "+ Novo Produto" exige a permissão mais estrita de gerenciar estoque —
+  // quem só tem "estoque" (ver + registrar consumo) não vê esse botão
+  var btnNovoProduto = document.querySelector('#page-estoque [onclick="openM(\'m-prod\')"]');
+  if (btnNovoProduto) {
+    var podeGerenciarEstoque = USER_PERFIL === 'admin' || USER_PERMISSOES.indexOf('estoque_gerenciar') >= 0;
+    btnNovoProduto.style.display = podeGerenciarEstoque ? '' : 'none';
+  }
+
   // "API & Integração" mostra URL do backend e diagnóstico técnico — é
   // informação de infraestrutura, não faz sentido pra um funcionário comum
   // ver isso mesmo que ele tenha acesso à página de Config.
@@ -5280,6 +5296,7 @@ function abrirEditPerms(uid, nome) {
       };
     });
     document.getElementById('ep-fechar-comissao').checked = perms.indexOf('fechar_comissao') >= 0;
+    document.getElementById('ep-estoque-gerenciar').checked = perms.indexOf('estoque_gerenciar') >= 0;
     if (selProf) selProf.value = (u && u.profissional_id) ? u.profissional_id : '';
   }).catch(function() {
     // Se não conseguir buscar, abre com todos desmarcados
@@ -5293,6 +5310,7 @@ function salvarEditPerms() {
   var perms = [];
   document.querySelectorAll('#ep-checkboxes input[type=checkbox]:checked').forEach(function(cb){ perms.push(cb.value); });
   if (document.getElementById('ep-fechar-comissao').checked) perms.push('fechar_comissao');
+  if (document.getElementById('ep-estoque-gerenciar').checked) perms.push('estoque_gerenciar');
   if (!perms.length) { toast('Selecione pelo menos uma permissão','er'); return; }
   var selProf = document.getElementById('ep-profissional');
   var profissionalId = selProf ? selProf.value : '';
@@ -6225,6 +6243,12 @@ function dispensarBannerPWA() {
         </label>
         <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Ação sensível — permite marcar comissões de profissionais como pagas (mexe com dinheiro). Fica desligada por padrão mesmo se a pessoa tiver acesso à página de Comissões.</div>
       </div>
+      <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px;margin-top:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="nu-estoque-gerenciar" value="estoque_gerenciar" style="accent-color:var(--warn)"/> 📦 Pode gerenciar estoque (criar, editar, excluir, ajustar quantidade e vender)
+        </label>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Sem isso, quem tem acesso a Estoque só vê os produtos e registra consumo — não altera quantidade na mão.</div>
+      </div>
     </div>
     <div class="mf">
       <button class="btn btns" onclick="closeM('m-novo-user')">Cancelar</button>
@@ -6280,6 +6304,12 @@ function dispensarBannerPWA() {
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
           <input type="checkbox" id="ep-fechar-comissao" value="fechar_comissao" style="accent-color:var(--warn)"/> 💸 Pode fechar/reabrir comissões
         </label>
+      </div>
+      <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px;margin-top:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="ep-estoque-gerenciar" value="estoque_gerenciar" style="accent-color:var(--warn)"/> 📦 Pode gerenciar estoque (criar, editar, excluir produto, ajustar quantidade manualmente e vender pro cliente)
+        </label>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:6px;margin-left:26px">Sem isso marcado, quem tem acesso a Estoque só consegue ver os produtos e registrar consumo (produto usado num atendimento) — não consegue aumentar/diminuir a quantidade na mão.</div>
       </div>
     </div>
     <div class="mf">
