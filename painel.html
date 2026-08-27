@@ -489,7 +489,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.12.2-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.13.1-frontend</div>
       </div>
     </div>
 
@@ -1901,13 +1901,21 @@ function loadComandas() {
   if (!campoData.value) campoData.value = today();
   var data = campoData.value;
   document.getElementById('cmd-grid').innerHTML = '<div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>';
-  apiFetch('/api/agendamentos?data=' + data).then(function(lista){
-    COMANDAS_TODAS_DO_DIA = lista || [];
+  Promise.all([
+    apiFetch('/api/agendamentos?data=' + data).catch(function(){ return []; }),
+    apiFetch('/api/compras-profissionais?data=' + data).catch(function(e){
+      console.warn('Não consegui buscar compras de profissional (rota pode não existir nessa versão do backend ainda):', e.message);
+      return [];
+    })
+  ]).then(function(resultados){
+    COMANDAS_TODAS_DO_DIA = resultados[0] || [];
+    COMPRAS_PROF_DO_DIA = resultados[1] || [];
     renderComandas();
   }).catch(function(){
     document.getElementById('cmd-grid').innerHTML = '<div class="empty" style="grid-column:1/-1">Erro ao carregar as comandas.</div>';
   });
 }
+var COMPRAS_PROF_DO_DIA = [];
 
 function filtrarComandasPorStatus(status) {
   COMANDAS_FILTRO_ATUAL = status;
@@ -1923,38 +1931,81 @@ var STATUS_A_CONCLUIR = ['agendado', 'confirmado', 'em_atendimento'];
 
 // Comandas em cartões (quadradinhos), um por atendimento — pedido
 // específico pra ficar visualmente parecido com o print que foi mandado
-// de referência (outro sistema mostrando as comandas do dia assim)
+// de referência (outro sistema mostrando as comandas do dia assim).
+// Mistura agendamentos de cliente com compras de profissional na mesma
+// grade — pro dono, as duas coisas são "uma venda que rolou hoje".
 function renderComandas() {
-  var lista = COMANDAS_TODAS_DO_DIA;
-  if (COMANDAS_FILTRO_ATUAL === 'a_concluir') {
-    lista = lista.filter(function(a){ return STATUS_A_CONCLUIR.indexOf(a.status) >= 0; });
-  } else if (COMANDAS_FILTRO_ATUAL) {
-    lista = lista.filter(function(a){ return a.status === COMANDAS_FILTRO_ATUAL; });
-  }
-  var grid = document.getElementById('cmd-grid');
-  if (!lista.length) { grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Nenhuma comanda encontrada com esse filtro.</div>'; return; }
+  var lista = COMANDAS_TODAS_DO_DIA.map(function(a){ return { tipo: 'agendamento', dados: a }; });
+  var comprasProf = COMPRAS_PROF_DO_DIA.map(function(c){ return { tipo: 'compra_profissional', dados: c }; });
 
-  grid.innerHTML = lista.map(function(a){
-    var svcTxt = (a.agendamento_servicos || []).map(function(s){ return s.servicos && s.servicos.nome; }).filter(Boolean).join(', ') || 'Sem serviço';
-    var ehFiadoPendente = a.status === 'concluido' && !a.forma_pgto;
-    var statusHtml = ehFiadoPendente
-      ? '<span class="badge bw" style="font-size:.62rem">🧾 Fiado</span>'
-      : '<span class="badge ' + (SC[a.status]||'bg2') + '" style="font-size:.62rem">' + (SL[a.status]||a.status) + '</span>';
-    return '<div class="card" style="cursor:pointer;padding:14px;transition:transform .1s" onclick="abrirDetalhesAgendamento(\'' + a.id + '\')" onmouseover="this.style.borderColor=\'var(--ac)\'" onmouseout="this.style.borderColor=\'\'">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">' +
-        '<div style="min-width:0">' +
-          '<div style="font-weight:700;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(a.clientes && a.clientes.nome || 'Cliente') + '</div>' +
-          '<div style="font-size:.68rem;color:var(--t3)">' + fhr(a.data_hora) + ' · ' + esc(a.profissionais && a.profissionais.nome || '—') + '</div>' +
-        '</div>' +
-        statusHtml +
-      '</div>' +
-      '<div style="font-size:.74rem;color:var(--t2);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(svcTxt) + '</div>' +
-      '<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--bd2)">' +
-        '<span style="font-size:.66rem;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">Total</span>' +
-        '<strong style="font-size:1.05rem;color:var(--ac)">' + brl(a.valor_total) + '</strong>' +
-      '</div>' +
-    '</div>';
+  if (COMANDAS_FILTRO_ATUAL === 'a_concluir') {
+    lista = lista.filter(function(item){ return STATUS_A_CONCLUIR.indexOf(item.dados.status) >= 0; });
+    comprasProf = comprasProf.filter(function(item){
+      return (item.dados.parcelas_compra_profissional || []).some(function(p){ return p.status !== 'pago'; });
+    });
+  } else if (COMANDAS_FILTRO_ATUAL === 'concluido') {
+    lista = lista.filter(function(item){ return item.dados.status === 'concluido'; });
+    comprasProf = comprasProf.filter(function(item){
+      var parcelas = item.dados.parcelas_compra_profissional || [];
+      return parcelas.length && parcelas.every(function(p){ return p.status === 'pago'; });
+    });
+  } else if (COMANDAS_FILTRO_ATUAL === 'cancelado') {
+    lista = lista.filter(function(item){ return item.dados.status === 'cancelado'; });
+    comprasProf = []; // compra de profissional não tem "cancelado"
+  }
+
+  var todos = lista.concat(comprasProf);
+  var grid = document.getElementById('cmd-grid');
+  if (!todos.length) { grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Nenhuma comanda encontrada com esse filtro.</div>'; return; }
+
+  grid.innerHTML = todos.map(function(item){
+    if (item.tipo === 'compra_profissional') return renderCardCompraProfissional(item.dados);
+    return renderCardAgendamento(item.dados);
   }).join('');
+}
+
+function renderCardAgendamento(a) {
+  var svcTxt = (a.agendamento_servicos || []).map(function(s){ return s.servicos && s.servicos.nome; }).filter(Boolean).join(', ') || 'Sem serviço';
+  var ehFiadoPendente = a.status === 'concluido' && !a.forma_pgto;
+  var statusHtml = ehFiadoPendente
+    ? '<span class="badge bw" style="font-size:.62rem">🧾 Fiado</span>'
+    : '<span class="badge ' + (SC[a.status]||'bg2') + '" style="font-size:.62rem">' + (SL[a.status]||a.status) + '</span>';
+  return '<div class="card" style="cursor:pointer;padding:14px;transition:transform .1s" onclick="abrirDetalhesAgendamento(\'' + a.id + '\')" onmouseover="this.style.borderColor=\'var(--ac)\'" onmouseout="this.style.borderColor=\'\'">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">' +
+      '<div style="min-width:0">' +
+        '<div style="font-weight:700;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(a.clientes && a.clientes.nome || 'Cliente') + '</div>' +
+        '<div style="font-size:.68rem;color:var(--t3)">' + fhr(a.data_hora) + ' · ' + esc(a.profissionais && a.profissionais.nome || '—') + '</div>' +
+      '</div>' +
+      statusHtml +
+    '</div>' +
+    '<div style="font-size:.74rem;color:var(--t2);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(svcTxt) + '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--bd2)">' +
+      '<span style="font-size:.66rem;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">Total</span>' +
+      '<strong style="font-size:1.05rem;color:var(--ac)">' + brl(a.valor_total) + '</strong>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderCardCompraProfissional(c) {
+  var parcelas = c.parcelas_compra_profissional || [];
+  var todasPagas = parcelas.length && parcelas.every(function(p){ return p.status === 'pago'; });
+  var statusHtml = todasPagas
+    ? '<span class="badge bs" style="font-size:.62rem">Pago</span>'
+    : '<span class="badge bw" style="font-size:.62rem">' + parcelas.length + 'x pendente</span>';
+  return '<div class="card" style="cursor:pointer;padding:14px;transition:transform .1s;border-color:rgba(251,191,36,.25)" onclick="abrirParcelasProfissional(\'' + c.profissional_id + '\',\'' + escAttr(c.profissional_nome) + '\')" onmouseover="this.style.borderColor=\'var(--ac)\'" onmouseout="this.style.borderColor=\'rgba(251,191,36,.25)\'">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">' +
+      '<div style="min-width:0">' +
+        '<div style="font-weight:700;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🧑‍💼 ' + esc(c.profissional_nome) + '</div>' +
+        '<div style="font-size:.68rem;color:var(--t3)">Compra do profissional' + (parcelas.length > 1 ? ' · ' + parcelas.length + 'x' : '') + '</div>' +
+      '</div>' +
+      statusHtml +
+    '</div>' +
+    '<div style="font-size:.74rem;color:var(--t2);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.descricao || 'Item avulso') + '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--bd2)">' +
+      '<span style="font-size:.66rem;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">Total</span>' +
+      '<strong style="font-size:1.05rem;color:var(--ac)">' + brl(c.valor_total) + '</strong>' +
+    '</div>' +
+  '</div>';
 }
 
 function loadAgenda() {
@@ -2932,6 +2983,10 @@ function confirmarComandaProfissional() {
     toast('Comanda registrada! ' + parcelas + 'x de ' + brl(r.valor_total / parcelas), 'ok');
     closeM('m-comanda-prof');
     loadEst(); loadPros();
+    // Se a comanda foi feita hoje e a tela de Comandas está aberta, já
+    // recarrega ela também — pra aparecer junto com as comandas de cliente
+    var pageComandas = document.getElementById('page-comandas');
+    if (pageComandas && pageComandas.classList.contains('on')) loadComandas();
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled = false; btn.textContent = 'Registrar Comanda'; });
