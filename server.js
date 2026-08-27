@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.12.0-comandas-reorganizadas' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.12.1-corrige-origem-comanda' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1592,7 +1592,7 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
     const resultado = await criarAgendamentoUnico({
       salaoId: req.salao_id, clienteId: cliente_id, profissionalId: profissional_id,
       dataHora: agora, servicosInfo: srvcs, profComissaoPct: prof?.comissao_pct,
-      origem: 'venda_avulsa', pularChecagemConflito: true
+      origem: 'backoffice', pularChecagemConflito: true
     });
     if (resultado.status === 'conflito') {
       const msg = resultado.motivo === 'almoco'
