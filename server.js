@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.12.1-corrige-origem-comanda' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.13.0-compra-profissional-em-comandas' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -913,6 +913,35 @@ app.get('/api/profissionais/:id/compras', auth, async (req, res) => {
     res.json(data || []);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// Compras de profissionais do salão inteiro numa data — usado pra elas
+// aparecerem juntas na tela de Comandas (não só escondidas em "Parcelas"
+// de cada profissional). Comanda de cliente e compra de profissional são
+// coisas tecnicamente diferentes no banco, mas pro dono do salão as duas
+// são "uma venda que rolou hoje" e ele quer ver tudo junto.
+app.get('/api/compras-profissionais', auth, requirePermissao('agenda'), async (req, res) => {
+  const data = req.query.data || new Date().toISOString().split('T')[0];
+  try {
+    const { data: compras, error } = await supabase.from('compras_profissional')
+      .select('*, parcelas_compra_profissional(*)')
+      .eq('salao_id', req.salao_id).eq('data_compra', data)
+      .order('data_compra', { ascending: false });
+    if (error) throw error;
+
+    const { data: profissionais } = await supabase.from('profissionais')
+      .select('id, nome, cor_agenda').eq('salao_id', req.salao_id);
+    const nomePorId = {};
+    (profissionais || []).forEach(p => { nomePorId[p.id] = { nome: p.nome, cor: p.cor_agenda }; });
+
+    const lista = (compras || []).map(c => ({
+      ...c,
+      profissional_nome: nomePorId[c.profissional_id]?.nome || 'Profissional removido',
+      profissional_cor: nomePorId[c.profissional_id]?.cor || '#9A5B3F'
+    }));
+    res.json(lista);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // Marca uma parcela específica como paga
 app.patch('/api/parcelas/:id/pagar', auth, async (req, res) => {
