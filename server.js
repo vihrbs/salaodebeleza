@@ -278,7 +278,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.11.0-permissao-estoque-separada' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.12.0-comandas-reorganizadas' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -813,42 +813,78 @@ app.delete('/api/profissionais/:id', auth, requirePermissao('profissionais'), as
 // Registra uma venda de produto (ou item avulso) pro profissional, dividida
 // em N parcelas mensais. Só o admin pode registrar/gerenciar essas vendas;
 // o próprio profissional pode consultar as suas.
+// Registra uma "comanda" de compra do profissional — pode ser um item só
+// (formato antigo, ainda funciona) ou vários itens juntos (serviços e/ou
+// produtos, estilo comanda completa). Sempre gera parcelas (1 parcela =
+// à vista), reaproveitando a mesma estrutura que já alimenta o desconto
+// automático na hora de fechar comissão.
 app.post('/api/profissionais/:id/compras', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') {
     return res.status(403).json({ error: 'Apenas o administrador pode registrar vendas parceladas' });
   }
-  const { produto_id, descricao, valor_total, num_parcelas, data_compra } = req.body;
-  const valorTotal = Number(valor_total);
+  const { produto_id, descricao, valor_total, num_parcelas, data_compra, itens } = req.body;
   const numParcelas = parseInt(num_parcelas) || 1;
-
-  if (!valorTotal || valorTotal <= 0) return res.status(422).json({ error: 'Valor total inválido' });
   if (numParcelas < 1 || numParcelas > 24) return res.status(422).json({ error: 'Número de parcelas deve ser entre 1 e 24' });
-  if (!descricao && !produto_id) return res.status(422).json({ error: 'Informe um produto ou uma descrição' });
 
   try {
     const { data: prof } = await supabase.from('profissionais')
       .select('id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
     if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
 
-    let descricaoFinal = descricao || null;
-    if (produto_id) {
-      const { data: produto } = await supabase.from('produtos')
-        .select('id, nome, qtd_atual').eq('id', produto_id).eq('salao_id', req.salao_id).single();
-      if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
-      if (Number(produto.qtd_atual) < 1) return res.status(422).json({ error: 'Produto sem estoque disponível' });
-      descricaoFinal = descricaoFinal || produto.nome;
-      // Debita 1 unidade do estoque — o produto está saindo pro profissional
-      await supabase.from('produtos')
-        .update({ qtd_atual: Number(produto.qtd_atual) - 1 }).eq('id', produto_id);
-    }
-
     const dataCompraFinal = data_compra || new Date().toISOString().split('T')[0];
+    let valorTotal, descricaoFinal, itensSalvos = null;
+
+    // Formato novo: vários itens numa comanda só (serviços e/ou produtos)
+    if (Array.isArray(itens) && itens.length) {
+      const itensProcessados = [];
+      for (const item of itens) {
+        const quantidade = Number(item.quantidade) || 1;
+        const valorItem = Number(item.valor) || 0;
+        if (valorItem <= 0) return res.status(422).json({ error: 'Cada item precisa ter um valor válido' });
+
+        if (item.tipo === 'produto' && item.produto_id) {
+          const { data: produto } = await supabase.from('produtos')
+            .select('id, nome, qtd_atual').eq('id', item.produto_id).eq('salao_id', req.salao_id).single();
+          if (!produto) return res.status(404).json({ error: 'Produto "' + (item.nome||'') + '" não encontrado' });
+          if (Number(produto.qtd_atual) < quantidade) {
+            return res.status(422).json({ error: 'Estoque insuficiente pra "' + produto.nome + '". Atual: ' + produto.qtd_atual });
+          }
+          await supabase.from('produtos').update({ qtd_atual: Number(produto.qtd_atual) - quantidade }).eq('id', item.produto_id);
+          itensProcessados.push({ tipo: 'produto', produto_id: item.produto_id, nome: produto.nome, quantidade, valor: valorItem });
+        } else if (item.tipo === 'servico' && item.servico_id) {
+          const { data: servico } = await supabase.from('servicos')
+            .select('id, nome').eq('id', item.servico_id).eq('salao_id', req.salao_id).single();
+          if (!servico) return res.status(404).json({ error: 'Serviço não encontrado' });
+          itensProcessados.push({ tipo: 'servico', servico_id: item.servico_id, nome: servico.nome, quantidade: 1, valor: valorItem });
+        } else {
+          itensProcessados.push({ tipo: 'outro', nome: item.nome || item.descricao || 'Item avulso', quantidade, valor: valorItem });
+        }
+      }
+      itensSalvos = itensProcessados;
+      valorTotal = itensProcessados.reduce((s, i) => s + i.valor, 0);
+      descricaoFinal = itensProcessados.map(i => i.nome + (i.quantidade > 1 ? ' (' + i.quantidade + 'x)' : '')).join(', ');
+    } else {
+      // Formato antigo: um item só (produto_id OU descrição livre)
+      valorTotal = Number(valor_total);
+      if (!valorTotal || valorTotal <= 0) return res.status(422).json({ error: 'Valor total inválido' });
+      if (!descricao && !produto_id) return res.status(422).json({ error: 'Informe um produto ou uma descrição' });
+
+      descricaoFinal = descricao || null;
+      if (produto_id) {
+        const { data: produto } = await supabase.from('produtos')
+          .select('id, nome, qtd_atual').eq('id', produto_id).eq('salao_id', req.salao_id).single();
+        if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
+        if (Number(produto.qtd_atual) < 1) return res.status(422).json({ error: 'Produto sem estoque disponível' });
+        descricaoFinal = descricaoFinal || produto.nome;
+        await supabase.from('produtos').update({ qtd_atual: Number(produto.qtd_atual) - 1 }).eq('id', produto_id);
+      }
+    }
 
     const { data: compra, error: compraErr } = await supabase.from('compras_profissional')
       .insert({
         salao_id: req.salao_id, profissional_id: req.params.id, produto_id: produto_id || null,
         descricao: descricaoFinal, valor_total: valorTotal, num_parcelas: numParcelas,
-        data_compra: dataCompraFinal
+        data_compra: dataCompraFinal, itens: itensSalvos
       }).select().single();
     if (compraErr) throw compraErr;
 
