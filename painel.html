@@ -489,7 +489,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.13.2-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.13.3-frontend</div>
       </div>
     </div>
 
@@ -1988,22 +1988,24 @@ function renderCardAgendamento(a) {
 
 function renderCardCompraProfissional(c) {
   var parcelas = c.parcelas_compra_profissional || [];
-  var todasPagas = parcelas.length && parcelas.every(function(p){ return p.status === 'pago'; });
+  var parcelasPendentes = parcelas.filter(function(p){ return p.status !== 'pago'; });
+  var valorPendente = parcelasPendentes.reduce(function(s, p){ return s + Number(p.valor || 0); }, 0);
+  var todasPagas = parcelas.length && parcelasPendentes.length === 0;
   var statusHtml = todasPagas
     ? '<span class="badge bs" style="font-size:.62rem">Pago</span>'
-    : '<span class="badge bw" style="font-size:.62rem">' + parcelas.length + 'x pendente</span>';
+    : '<span class="badge bw" style="font-size:.62rem">' + parcelasPendentes.length + 'x pendente</span>';
   return '<div class="card" style="cursor:pointer;padding:14px;transition:transform .1s;border-color:rgba(251,191,36,.25)" onclick="abrirParcelasProfissional(\'' + c.profissional_id + '\',\'' + escAttr(c.profissional_nome) + '\')" onmouseover="this.style.borderColor=\'var(--ac)\'" onmouseout="this.style.borderColor=\'rgba(251,191,36,.25)\'">' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">' +
       '<div style="min-width:0">' +
         '<div style="font-weight:700;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🧑‍💼 ' + esc(c.profissional_nome) + '</div>' +
-        '<div style="font-size:.68rem;color:var(--t3)">Compra do profissional' + (parcelas.length > 1 ? ' · ' + parcelas.length + 'x' : '') + '</div>' +
+        '<div style="font-size:.68rem;color:var(--t3)">Compra do profissional' + (parcelas.length > 1 ? ' · ' + parcelas.length + 'x no total' : '') + '</div>' +
       '</div>' +
       statusHtml +
     '</div>' +
     '<div style="font-size:.74rem;color:var(--t2);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.descricao || 'Item avulso') + '</div>' +
     '<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--bd2)">' +
-      '<span style="font-size:.66rem;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">Total</span>' +
-      '<strong style="font-size:1.05rem;color:var(--ac)">' + brl(c.valor_total) + '</strong>' +
+      '<span style="font-size:.66rem;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">' + (todasPagas ? 'Total' : 'Falta pagar') + '</span>' +
+      '<strong style="font-size:1.05rem;color:var(--ac)">' + brl(todasPagas ? c.valor_total : valorPendente) + '</strong>' +
     '</div>' +
   '</div>';
 }
@@ -3043,6 +3045,10 @@ function pagarParcela(parcelaId, profId) {
     // o "R$X em compras pendentes" fica desatualizado até recarregar a página
     var pageComissoes = document.getElementById('page-comissoes');
     if (pageComissoes && pageComissoes.classList.contains('on')) loadCom();
+    // Mesma coisa pra Comandas — o card de "compra do profissional" mostra
+    // quanto falta pagar, então também precisa recarregar
+    var pageComandas = document.getElementById('page-comandas');
+    if (pageComandas && pageComandas.classList.contains('on')) loadComandas();
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
