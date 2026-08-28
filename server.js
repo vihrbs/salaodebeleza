@@ -3,6 +3,8 @@ const cors     = require('cors');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const crypto   = require('crypto');
+const fs       = require('fs');
+const path     = require('path');
 
 const app = express();
 app.use(cors());
@@ -289,6 +291,18 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
+// Serve o painel diretamente pelo backend (Railway) — uma via alternativa
+// de acesso enquanto o GitHub Pages não estiver publicando certo. Não
+// substitui o painel.html do GitHub Pages; é só um espelho de emergência.
+app.get('/painel-direto', (req, res) => {
+  try {
+    const html = fs.readFileSync(path.join(__dirname, 'painel.html'), 'utf-8');
+    res.type('html').send(html);
+  } catch(e) {
+    res.status(500).send('Erro ao carregar o painel: ' + e.message);
+  }
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.16.0-comanda-aberta-e-agendar' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
