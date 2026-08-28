@@ -289,7 +289,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.14.0-painel-super-admin' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.15.0-comissao-produto' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1616,7 +1616,7 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
 
   try {
     const { data: prof } = await supabase.from('profissionais')
-      .select('comissao_pct').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
+      .select('comissao_pct, comissao_produto_pct').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
     if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
 
     let srvcs = [];
@@ -1667,12 +1667,19 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
         valor: valorProduto, data: agora.split('T')[0], forma_pgto, pago: pago !== false
       }).select().single();
 
+      // Comissão sobre venda de produto — usa a % específica de produto do
+      // profissional, separada da % de serviço (uma pessoa pode ganhar 40%
+      // no serviço e só 10% em produto, por exemplo — são coisas diferentes)
+      const pctProduto = Number(prof.comissao_produto_pct) || 0;
+      const comissaoProdutoValor = valorProduto * (pctProduto / 100);
+
       await supabase.from('movimentacoes_estoque').insert({
         salao_id: req.salao_id, produto_id: item.produto_id, tipo: 'venda',
         quantidade, valor: valorProduto, cliente_id, profissional_id,
-        usuario_id: req.user.id, lancamento_id: lancamento ? lancamento.id : null
+        usuario_id: req.user.id, lancamento_id: lancamento ? lancamento.id : null,
+        comissao_valor: comissaoProdutoValor
       });
-      produtosVendidos.push({ produto_id: item.produto_id, nome: prod.nome, quantidade, valor: valorProduto });
+      produtosVendidos.push({ produto_id: item.produto_id, nome: prod.nome, quantidade, valor: valorProduto, comissao: comissaoProdutoValor });
     }
 
     // Marca como concluída na hora (já é uma venda que aconteceu agora) e
@@ -2517,16 +2524,30 @@ app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque_gerenciar'),
     valor: valorFinal, data: dataFinal, forma_pgto, pago: pagoFinal
   }).select().single();
 
+  // Comissão sobre venda de produto — usa a % específica de produto do
+  // profissional (comissao_produto_pct), separada da % de serviço. Sem
+  // profissional vinculado, ou sem essa % configurada, não gera comissão
+  // nenhuma (não força custo em cima de venda de balcão sem ninguém envolvido).
+  let comissaoProdutoValor = 0;
+  if (profissional_id) {
+    const { data: profVendedor } = await supabase.from('profissionais')
+      .select('comissao_produto_pct').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
+    const pctProduto = Number(profVendedor?.comissao_produto_pct) || 0;
+    comissaoProdutoValor = valorFinal * (pctProduto / 100);
+  }
+
   await supabase.from('movimentacoes_estoque').insert({
     salao_id: req.salao_id, produto_id: req.params.id, tipo: 'venda',
     quantidade, valor: valorFinal, cliente_id, profissional_id: profissional_id || null,
-    usuario_id: req.user.id, lancamento_id: lancamento ? lancamento.id : null
+    usuario_id: req.user.id, lancamento_id: lancamento ? lancamento.id : null,
+    comissao_valor: comissaoProdutoValor
   });
 
   res.json({
     nova_quantidade: nova, produto: prod.nome, valor: valorFinal,
     lancamento_id: lancamento ? lancamento.id : null,
-    novo_valor_total_agendamento: novoValorTotalAgendamento
+    novo_valor_total_agendamento: novoValorTotalAgendamento,
+    comissao_produto: comissaoProdutoValor
   });
 });
 
@@ -2584,7 +2605,7 @@ app.get('/api/estoque/movimentacoes', auth, requirePermissao('estoque'), async (
 app.get('/api/comissoes/historico', auth, requirePermissao('comissoes'), async (req, res) => {
   try {
     let query = supabase.from('fechamentos_comissao')
-      .select('id, profissional_id, periodo_inicio, periodo_fim, total_comissao, total_bruto, total_servicos, total_caixinhas, valor_parcelas_descontado, pago_em')
+      .select('id, profissional_id, periodo_inicio, periodo_fim, total_comissao, total_bruto, total_servicos, total_caixinhas, total_comissao_produtos, valor_parcelas_descontado, pago_em')
       .eq('salao_id', req.salao_id).eq('status', 'pago').order('pago_em', { ascending: false });
     if (req.query.profissional_id) query = query.eq('profissional_id', req.query.profissional_id);
 
@@ -2664,7 +2685,7 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
 
     // Se já está pago, mostra zerado (já foi quitado, não soma de novo)
     if (fechamento && fechamento.status === 'pago') {
-      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, total_caixinhas: 0, fechamento, compras_pendentes_total };
+      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, total_comissao_produtos: 0, total_caixinhas: 0, fechamento, compras_pendentes_total };
     }
 
     // Senão, calcula normalmente a partir dos agendamentos concluídos
@@ -2693,7 +2714,17 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
     const agsComCaixinha = (agsComCaixinhaBrutos || []).filter(a => !servicoJaPago(a.data_hora, periodosPagos));
     const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
 
-    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao, total_caixinhas, fechamento, compras_pendentes_total };
+    // Comissão de venda de produto — soma à parte pra mostrar transparente
+    // pro dono e pro profissional (ex.: "R$X foi de serviço, R$Y foi de
+    // produto vendido"), mas entra junto no total_comissao final a pagar.
+    const { data: vendasProdutoBrutas } = await supabase.from('movimentacoes_estoque')
+      .select('created_at, comissao_valor')
+      .eq('profissional_id', p.id).eq('tipo', 'venda').eq('salao_id', req.salao_id)
+      .gte('created_at', ini + 'T03:00:00+00:00').lte('created_at', adicionarDia(fim) + 'T02:59:59+00:00');
+    const vendasProduto = (vendasProdutoBrutas || []).filter(v => !servicoJaPago(v.created_at, periodosPagos));
+    const total_comissao_produtos = vendasProduto.reduce((s, v) => s + Number(v.comissao_valor || 0), 0);
+
+    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao: total_comissao + total_comissao_produtos, total_comissao_produtos, total_caixinhas, fechamento, compras_pendentes_total };
   }));
   res.json(resultado);
 });
@@ -2768,10 +2799,23 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
     const agsComCaixinha = (agsComCaixintaBrutos || []).filter(a => !servicoJaPago(a.data_hora, periodosPagos));
     const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
-    const total_comissao = total_comissao_servicos + total_caixinhas;
 
-    if (total_servicos === 0) {
-      return res.status(400).json({ error: 'Nenhum serviço novo pra fechar neste período (pode já ter sido pago num fechamento anterior que se sobrepõe a essas datas).' });
+    // Comissão de venda de produto do período — mesma proteção contra
+    // período sobreposto que os serviços já têm.
+    const { data: vendasProdutoBrutas } = await supabase.from('movimentacoes_estoque')
+      .select('created_at, comissao_valor')
+      .eq('profissional_id', profissional_id).eq('tipo', 'venda').eq('salao_id', req.salao_id)
+      .gte('created_at', ini + 'T03:00:00+00:00').lte('created_at', adicionarDia(fim) + 'T02:59:59+00:00');
+    const vendasProduto = (vendasProdutoBrutas || []).filter(v => !servicoJaPago(v.created_at, periodosPagos));
+    const total_comissao_produtos = vendasProduto.reduce((s, v) => s + Number(v.comissao_valor || 0), 0);
+
+    const total_comissao = total_comissao_servicos + total_caixinhas + total_comissao_produtos;
+
+    // Só bloqueia se realmente não sobrou NADA pra fechar (nem serviço, nem
+    // produto) — antes só olhava serviço, então um profissional que só
+    // vendeu produto no período (sem atender ninguém) nunca conseguia fechar.
+    if (total_servicos === 0 && total_comissao_produtos === 0 && total_caixinhas === 0) {
+      return res.status(400).json({ error: 'Nenhum serviço ou venda novo pra fechar neste período (pode já ter sido pago num fechamento anterior que se sobrepõe a essas datas).' });
     }
 
     // Desconto opcional das parcelas pendentes (compras parceladas que o
@@ -2820,7 +2864,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       ({ data, error } = await supabase.from('fechamentos_comissao')
         .update({
           total_comissao: total_comissao_final, total_bruto, total_servicos, total_caixinhas,
-          valor_parcelas_descontado, status: 'pago', pago_em: new Date(), periodo_fim: fim
+          total_comissao_produtos, valor_parcelas_descontado, status: 'pago', pago_em: new Date(), periodo_fim: fim
         })
         .eq('id', existing.id).select().single());
     } else {
@@ -2829,7 +2873,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
         .insert({
           salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
           total_comissao: total_comissao_final, total_bruto, total_servicos, total_caixinhas,
-          valor_parcelas_descontado, status: 'pago', pago_em: new Date()
+          total_comissao_produtos, valor_parcelas_descontado, status: 'pago', pago_em: new Date()
         })
         .select().single());
     }
@@ -2847,7 +2891,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
         }).catch(e => console.error('Erro inesperado ao notificar profissional (comissão):', e.message));
     }
 
-    res.json({ ...data, total_comissao_bruta, valor_parcelas_descontado, parcelas_quitadas: parcelas_quitadas.length });
+    res.json({ ...data, total_comissao_bruta, total_comissao_produtos, valor_parcelas_descontado, parcelas_quitadas: parcelas_quitadas.length });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
