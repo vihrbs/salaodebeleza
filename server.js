@@ -289,7 +289,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.15.0-comissao-produto' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.16.0-comanda-aberta-e-agendar' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1603,7 +1603,7 @@ async function criarAgendamentoUnico({
 // criação de agendamento (pra manter a comissão contando certinho) e a
 // mesma lógica de venda de produto (pra descontar do estoque igual sempre).
 app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, res) => {
-  const { cliente_id, profissional_id, servicos, produtos, forma_pgto, pago } = req.body;
+  const { cliente_id, profissional_id, servicos, produtos, forma_pgto, pago, deixar_aberto } = req.body;
   const servicosIds = Array.isArray(servicos) ? servicos.filter(Boolean) : [];
   const produtosLista = Array.isArray(produtos) ? produtos.filter(p => p && p.produto_id) : [];
 
@@ -1612,6 +1612,9 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
   }
   if (!servicosIds.length && !produtosLista.length) {
     return res.status(422).json({ error: 'Selecione ao menos um serviço ou produto' });
+  }
+  if (!deixar_aberto && !forma_pgto) {
+    return res.status(422).json({ error: 'Informe a forma de pagamento, ou marque "deixar em aberto" pra cobrar depois' });
   }
 
   try {
@@ -1664,7 +1667,7 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
       const { data: lancamento } = await supabase.from('lancamentos').insert({
         salao_id: req.salao_id, cliente_id, agendamento_id: agendamentoId, tipo: 'entrada', categoria: 'Produto',
         descricao: 'Venda: ' + prod.nome + ' (' + quantidade + 'x)',
-        valor: valorProduto, data: agora.split('T')[0], forma_pgto, pago: pago !== false
+        valor: valorProduto, data: agora.split('T')[0], forma_pgto: forma_pgto || null, pago: deixar_aberto ? false : (pago !== false)
       }).select().single();
 
       // Comissão sobre venda de produto — usa a % específica de produto do
@@ -1682,23 +1685,34 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
       produtosVendidos.push({ produto_id: item.produto_id, nome: prod.nome, quantidade, valor: valorProduto, comissao: comissaoProdutoValor });
     }
 
-    // Marca como concluída na hora (já é uma venda que aconteceu agora) e
-    // aplica a taxa de maquininha se foi no cartão, igual concluir atendimento normal
-    const marcarComoPago = pago !== false;
-    await supabase.from('agendamentos').update({ status: 'concluido', forma_pgto }).eq('id', agendamentoId);
-    await supabase.from('lancamentos')
-      .update({ pago: marcarComoPago, forma_pgto, valor: valorTotalAtual - produtosVendidos.reduce((s,p)=>s+p.valor,0) })
-      .eq('agendamento_id', agendamentoId).eq('categoria', 'Serviço');
-
+    // Se pediu pra deixar em aberto, NÃO conclui agora — fica como
+    // "em_atendimento" (cliente já chegou, comanda existe, mas ainda vai
+    // decidir/pagar depois). Nesse caso não mexe em forma de pagamento nem
+    // aplica taxa de maquininha, porque isso só se sabe na hora de fechar
+    // de verdade (pelo fluxo normal de "Concluir Atendimento").
+    let statusFinal = 'concluido';
     let infoTaxaMaquininha = { taxa_total: 0, taxa_profissional: 0 };
-    if (marcarComoPago) {
-      try {
-        infoTaxaMaquininha = await aplicarTaxaMaquininha(agendamentoId, req.salao_id, valorTotalAtual, forma_pgto);
-      } catch(e) { console.error('Erro ao aplicar taxa maquininha (venda avulsa):', e.message); }
+    if (deixar_aberto) {
+      statusFinal = 'em_atendimento';
+      await supabase.from('agendamentos').update({ status: statusFinal }).eq('id', agendamentoId);
+    } else {
+      // Marca como concluída na hora (já é uma venda que aconteceu agora) e
+      // aplica a taxa de maquininha se foi no cartão, igual concluir atendimento normal
+      const marcarComoPago = pago !== false;
+      await supabase.from('agendamentos').update({ status: statusFinal, forma_pgto }).eq('id', agendamentoId);
+      await supabase.from('lancamentos')
+        .update({ pago: marcarComoPago, forma_pgto, valor: valorTotalAtual - produtosVendidos.reduce((s,p)=>s+p.valor,0) })
+        .eq('agendamento_id', agendamentoId).eq('categoria', 'Serviço');
+
+      if (marcarComoPago) {
+        try {
+          infoTaxaMaquininha = await aplicarTaxaMaquininha(agendamentoId, req.salao_id, valorTotalAtual, forma_pgto);
+        } catch(e) { console.error('Erro ao aplicar taxa maquininha (venda avulsa):', e.message); }
+      }
     }
 
     res.status(201).json({
-      id: agendamentoId, valor_total: valorTotalAtual, status: 'concluido',
+      id: agendamentoId, valor_total: valorTotalAtual, status: statusFinal,
       produtos_vendidos: produtosVendidos, taxa_maquininha: infoTaxaMaquininha
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
