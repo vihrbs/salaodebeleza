@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.16.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.16.1-frontend</div>
       </div>
     </div>
 
@@ -921,6 +921,33 @@ var COLS = ['#6C63FF','#FF6584','#43D9AD','#FFB347','#3B82F6','#EC4899'];
 
 // ── HELPERS ─────────────────────────────────────────────
 function brl(v){ return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
+
+// Mesma formatação do brl(), só sem o "R$" na frente — usada em CAMPOS
+// EDITÁVEIS de preço, pra já mostrar no formato que a pessoa espera digitar
+// (vírgula, do jeito brasileiro), não em formato de máquina (ponto).
+function brlSemSimbolo(v){ return Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
+
+// Interpreta um valor digitado que pode vir com vírgula OU ponto como
+// separador decimal (ex.: "45,00", "45.00", "45") — campos type="number"
+// do HTML só aceitam ponto e SILENCIOSAMENTE descartam a vírgula, o que
+// bagunçava completamente o valor digitado por qualquer pessoa
+// escrevendo do jeito natural em português. Por isso os campos de preço
+// viraram type="text", e essa função trata a conversão na mão.
+function parseNumeroBR(valor) {
+  if (valor === null || valor === undefined) return 0;
+  var limpo = String(valor).trim();
+  if (!limpo) return 0;
+  // Se tiver os dois (ex.: "1.234,56"), o ponto é separador de milhar —
+  // remove ele e troca a vírgula por ponto decimal
+  if (limpo.indexOf(',') >= 0 && limpo.indexOf('.') >= 0) {
+    limpo = limpo.replace(/\./g, '').replace(',', '.');
+  } else {
+    // Só vírgula (ex.: "45,00") — ela É o separador decimal
+    limpo = limpo.replace(',', '.');
+  }
+  var n = parseFloat(limpo);
+  return isNaN(n) ? 0 : n;
+}
 function fdt(d){ return new Date(d).toLocaleDateString('pt-BR'); }
 function fhr(d){ return new Date(d).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
 function today(){
@@ -3034,14 +3061,14 @@ function atualizarQtdProdutoComandaProf(produtoId, novaQtd) {
 
 function atualizarPrecoProdutoComandaProf(produtoId, novoValor) {
   var item = COMANDA_PROF_PRODUTOS.find(function(p){ return p.produto_id === produtoId; });
-  if (item) item.preco_unit = Math.max(0, Number(novoValor) || 0);
+  if (item) item.preco_unit = Math.max(0, parseNumeroBR(novoValor));
   renderProdutosComandaProf();
   recalcularTotalComandaProf();
 }
 
 function adicionarOutroItemComandaProf() {
   var nome = document.getElementById('cp-outro-nome').value.trim();
-  var valor = parseFloat(document.getElementById('cp-outro-valor').value);
+  var valor = parseNumeroBR(document.getElementById('cp-outro-valor').value);
   if (!nome) { toast('Descreva o item','er'); return; }
   if (!valor || valor <= 0) { toast('Informe um valor válido','er'); return; }
   COMANDA_PROF_OUTROS.push({ nome: nome, valor: valor });
@@ -3064,7 +3091,7 @@ function renderProdutosComandaProf() {
       '<span style="flex:1">' + esc(p.nome) + '</span>' +
       '<input type="number" min="1" value="' + p.quantidade + '" style="width:48px;padding:4px 6px;font-size:.78rem" class="fc" title="Quantidade" onchange="atualizarQtdProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
       '<span style="font-size:.7rem;color:var(--t3)">×</span>' +
-      '<input type="number" min="0" step="0.01" value="' + p.preco_unit + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onchange="atualizarPrecoProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
+      '<input type="text" inputmode="decimal" value="' + brlSemSimbolo(p.preco_unit) + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onfocus="this.select()" onchange="atualizarPrecoProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
       '<strong style="min-width:64px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoComandaProf(\'' + p.produto_id + '\')">✕</button>' +
     '</div>';
@@ -3107,12 +3134,12 @@ function sincronizarProdutosComandaProfComDOM() {
   var linhasProdutos = document.querySelectorAll('#cp-produtos-lista > div');
   var idx = 0;
   linhasProdutos.forEach(function(linha){
-    var inputs = linha.querySelectorAll('input[type="number"]');
-    if (!inputs.length) return; // linha de "outro item" não tem input numérico
+    var inputs = linha.querySelectorAll('input'); // pega quantidade (number) E preço (text) juntos
+    if (!inputs.length) return; // linha de "outro item" não tem input nenhum
     var item = COMANDA_PROF_PRODUTOS[idx];
     if (item) {
       if (inputs[0]) item.quantidade = Math.max(1, parseInt(inputs[0].value) || 1);
-      if (inputs[1]) item.preco_unit = Math.max(0, Number(inputs[1].value) || 0);
+      if (inputs[1]) item.preco_unit = Math.max(0, parseNumeroBR(inputs[1].value));
     }
     idx++;
   });
@@ -3676,7 +3703,7 @@ function renderProdutosVendaAvulsa() {
       '<span style="flex:1">' + esc(p.nome) + '</span>' +
       '<input type="number" min="1" value="' + p.quantidade + '" style="width:48px;padding:4px 6px;font-size:.78rem" class="fc" title="Quantidade" onchange="atualizarQtdProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
       '<span style="font-size:.7rem;color:var(--t3)">×</span>' +
-      '<input type="number" min="0" step="0.01" value="' + p.preco_unit + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onchange="atualizarPrecoProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
+      '<input type="text" inputmode="decimal" value="' + brlSemSimbolo(p.preco_unit) + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onfocus="this.select()" onchange="atualizarPrecoProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
       '<strong style="min-width:64px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoVendaAvulsa(\'' + p.produto_id + '\')">✕</button>' +
     '</div>';
@@ -3685,7 +3712,7 @@ function renderProdutosVendaAvulsa() {
 
 function atualizarPrecoProdutoVendaAvulsa(produtoId, novoValor) {
   var item = VENDA_AVULSA_PRODUTOS.find(function(p){ return p.produto_id === produtoId; });
-  if (item) item.preco_unit = Math.max(0, Number(novoValor) || 0);
+  if (item) item.preco_unit = Math.max(0, parseNumeroBR(novoValor));
   renderProdutosVendaAvulsa();
   recalcularTotalVendaAvulsa();
 }
@@ -3734,9 +3761,9 @@ function sincronizarProdutosVendaAvulsaComDOM() {
   document.querySelectorAll('#va-produtos-lista > div').forEach(function(linha, idx){
     var item = VENDA_AVULSA_PRODUTOS[idx];
     if (!item) return;
-    var inputs = linha.querySelectorAll('input[type="number"]');
+    var inputs = linha.querySelectorAll('input'); // pega quantidade (number) E preço (text) juntos
     if (inputs[0]) item.quantidade = Math.max(1, parseInt(inputs[0].value) || 1);
-    if (inputs[1]) item.preco_unit = Math.max(0, Number(inputs[1].value) || 0);
+    if (inputs[1]) item.preco_unit = Math.max(0, parseNumeroBR(inputs[1].value));
   });
 }
 
@@ -6889,7 +6916,7 @@ function dispensarBannerPWA() {
         <label class="fl">Outro item (opcional)</label>
         <div class="fr">
           <input class="fc" id="cp-outro-nome" placeholder="Ex.: Kit de tesouras" onkeypress="if(event.key==='Enter'){event.preventDefault();document.getElementById('cp-outro-valor').focus();}"/>
-          <input type="number" class="fc" id="cp-outro-valor" step="0.01" placeholder="Valor R$" style="max-width:120px" onkeypress="if(event.key==='Enter'){event.preventDefault();adicionarOutroItemComandaProf();}"/>
+          <input type="text" inputmode="decimal" class="fc" id="cp-outro-valor" placeholder="Valor R$ (ex.: 45,00)" style="max-width:120px" onkeypress="if(event.key==='Enter'){event.preventDefault();adicionarOutroItemComandaProf();}"/>
         </div>
         <button type="button" class="btn btnp btnsm" style="margin-top:6px" onclick="adicionarOutroItemComandaProf()">+ Adicionar esse item à comanda</button>
         <div style="font-size:.68rem;color:var(--t3);margin-top:4px">⚠️ Preencher os campos não basta — clique em "Adicionar" (ou aperte Enter no valor) pra esse item contar no total.</div>
