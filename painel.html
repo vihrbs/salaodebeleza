@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.14.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.14.1-frontend</div>
       </div>
     </div>
 
@@ -1353,6 +1353,7 @@ function loadAll() {
 // e atualiza Dashboard/Agenda sem precisar dar F5. Não atualiza se algum modal
 // estiver aberto, para não interromper o usuário no meio de uma ação.
 var INTERVALO_ATUALIZACAO = null;
+var INTERVALO_TRIAL = null;
 
 function iniciarAtualizacaoAutomatica() {
   if (INTERVALO_ATUALIZACAO) clearInterval(INTERVALO_ATUALIZACAO);
@@ -1370,6 +1371,13 @@ function iniciarAtualizacaoAutomatica() {
       loadAgenda();
     }
   }, 30000); // verifica a cada 30 segundos
+
+  // Rechecagem do trial num intervalo mais espaçado — se alguém estender o
+  // trial ou o pagamento cair enquanto a pessoa está com o app aberto, o
+  // bloqueio (ou o aviso de "faltam X dias") se corrige sozinho, sem
+  // precisar dar reload na página.
+  if (INTERVALO_TRIAL) clearInterval(INTERVALO_TRIAL);
+  INTERVALO_TRIAL = setInterval(checkTrial, 5 * 60000); // a cada 5 minutos
 }
 
 function pararAtualizacaoAutomatica() {
@@ -5762,10 +5770,17 @@ function checkTrial() {
     if (r.trial_expirado) {
       // BLOQUEIA O SISTEMA — mostra tela de pagamento
       bloquearSistema();
-    } else if (r.em_trial && r.dias_restantes <= 5) {
-      if (banner) {
-        banner.style.display = 'flex';
-        msg.textContent = '⏰ ' + r.dias_restantes + ' dia(s) restante(s) no trial. Assine para não perder o acesso.';
+    } else {
+      // Trial válido de novo (ex: alguém estendeu manualmente, ou pagou) —
+      // se a tela de bloqueio estava em pé de uma checagem anterior, tira
+      // ela agora. Sem isso, só um reload completo tirava o bloqueio, mesmo
+      // com o banco já certo.
+      desbloquearSistema();
+      if (r.em_trial && r.dias_restantes <= 5) {
+        if (banner) {
+          banner.style.display = 'flex';
+          msg.textContent = '⏰ ' + r.dias_restantes + ' dia(s) restante(s) no trial. Assine para não perder o acesso.';
+        }
       }
     }
   })
@@ -5773,6 +5788,13 @@ function checkTrial() {
     var banner = document.getElementById('trial-banner');
     if (banner) banner.style.display = 'none';
   });
+}
+
+function desbloquearSistema() {
+  var existing = document.getElementById('bloqueio-screen');
+  if (existing) existing.remove();
+  var topnav = document.querySelector('.tb-nav');
+  if (topnav) topnav.style.display = '';
 }
 
 function bloquearSistema() {
