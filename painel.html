@@ -478,6 +478,7 @@ select.fc option{background:var(--bg2)}
         <button class="sb-item" data-page="pacotes" onclick="nav('pacotes',this)"><span class="sb-ic">🎁</span>Pacotes</button>
         <div class="sb-section">Sistema</div>
         <button class="sb-item" data-page="config" onclick="nav('config',this)"><span class="sb-ic">⚙️</span>Config</button>
+        <button class="sb-item" data-page="super-admin" id="sb-super-admin" onclick="nav('super-admin',this)" style="display:none"><span class="sb-ic">🔑</span>Meus Clientes</button>
       </nav>
       <div class="sb-footer">
         <div class="sb-user">
@@ -489,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.13.3-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.14.0-frontend</div>
       </div>
     </div>
 
@@ -852,6 +853,15 @@ select.fc option{background:var(--bg2)}
       </div>
     </div>
 
+    <!-- SUPER ADMIN — gerenciar todos os salões (clientes) -->
+    <div class="page" id="page-super-admin">
+      <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
+        <input class="fc" id="sa-busca" placeholder="🔍 Buscar salão pelo nome..." style="max-width:280px" oninput="deb(loadSuperAdminSaloes,350)()"/>
+        <div style="margin-left:auto;font-size:.78rem;color:var(--t3)" id="sa-resumo"></div>
+      </div>
+      <div id="sa-lista"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+
   </div>
 </div>
 
@@ -899,6 +909,7 @@ var COR_SEL = '#6C63FF';
 var USER_PERFIL = 'admin'; // 'admin' ou 'recepcionista'
 var USER_EMAIL = '';
 var USER_EMAIL_VERIFICADO = true; // otimista até o login/registro dizer o contrário
+var USER_SUPER_ADMIN = false; // dono da plataforma (não é a mesma coisa que "admin" de UM salão)
 
 // Permissões do usuário atual (carregadas do login)
 var USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
@@ -1027,7 +1038,7 @@ function doLogin() {
       if (data.usuario && data.usuario.salao_id) localStorage.setItem('bpro_salao_id', data.usuario.salao_id);
       if (data.usuario && data.usuario.saloes && data.usuario.saloes.id) localStorage.setItem('bpro_salao_id', data.usuario.saloes.id);
       DEMO = false;
-      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms, data.usuario && data.usuario.email, data.usuario && data.usuario.email_verificado);
+      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms, data.usuario && data.usuario.email, data.usuario && data.usuario.email_verificado, data.usuario && data.usuario.super_admin);
     } else {
       DEMO = true;
       enterApp(email ? email.split('@')[0] : 'Admin Demo', 'Studio Demo', 'DEMO');
@@ -1133,10 +1144,12 @@ function doRegister() {
   .finally(function(){ btn.disabled=false; btn.textContent='Criar Conta Grátis'; });
 }
 
-function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado) {
+function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado, superAdmin) {
   USER_PERFIL = perfil || 'admin';
   USER_EMAIL = email || '';
   USER_EMAIL_VERIFICADO = (emailVerificado === undefined || emailVerificado === null) ? true : !!emailVerificado;
+  USER_SUPER_ADMIN = !!superAdmin;
+  document.getElementById('sb-super-admin').style.display = USER_SUPER_ADMIN ? '' : 'none';
   if (permissoes && permissoes.length) {
     USER_PERMISSOES = permissoes;
   } else if (perfil === 'admin') {
@@ -1194,6 +1207,15 @@ function doLogout() {
 var MODULOS_COM_PERMISSAO = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
 
 function nav(page, el) {
+  // Bloqueio específico do painel de Super Admin — não é uma permissão de
+  // módulo normal (essas são por salão); é acesso de dono da plataforma.
+  // Mesmo que alguém chame nav('super-admin') direto pelo console, não sai
+  // do lugar sem a flag — e o backend também bloqueia de verdade nas rotas.
+  if (page === 'super-admin' && !USER_SUPER_ADMIN) {
+    toast('Essa área é restrita.', 'er');
+    return;
+  }
+
   // Bloqueio de verdade: mesmo que o botão de alguma forma fique visível ou
   // alguém chame nav() manualmente, a troca de página não acontece se o
   // usuário não tiver essa permissão (exceto admin, que sempre pode tudo).
@@ -1220,13 +1242,14 @@ function nav(page, el) {
   });
 
   // Título da topbar
-  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',comandas:'Comandas',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações'};
+  var PAGE_TITLES = {dashboard:'Dashboard',agenda:'Agenda',comandas:'Comandas',clientes:'Clientes',fiado:'Fiado',financeiro:'Financeiro',estoque:'Estoque',comissoes:'Comissões',profissionais:'Profissionais',servicos:'Serviços',pacotes:'Pacotes',config:'Configurações','super-admin':'Meus Clientes'};
   var tbTitle = document.getElementById('tb-page-title');
   if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
 
   // Ações especiais por página
   if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
   if (page==='comandas') { loadComandas(); }
+  if (page==='super-admin') { loadSuperAdminSaloes(); }
 
   // Reavalia as sombras de rolagem das tabelas da página que acabou de abrir
   // (pega o caso de conteúdo já carregado antes, em cache)
@@ -2750,6 +2773,100 @@ function abrirHistoricoComissoes() {
     (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
   openM('m-historico-com');
   loadHistoricoComissoes();
+}
+
+// ── SUPER ADMIN — gerenciar todos os salões (clientes) ──
+function loadSuperAdminSaloes() {
+  var busca = document.getElementById('sa-busca').value.trim();
+  document.getElementById('sa-lista').innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  apiFetch('/api/super-admin/saloes' + (busca ? '?q=' + encodeURIComponent(busca) : ''))
+    .then(function(r){ renderSuperAdminSaloes(r || []); })
+    .catch(function(e){ document.getElementById('sa-lista').innerHTML = '<div class="empty">Erro ao carregar: ' + esc(e.message||'') + '</div>'; });
+}
+
+function fmtUltimoAcesso(iso) {
+  if (!iso) return 'Nunca acessou';
+  var d = new Date(iso);
+  var diffMs = Date.now() - d.getTime();
+  var diffDias = Math.floor(diffMs / 86400000);
+  if (diffDias === 0) return 'Hoje, ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+  if (diffDias === 1) return 'Ontem';
+  if (diffDias < 30) return 'Há ' + diffDias + ' dias';
+  return d.toLocaleDateString('pt-BR');
+}
+
+function renderSuperAdminSaloes(lista) {
+  document.getElementById('sa-resumo').textContent = lista.length + (lista.length === 1 ? ' salão' : ' salões');
+  var el = document.getElementById('sa-lista');
+  if (!lista.length) { el.innerHTML = '<div class="empty">Nenhum salão encontrado.</div>'; return; }
+
+  el.innerHTML = lista.map(function(s){
+    var hoje = new Date(); hoje.setHours(0,0,0,0);
+    var trial = s.trial_ate ? new Date(s.trial_ate) : null;
+    var diasRestantes = trial ? Math.ceil((trial - hoje) / 86400000) : null;
+    var statusTrial;
+    if (!s.ativo) statusTrial = '<span class="badge bd2">🔒 Desativado manualmente</span>';
+    else if (diasRestantes === null) statusTrial = '<span class="badge bg2">Sem trial definido</span>';
+    else if (diasRestantes < 0) statusTrial = '<span class="badge bd2">⛔ Trial expirado há ' + Math.abs(diasRestantes) + 'd</span>';
+    else if (diasRestantes <= 3) statusTrial = '<span class="badge bw">⚠️ ' + diasRestantes + 'd restantes</span>';
+    else statusTrial = '<span class="badge bs">✅ ' + diasRestantes + 'd restantes</span>';
+
+    var ultimoAcessoTexto = fmtUltimoAcesso(s.ultimo_acesso);
+    var semAcessoRecente = !s.ultimo_acesso || (Date.now() - new Date(s.ultimo_acesso).getTime()) > 7 * 86400000;
+
+    return '<div class="card" style="margin-bottom:10px;padding:16px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<div>' +
+          '<div style="font-weight:800;font-size:.95rem">' + esc(s.nome) + '</div>' +
+          '<div style="font-size:.74rem;color:var(--t3)">' + esc(s.admin_nome||'—') + (s.admin_email ? ' · ' + esc(s.admin_email) : '') + (s.telefone ? ' · ' + esc(s.telefone) : '') + '</div>' +
+        '</div>' +
+        statusTrial +
+      '</div>' +
+      '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px;font-size:.78rem;color:var(--t2)">' +
+        '<span>👤 ' + s.qtd_profissionais + ' profissional(is)</span>' +
+        '<span>📅 ' + s.qtd_agendamentos + ' agendamento(s) no total</span>' +
+        '<span style="color:' + (semAcessoRecente ? 'var(--warn)' : 'var(--t2)') + '">🕒 Último acesso: ' + ultimoAcessoTexto + '</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn btnp btnsm" onclick="abrirEstenderTrial(\'' + s.id + '\',\'' + escAttr(s.nome) + '\')">⏳ Estender Trial</button>' +
+        (s.ativo
+          ? '<button class="btn btns btnsm" style="color:var(--er)" onclick="alternarStatusSalao(\'' + s.id + '\',\'' + escAttr(s.nome) + '\',false)">🔒 Desativar</button>'
+          : '<button class="btn btns btnsm" style="color:var(--ok)" onclick="alternarStatusSalao(\'' + s.id + '\',\'' + escAttr(s.nome) + '\',true)">🔓 Reativar</button>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function abrirEstenderTrial(salaoId, salaoNome) {
+  document.getElementById('et-salao-id').value = salaoId;
+  document.getElementById('et-salao-nome').textContent = salaoNome;
+  document.getElementById('et-dias').value = 30;
+  openM('m-estender-trial');
+}
+
+function confirmarEstenderTrial() {
+  var salaoId = document.getElementById('et-salao-id').value;
+  var dias = parseInt(document.getElementById('et-dias').value);
+  if (!dias || dias < 1) { toast('Informe uma quantidade de dias válida','er'); return; }
+  apiFetch('/api/super-admin/saloes/' + salaoId + '/estender-trial', { method: 'POST', body: { dias: dias } })
+    .then(function(r){
+      var novaData = new Date(r.trial_ate).toLocaleDateString('pt-BR');
+      toast('Trial estendido até ' + novaData + ' ✅', 'ok');
+      closeM('m-estender-trial');
+      loadSuperAdminSaloes();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+}
+
+function alternarStatusSalao(salaoId, salaoNome, novoStatus) {
+  var acao = novoStatus ? 'reativar' : 'desativar (bloquear o acesso d';
+  if (!confirm((novoStatus ? 'Reativar' : 'Desativar') + ' o acesso de "' + salaoNome + '"?' + (novoStatus ? '' : '\n\nEle não vai conseguir mais entrar no sistema até você reativar.'))) return;
+  apiFetch('/api/super-admin/saloes/' + salaoId + '/status', { method: 'POST', body: { ativo: novoStatus } })
+    .then(function(){
+      toast(salaoNome + (novoStatus ? ' reativado ✅' : ' desativado 🔒'), 'ok');
+      loadSuperAdminSaloes();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 function loadHistoricoComissoes() {
@@ -5311,7 +5428,12 @@ function aplicarPermissoes() {
 
   // Admin sempre vê tudo — nem passa pela filtragem
   if (USER_PERFIL === 'admin') {
-    document.querySelectorAll('.sb-item[data-page]').forEach(function(btn){ btn.style.display = ''; });
+    document.querySelectorAll('.sb-item[data-page]').forEach(function(btn){
+      // "Meus Clientes" (super admin) é uma exceção mesmo pra quem é admin
+      // do próprio salão — só aparece pra quem é dono da PLATAFORMA inteira
+      if (btn.id === 'sb-super-admin') return;
+      btn.style.display = '';
+    });
   } else {
     // Esconde/mostra os itens do menu lateral com base nas permissões reais do usuário
     document.querySelectorAll('.sb-item[data-page]').forEach(function(btn) {
@@ -5690,7 +5812,7 @@ window.addEventListener('load', function(){
         var _p  = d.perfil || localStorage.getItem('bpro_perfil') || 'admin';
         var _pm = d.permissoes || (function(){ try{ return JSON.parse(localStorage.getItem('bpro_permissoes')||'null'); }catch(e){ return null; } })();
         if (d.saloes && d.saloes.id) localStorage.setItem('bpro_salao_id', d.saloes.id);
-        enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE', _p, _pm, d.email, d.email_verificado);
+        enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE', _p, _pm, d.email, d.email_verificado, d.super_admin);
       })
       .catch(function(){ localStorage.removeItem('bpro_tk'); TK=''; });
   }
@@ -6152,6 +6274,27 @@ function dispensarBannerPWA() {
       <div id="fcom-t"></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-fcom')">Cancelar</button><button class="btn btnp" onclick="fecharCom()">Confirmar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-estender-trial">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">⏳ Estender Trial</span><button class="mx" onclick="closeM('m-estender-trial')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="et-salao-id"/>
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:14px" id="et-salao-nome">—</div>
+      <div class="fg"><label class="fl">Quantos dias?</label>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">
+          <button type="button" class="btn btns btnsm" onclick="document.getElementById('et-dias').value=7">+7</button>
+          <button type="button" class="btn btns btnsm" onclick="document.getElementById('et-dias').value=15">+15</button>
+          <button type="button" class="btn btns btnsm" onclick="document.getElementById('et-dias').value=30">+30</button>
+          <button type="button" class="btn btns btnsm" onclick="document.getElementById('et-dias').value=60">+60</button>
+        </div>
+        <input type="number" class="fc" id="et-dias" min="1" value="30"/>
+      </div>
+      <div style="font-size:.7rem;color:var(--t3)">Se o trial ainda não venceu, soma a partir do vencimento atual (não perde os dias que já restavam). Se já venceu, conta a partir de hoje.</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-estender-trial')">Cancelar</button><button class="btn btnp" onclick="confirmarEstenderTrial()">Confirmar</button></div>
   </div>
 </div>
 
