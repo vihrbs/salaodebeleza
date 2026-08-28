@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.14.1-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.15.0-frontend</div>
       </div>
     </div>
 
@@ -2630,7 +2630,11 @@ function renderCom(list) {
       // Caixinha é 100% do profissional, mas entra JUNTO no valor pago no
       // fechamento — por isso soma no total a pagar, mesmo aparecendo
       // separada visualmente
-      caixinhas: foiPago ? (p.fechamento.total_caixinhas||0) : (p.total_caixinhas||0)
+      caixinhas: foiPago ? (p.fechamento.total_caixinhas||0) : (p.total_caixinhas||0),
+      // Comissão de produto JÁ VEM somada dentro de "comissao" (o backend
+      // soma antes de mandar) — aqui é só pra mostrar separado visualmente,
+      // não soma de novo em lugar nenhum
+      comissaoProdutos: foiPago ? (p.fechamento.total_comissao_produtos||0) : (p.total_comissao_produtos||0)
     };
   }
 
@@ -2664,6 +2668,7 @@ function renderCom(list) {
       '<div><div style="font-size:.88rem;font-weight:800">' + brl(v.bruto) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div>' +
       '<div><div style="font-size:.88rem;font-weight:800;color:var(--ac)">' + brl(v.comissao) + '</div><div style="font-size:.62rem;color:var(--t3)">Comissão</div></div>' +
       (v.caixinhas > 0 ? '<div><div style="font-size:.88rem;font-weight:800;color:var(--gold,#c9a96e)">' + brl(v.caixinhas) + '</div><div style="font-size:.62rem;color:var(--t3)">🎁 Caixinha</div></div>' : '') +
+      (v.comissaoProdutos > 0 ? '<div><div style="font-size:.88rem;font-weight:800;color:var(--ok)">' + brl(v.comissaoProdutos) + '</div><div style="font-size:.62rem;color:var(--t3)">🛍️ Produto</div></div>' : '') +
       '</div>' +
       (v.foiPago ? '<span class="badge bs">✅ Pago</span>' : '') +
       acaoBtn +
@@ -2903,6 +2908,7 @@ function renderHistoricoComissoes(dados) {
     var dataPagamento = h.pago_em ? new Date(h.pago_em).toLocaleDateString('pt-BR') : '—';
     var detalhes = [];
     if (h.total_caixinhas > 0) detalhes.push('inclui ' + brl(h.total_caixinhas) + ' de caixinha');
+    if (h.total_comissao_produtos > 0) detalhes.push('inclui ' + brl(h.total_comissao_produtos) + ' de venda de produto');
     if (h.valor_parcelas_descontado > 0) detalhes.push('descontou ' + brl(h.valor_parcelas_descontado) + ' de compra pendente');
     return '<div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--bd2)">' +
       '<div class="pro-av" style="width:36px;height:36px;font-size:.8rem;background:' + (h.profissional_cor||'#9A5B3F') + '">' + esc((h.profissional_nome||'?')[0]) + '</div>' +
@@ -3008,6 +3014,9 @@ function adicionarProdutoComandaProf() {
   sel.value = '';
   renderProdutosComandaProf();
   recalcularTotalComandaProf();
+  if (!Number(opcao.dataset.preco)) {
+    toast('Esse produto não tem preço de venda cadastrado — ajusta o valor na lista abaixo','inf');
+  }
 }
 
 function removerProdutoComandaProf(produtoId) {
@@ -3019,6 +3028,13 @@ function removerProdutoComandaProf(produtoId) {
 function atualizarQtdProdutoComandaProf(produtoId, novaQtd) {
   var item = COMANDA_PROF_PRODUTOS.find(function(p){ return p.produto_id === produtoId; });
   if (item) item.quantidade = Math.max(1, parseInt(novaQtd) || 1);
+  recalcularTotalComandaProf();
+}
+
+function atualizarPrecoProdutoComandaProf(produtoId, novoValor) {
+  var item = COMANDA_PROF_PRODUTOS.find(function(p){ return p.produto_id === produtoId; });
+  if (item) item.preco_unit = Math.max(0, Number(novoValor) || 0);
+  renderProdutosComandaProf();
   recalcularTotalComandaProf();
 }
 
@@ -3045,8 +3061,10 @@ function renderProdutosComandaProf() {
   var linhasProdutos = COMANDA_PROF_PRODUTOS.map(function(p){
     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
       '<span style="flex:1">' + esc(p.nome) + '</span>' +
-      '<input type="number" min="1" value="' + p.quantidade + '" style="width:52px;padding:4px 6px;font-size:.78rem" class="fc" onchange="atualizarQtdProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
-      '<strong style="min-width:60px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
+      '<input type="number" min="1" value="' + p.quantidade + '" style="width:48px;padding:4px 6px;font-size:.78rem" class="fc" title="Quantidade" onchange="atualizarQtdProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
+      '<span style="font-size:.7rem;color:var(--t3)">×</span>' +
+      '<input type="number" min="0" step="0.01" value="' + p.preco_unit + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onchange="atualizarPrecoProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
+      '<strong style="min-width:64px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoComandaProf(\'' + p.produto_id + '\')">✕</button>' +
     '</div>';
   }).join('');
@@ -3609,6 +3627,9 @@ function adicionarProdutoVendaAvulsa() {
   sel.value = '';
   renderProdutosVendaAvulsa();
   recalcularTotalVendaAvulsa();
+  if (!Number(opcao.dataset.preco)) {
+    toast('Esse produto não tem preço de venda cadastrado — ajusta o valor na lista abaixo','inf');
+  }
 }
 
 function removerProdutoVendaAvulsa(produtoId) {
@@ -3629,11 +3650,20 @@ function renderProdutosVendaAvulsa() {
   wrap.innerHTML = VENDA_AVULSA_PRODUTOS.map(function(p){
     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
       '<span style="flex:1">' + esc(p.nome) + '</span>' +
-      '<input type="number" min="1" value="' + p.quantidade + '" style="width:52px;padding:4px 6px;font-size:.78rem" class="fc" onchange="atualizarQtdProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
-      '<strong style="min-width:60px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
+      '<input type="number" min="1" value="' + p.quantidade + '" style="width:48px;padding:4px 6px;font-size:.78rem" class="fc" title="Quantidade" onchange="atualizarQtdProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
+      '<span style="font-size:.7rem;color:var(--t3)">×</span>' +
+      '<input type="number" min="0" step="0.01" value="' + p.preco_unit + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onchange="atualizarPrecoProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
+      '<strong style="min-width:64px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoVendaAvulsa(\'' + p.produto_id + '\')">✕</button>' +
     '</div>';
   }).join('');
+}
+
+function atualizarPrecoProdutoVendaAvulsa(produtoId, novoValor) {
+  var item = VENDA_AVULSA_PRODUTOS.find(function(p){ return p.produto_id === produtoId; });
+  if (item) item.preco_unit = Math.max(0, Number(novoValor) || 0);
+  renderProdutosVendaAvulsa();
+  recalcularTotalVendaAvulsa();
 }
 
 function selecionarFpgVendaAvulsa(btn) {
@@ -4015,7 +4045,7 @@ function savePro() {
   if (!nome) { toast('Nome obrigatório','er'); return; }
   var btn = document.querySelector('#m-pro .btnp');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  var body = {nome:nome, especialidade:document.getElementById('pr-e').value, telefone:document.getElementById('pr-t').value, email:document.getElementById('pr-email').value.trim()||null, comissao_pct:parseFloat(document.getElementById('pr-c').value)||40, cor_agenda:COR_SEL};
+  var body = {nome:nome, especialidade:document.getElementById('pr-e').value, telefone:document.getElementById('pr-t').value, email:document.getElementById('pr-email').value.trim()||null, comissao_pct:parseFloat(document.getElementById('pr-c').value)||40, comissao_produto_pct:parseFloat(document.getElementById('pr-cp').value)||0, cor_agenda:COR_SEL};
   (DEMO ? Promise.resolve({nome:nome,especialidade:body.especialidade,comissao_pct:body.comissao_pct,cor_agenda:body.cor_agenda,total_servicos:0,faturado:0,id:'demo_'+Date.now()}) : apiFetch('/api/profissionais',{method:'POST',body:body}))
   .then(function(r){
     toast('Profissional cadastrado! ✅','ok');
@@ -4025,6 +4055,7 @@ function savePro() {
     document.getElementById('pr-t').value='';
     document.getElementById('pr-email').value='';
     document.getElementById('pr-c').value='40';
+    document.getElementById('pr-cp').value='';
     if (DEMO && r) { D.pros.push(r); PROS = D.pros; renderPros(PROS); } else { loadPros(); }
     fillSelects();
   }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -4505,6 +4536,7 @@ function editPro(btn) {
   document.getElementById('epr-t').value  = p.telefone || '';
   document.getElementById('epr-email').value = p.email || '';
   document.getElementById('epr-c').value  = p.comissao_pct || 40;
+  document.getElementById('epr-cp').value = p.comissao_produto_pct || '';
   document.getElementById('epr-almoco-ini').value = p.horario_almoco_inicio || '';
   document.getElementById('epr-almoco-fim').value = p.horario_almoco_fim || '';
   document.getElementById('epr-cor').value = p.cor_agenda || '#6C63FF';
@@ -4582,6 +4614,7 @@ function updatePro() {
     telefone: document.getElementById('epr-t').value,
     email: document.getElementById('epr-email').value.trim() || null,
     comissao_pct: parseFloat(document.getElementById('epr-c').value)||40,
+    comissao_produto_pct: parseFloat(document.getElementById('epr-cp').value)||0,
     horario_almoco_inicio: almocoIni,
     horario_almoco_fim: almocoFim,
     cor_agenda: document.getElementById('epr-cor').value
@@ -6238,7 +6271,10 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">Novo Profissional</span><button class="mx" onclick="closeM('m-pro')">✕</button></div>
     <div class="mb">
       <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="pr-n" placeholder="Nome completo"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="pr-e" placeholder="Ex.: Cabeleireira"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="pr-t" placeholder="(11) 99..."/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="pr-c" value="40"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="pr-t" placeholder="(11) 99..."/></div><div class="fg"><label class="fl">Comissão de Serviço (%)</label><input type="number" class="fc" id="pr-c" value="40"/></div></div>
+      <div class="fg"><label class="fl">Comissão sobre venda de Produto (%)</label><input type="number" class="fc" id="pr-cp" min="0" max="100" placeholder="0"/>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Separada da comissão de serviço — deixa em 0 (ou vazio) se ele não ganha nada em cima de produto vendido.</div>
+      </div>
       <div class="fg"><label class="fl">E-mail (opcional)</label><input class="fc" type="email" id="pr-email" placeholder="para@enviar.notificacoes.com"/>
         <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Se preenchido, ele recebe um e-mail automático a cada agendamento novo e quando a comissão dele é fechada.</div>
       </div>
@@ -6347,7 +6383,10 @@ function dispensarBannerPWA() {
         <button type="button" class="btn btns btnsm" id="epr-foto-remover" style="display:none;color:var(--er)" onclick="removerFotoProfissional()">Remover Foto</button>
       </div>
       <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="epr-n"/></div><div class="fg"><label class="fl">Especialidade</label><input class="fc" id="epr-e"/></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="epr-t"/></div><div class="fg"><label class="fl">Comissão de Serviço (%)</label><input type="number" class="fc" id="epr-c" min="0" max="100"/></div></div>
+      <div class="fg"><label class="fl">Comissão sobre venda de Produto (%)</label><input type="number" class="fc" id="epr-cp" min="0" max="100" placeholder="0"/>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Separada da comissão de serviço — deixa em 0 (ou vazio) se ele não ganha nada em cima de produto vendido.</div>
+      </div>
       <div class="fg"><label class="fl">E-mail (opcional)</label><input class="fc" type="email" id="epr-email" placeholder="para@enviar.notificacoes.com"/>
         <div style="font-size:.68rem;color:var(--t3);margin-top:4px">Se preenchido, ele recebe um e-mail automático a cada agendamento novo e quando a comissão dele é fechada.</div>
       </div>
