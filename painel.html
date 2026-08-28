@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.15.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.16.0-frontend</div>
       </div>
     </div>
 
@@ -608,7 +608,8 @@ select.fc option{background:var(--bg2)}
           <button class="btn btns btnsm" data-status="concluido" onclick="filtrarComandasPorStatus('concluido')">Concluídas</button>
           <button class="btn btns btnsm" data-status="cancelado" onclick="filtrarComandasPorStatus('cancelado')">Canceladas</button>
         </div>
-        <button class="btn btnp" style="margin-left:auto" onclick="abrirNovaComanda()">+ Nova Comanda</button>
+        <button class="btn btns" style="margin-left:auto" onclick="abrirNovoAgendamento()">📅 Agendar</button>
+        <button class="btn btnp" onclick="abrirNovaComanda()">+ Nova Comanda</button>
       </div>
       <div id="cmd-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
         <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
@@ -3099,12 +3100,31 @@ function recalcularTotalComandaProf() {
   }
 }
 
+// Mesmo cuidado do lado do cliente: relê os campos de quantidade/preço
+// direto da tela antes de montar os itens, garantindo que valor digitado
+// entre mesmo que a pessoa não tenha clicado fora do campo antes de confirmar.
+function sincronizarProdutosComandaProfComDOM() {
+  var linhasProdutos = document.querySelectorAll('#cp-produtos-lista > div');
+  var idx = 0;
+  linhasProdutos.forEach(function(linha){
+    var inputs = linha.querySelectorAll('input[type="number"]');
+    if (!inputs.length) return; // linha de "outro item" não tem input numérico
+    var item = COMANDA_PROF_PRODUTOS[idx];
+    if (item) {
+      if (inputs[0]) item.quantidade = Math.max(1, parseInt(inputs[0].value) || 1);
+      if (inputs[1]) item.preco_unit = Math.max(0, Number(inputs[1].value) || 0);
+    }
+    idx++;
+  });
+}
+
 function confirmarComandaProfissional() {
   var profId = document.getElementById('cp-prof-id').value;
   var parcelas = parseInt(document.getElementById('cp-parcelas').value);
   var data = document.getElementById('cp-data').value;
   if (!parcelas || parcelas < 1 || parcelas > 24) { toast('Número de parcelas deve ser entre 1 e 24','er'); return; }
 
+  sincronizarProdutosComandaProfComDOM();
   var itens = [];
   document.querySelectorAll('#cp-svcs .svc-pill.on').forEach(function(pill){
     var svc = (SVCS || []).find(function(s){ return s.id === pill.dataset.id; });
@@ -3117,6 +3137,9 @@ function confirmarComandaProfissional() {
     itens.push({ tipo: 'outro', nome: o.nome, valor: o.valor });
   });
   if (!itens.length) { toast('Adicione ao menos um serviço, produto ou item','er'); return; }
+  if (itens.some(function(i){ return i.valor <= 0; })) {
+    toast('Tem item com valor R$ 0,00 na lista — corrige o preço antes de confirmar','er'); return;
+  }
 
   var btn = document.getElementById('cp-btn-confirmar');
   btn.disabled = true; btn.textContent = 'Salvando...';
@@ -3533,6 +3556,7 @@ function abrirNovaComanda() {
   VENDA_AVULSA_PRODUTOS = [];
   renderProdutosVendaAvulsa();
   document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+  document.getElementById('va-fpg-aberto').classList.remove('on');
 
   var selProf = document.getElementById('va-prof');
   selProf.innerHTML = '<option value="">Selecionar...</option>' +
@@ -3668,7 +3692,13 @@ function atualizarPrecoProdutoVendaAvulsa(produtoId, novoValor) {
 
 function selecionarFpgVendaAvulsa(btn) {
   document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+  document.getElementById('va-fpg-aberto').classList.remove('on');
   btn.classList.add('on');
+}
+
+function selecionarFpgAbertoVendaAvulsa() {
+  document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
+  document.getElementById('va-fpg-aberto').classList.add('on');
 }
 
 function recalcularTotalVendaAvulsa() {
@@ -3694,28 +3724,50 @@ function recalcularTotalVendaAvulsa() {
   }
 }
 
+// Lê os campos de quantidade/preço DIRETO da tela antes de confirmar —
+// não confia só no evento "change" dos inputs (que só dispara quando a
+// pessoa clica fora do campo). Se ela digitar o valor e apertar direto em
+// "Confirmar Venda" sem tocar em outro campo antes, o "change" pode nunca
+// disparar, e o valor digitado ficaria só visual, sem entrar na venda de
+// verdade — por isso relê tudo aqui, garantido, na hora de enviar.
+function sincronizarProdutosVendaAvulsaComDOM() {
+  document.querySelectorAll('#va-produtos-lista > div').forEach(function(linha, idx){
+    var item = VENDA_AVULSA_PRODUTOS[idx];
+    if (!item) return;
+    var inputs = linha.querySelectorAll('input[type="number"]');
+    if (inputs[0]) item.quantidade = Math.max(1, parseInt(inputs[0].value) || 1);
+    if (inputs[1]) item.preco_unit = Math.max(0, Number(inputs[1].value) || 0);
+  });
+}
+
 function confirmarVendaAvulsa() {
   var clienteId = document.getElementById('va-cli-id').value;
   var profId = document.getElementById('va-prof').value;
   if (!clienteId) { toast('Selecione o cliente','er'); return; }
   if (!profId) { toast('Selecione o profissional','er'); return; }
 
+  sincronizarProdutosVendaAvulsaComDOM();
   var servicos = Array.from(document.querySelectorAll('#va-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
   var produtos = VENDA_AVULSA_PRODUTOS.map(function(p){ return { produto_id: p.produto_id, quantidade: p.quantidade, valor: p.preco_unit * p.quantidade }; });
   if (!servicos.length && !produtos.length) { toast('Selecione ao menos um serviço ou produto','er'); return; }
+  if (produtos.some(function(p){ return p.valor <= 0; })) {
+    toast('Tem produto com valor R$ 0,00 na lista — corrige o preço antes de confirmar','er'); return;
+  }
 
   var fpgBtn = document.querySelector('#va-fpg-options .fpg-btn.on');
-  if (!fpgBtn) { toast('Selecione a forma de pagamento','er'); return; }
+  var deixarAberto = document.getElementById('va-fpg-aberto').classList.contains('on');
+  if (!fpgBtn && !deixarAberto) { toast('Selecione a forma de pagamento, ou "Deixar em aberto"','er'); return; }
 
   var btn = document.getElementById('va-btn-confirmar');
   btn.disabled = true; btn.textContent = 'Salvando...';
 
   apiFetch('/api/vendas-avulsas', { method: 'POST', body: {
     cliente_id: clienteId, profissional_id: profId, servicos: servicos, produtos: produtos,
-    forma_pgto: fpgBtn.dataset.val, pago: true
+    forma_pgto: deixarAberto ? null : fpgBtn.dataset.val, pago: !deixarAberto, deixar_aberto: deixarAberto
   }})
     .then(function(r){
-      toast('Comanda criada! ✅ Total: ' + brl(r.valor_total), 'ok');
+      var msg = deixarAberto ? 'Comanda criada e deixada em aberto ⏳' : 'Comanda criada! ✅ Total: ' + brl(r.valor_total);
+      toast(msg, 'ok');
       closeM('m-nova-comanda');
       loadComandas(); loadDashTl(); loadKPIs(); loadEst();
     })
@@ -6129,6 +6181,8 @@ function dispensarBannerPWA() {
           <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpgVendaAvulsa(this)">💳 Débito</button>
           <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpgVendaAvulsa(this)">💳 Crédito</button>
         </div>
+        <button type="button" class="fpg-btn" id="va-fpg-aberto" style="width:100%;margin-top:8px" onclick="selecionarFpgAbertoVendaAvulsa()">⏳ Deixar em aberto — cobrar depois</button>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">A comanda fica registrada como "em atendimento". Você conclui e escolhe a forma de pagamento depois, direto no card dela em Comandas.</div>
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px dashed var(--bd);margin-top:6px">
