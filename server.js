@@ -90,7 +90,7 @@ async function auth(req, res, next) {
   try {
     const payload = jwt.verify(header.split(' ')[1], JWT_SECRET);
     const { data: usuario } = await supabase
-      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id')
+      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id, super_admin')
       .eq('id', payload.sub).single();
     if (!usuario || !usuario.ativo) return res.status(401).json({ error: 'Usuário inválido' });
     req.user     = usuario;
@@ -106,6 +106,17 @@ async function auth(req, res, next) {
 function profissionalFiltroDoUsuario(user) {
   if (user.perfil === 'admin') return null;
   return user.profissional_id || null;
+}
+
+// Bloqueia rotas que só quem é DONO DA PLATAFORMA (não só admin de UM
+// salão) pode acessar — usado no painel de gerenciar todos os clientes
+// (salões) do Beleza Pro. Diferente de "admin", que só enxerga o próprio
+// salão; super_admin enxerga e mexe em todos.
+function requireSuperAdmin(req, res, next) {
+  if (!req.user || !req.user.super_admin) {
+    return res.status(403).json({ error: 'Acesso restrito ao administrador da plataforma' });
+  }
+  next();
 }
 
 // Middleware de permissão por módulo — bloqueia o acesso no SERVIDOR, não só
@@ -278,7 +289,7 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
 
 // ── Health ───────────────────────────────────────────
 app.get('/',       (req, res) => res.json({ mensagem: 'Beleza Pro API rodando' }));
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.13.0-compra-profissional-em-comandas' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.14.0-painel-super-admin' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -471,7 +482,7 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { data: usuario } = await supabase
       .from('usuarios')
-      .select('id, nome, email, senha_hash, perfil, ativo, salao_id, profissional_id, email_verificado, saloes(id, nome, slug, trial_ate)')
+      .select('id, nome, email, senha_hash, perfil, ativo, salao_id, profissional_id, email_verificado, super_admin, saloes(id, nome, slug, trial_ate)')
       .eq('email', email).single();
     if (!usuario) return res.status(401).json({ error: 'Email ou senha incorretos' });
     if (!usuario.ativo) return res.status(403).json({ error: 'Conta desativada' });
@@ -508,7 +519,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', auth, async (req, res) => {
   const { data } = await supabase
     .from('usuarios')
-    .select('id, nome, email, perfil, profissional_id, email_verificado, ultimo_login, saloes(id, nome, slug, trial_ate)')
+    .select('id, nome, email, perfil, profissional_id, email_verificado, ultimo_login, super_admin, saloes(id, nome, slug, trial_ate)')
     .eq('id', req.user.id).single();
   res.json(data);
 });
@@ -3287,6 +3298,82 @@ app.get('/api/pagamento/status', auth, async (req, res) => {
     trial_expirado: dias <= 0,
     trial_ate: salao?.trial_ate
   });
+});
+
+// ═══════════════════════════════════════════════════
+// SUPER ADMIN — gerenciar todos os salões (clientes) da plataforma.
+// Só acessível por quem tem super_admin=true na própria conta (não é a
+// mesma coisa que ser "admin" — isso é só dono de UM salão).
+// ═══════════════════════════════════════════════════
+
+// Lista todos os salões, com busca por nome e dados de uso real (quantos
+// profissionais ativos, quantos agendamentos já fizeram) — pra dar uma
+// ideia rápida de quem está usando de verdade vs quem só cadastrou e sumiu.
+app.get('/api/super-admin/saloes', auth, requireSuperAdmin, async (req, res) => {
+  const busca = (req.query.q || '').trim();
+  try {
+    let query = supabase.from('saloes')
+      .select('id, nome, telefone, trial_ate, ativo, plano_id, planos(nome)')
+      .order('nome');
+    if (busca) query = query.ilike('nome', '%' + busca + '%');
+    const { data: saloes, error } = await query;
+    if (error) throw error;
+
+    const resultado = await Promise.all((saloes || []).map(async (s) => {
+      const [{ data: adminUser }, { count: qtdProfissionais }, { count: qtdAgendamentos }, { data: usuariosDoSalao }] = await Promise.all([
+        supabase.from('usuarios').select('email, nome').eq('salao_id', s.id).eq('perfil', 'admin').limit(1).maybeSingle(),
+        supabase.from('profissionais').select('id', { count: 'exact', head: true }).eq('salao_id', s.id).eq('ativo', true),
+        supabase.from('agendamentos').select('id', { count: 'exact', head: true }).eq('salao_id', s.id),
+        // Pega o login mais recente entre TODOS os usuários desse salão (não
+        // só o admin) — dá uma ideia melhor de "alguém desse negócio ainda
+        // tá usando o sistema", mesmo que quem entrou tenha sido um funcionário
+        supabase.from('usuarios').select('ultimo_login').eq('salao_id', s.id)
+          .not('ultimo_login', 'is', null).order('ultimo_login', { ascending: false }).limit(1)
+      ]);
+      return {
+        ...s,
+        admin_email: adminUser?.email || null,
+        admin_nome: adminUser?.nome || null,
+        qtd_profissionais: qtdProfissionais || 0,
+        qtd_agendamentos: qtdAgendamentos || 0,
+        ultimo_acesso: (usuariosDoSalao && usuariosDoSalao[0] && usuariosDoSalao[0].ultimo_login) || null
+      };
+    }));
+    res.json(resultado);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Prolonga o trial (ou renova manualmente) — soma os dias a partir do que
+// for MAIOR entre hoje e o vencimento atual, pra não desperdiçar dias que
+// ainda restavam caso o trial não tivesse expirado ainda.
+app.post('/api/super-admin/saloes/:id/estender-trial', auth, requireSuperAdmin, async (req, res) => {
+  const dias = parseInt(req.body.dias);
+  if (!dias || dias <= 0) return res.status(422).json({ error: 'Informe uma quantidade de dias válida' });
+  try {
+    const { data: salao } = await supabase.from('saloes').select('trial_ate').eq('id', req.params.id).single();
+    if (!salao) return res.status(404).json({ error: 'Salão não encontrado' });
+
+    const agora = new Date();
+    const trialAtual = salao.trial_ate ? new Date(salao.trial_ate) : agora;
+    const baseData = trialAtual > agora ? trialAtual : agora;
+    baseData.setDate(baseData.getDate() + dias);
+
+    const { data, error } = await supabase.from('saloes')
+      .update({ trial_ate: baseData, ativo: true }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Ativa ou desativa manualmente o acesso de um salão (bloqueio/desbloqueio direto)
+app.post('/api/super-admin/saloes/:id/status', auth, requireSuperAdmin, async (req, res) => {
+  if (typeof req.body.ativo !== 'boolean') return res.status(422).json({ error: 'Informe ativo: true ou false' });
+  try {
+    const { data, error } = await supabase.from('saloes')
+      .update({ ativo: req.body.ativo }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════
