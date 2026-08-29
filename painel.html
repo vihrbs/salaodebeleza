@@ -361,7 +361,6 @@ select.fc option{background:var(--bg2)}
   <div class="l-left">
     <div class="l-logo">Bele<em>za</em> Pro</div>
     <div class="l-tag">Sistema completo de gestão para salões de beleza</div>
-    <div style="background:#22c55e;color:#000;font-weight:900;padding:8px 16px;border-radius:8px;margin-top:12px;font-size:.85rem">🚀 TESTE DE DEPLOY — 28/08 22:20</div>
     <div class="l-feat">
       <div class="l-fi"><div class="l-dot"></div>Agenda com disponibilidade em tempo real</div>
       <div class="l-fi"><div class="l-dot"></div>Financeiro, estoque e comissões</div>
@@ -491,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.62rem;color:var(--ok);margin-top:8px;font-weight:800">🟢 v4.16.2-TESTE-DEPLOY</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.16.3-frontend</div>
       </div>
     </div>
 
@@ -766,7 +765,7 @@ select.fc option{background:var(--bg2)}
             <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
           </div>
         </div>
-        <div class="card" id="card-api-integracao">
+        <div class="card" id="card-api-integracao" style="display:none">
           <div class="ct">API & Integração</div>
           <label class="fl">URL da API Backend (Railway)</label>
           <input class="fc fg" type="url" id="cfg-api" placeholder="https://sua-api.up.railway.app"/>
@@ -2513,6 +2512,8 @@ function marcarPago(id, pago) {
 }
 
 // ── ESTOQUE ─────────────────────────────────────────────
+var ESTOQUE_CACHE_ATUAL = [];
+
 function loadEst(q) {
   q = q || '';
   apiFetch('/api/estoque' + (q ? '?q='+encodeURIComponent(q) : '')).then(function(r){
@@ -2525,6 +2526,7 @@ function loadEst(q) {
 }
 
 function renderEst(list) {
+  ESTOQUE_CACHE_ATUAL = list || []; // guardado pra abrir "Editar" sem precisar de outra chamada
   var lC = {ok:'bs',low:'bw',crit:'bd2'};
   var lF = {ok:'sfok',low:'sflow',crit:'sfcrit'};
   var lT = {ok:'Normal',low:'Baixo',crit:'Crítico'};
@@ -2540,6 +2542,7 @@ function renderEst(list) {
       acoes = '<button class="btnic btn btnsm" title="Repor estoque" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'entrada\')">+</button>' +
         '<button class="btnic btn btnsm" title="Ajustar/perda" style="color:var(--er)" onclick="event.stopPropagation();openMovModal(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',\'saida\')">−</button>' +
         acoes +
+        '<button class="btnic btn btnsm" title="Editar (nome, categoria, preços)" onclick="event.stopPropagation();abrirEdicaoProduto(\'' + p.id + '\')">✏️</button>' +
         '<button class="btnic btn btnsm" title="Vender pro cliente" onclick="event.stopPropagation();abrirVenderProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\',' + (p.preco_venda||0) + ')">💰</button>' +
         '<button class="btnic btn btnsm" title="Excluir" style="color:var(--er)" onclick="event.stopPropagation();deletarProduto(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')">🗑</button>';
     }
@@ -2549,11 +2552,47 @@ function renderEst(list) {
       '<td><strong style="color:' + (lvl==='crit'?'var(--er)':lvl==='low'?'var(--warn)':'inherit') + '">' + p.qtd_atual + '</strong></td>' +
       '<td>' + p.qtd_minima + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="sbt" style="width:65px"><div class="sbf ' + lF[lvl] + '" style="width:' + pct + '%"></div></div><span class="badge ' + lC[lvl] + '">' + lT[lvl] + '</span></div></td>' +
-      '<td>' + (p.preco_custo ? brl(p.preco_custo) : '—') + '</td>' +
+      '<td>' + (p.preco_venda ? brl(p.preco_venda) : '<span style="color:var(--er)">Sem preço de venda</span>') + (p.preco_custo ? '<div style="font-size:.62rem;color:var(--t3)">custo: ' + brl(p.preco_custo) + '</div>' : '') + '</td>' +
       '<td><div style="display:flex;gap:3px;flex-wrap:wrap">' + acoes + '</div></td>' +
       '</tr>';
   }).join('');
   setTimeout(iniciarSombrasScroll, 30);
+}
+
+function abrirEdicaoProduto(id) {
+  var p = ESTOQUE_CACHE_ATUAL.find(function(x){ return x.id === id; });
+  if (!p) { toast('Produto não encontrado — atualiza a lista e tenta de novo','er'); return; }
+  document.getElementById('ep-id').value = p.id;
+  document.getElementById('ep-nome').value = p.nome || '';
+  document.getElementById('ep-categoria').value = p.categoria || 'Outro';
+  document.getElementById('ep-fornecedor').value = p.fornecedor || '';
+  document.getElementById('ep-qtd-minima').value = p.qtd_minima || 5;
+  document.getElementById('ep-preco-custo').value = p.preco_custo || '';
+  document.getElementById('ep-preco-venda').value = p.preco_venda || '';
+  openM('m-editar-produto');
+}
+
+function salvarEdicaoProduto() {
+  var id = document.getElementById('ep-id').value;
+  var nome = document.getElementById('ep-nome').value.trim();
+  if (!nome) { toast('Informe o nome do produto','er'); return; }
+
+  var body = {
+    nome: nome,
+    categoria: document.getElementById('ep-categoria').value,
+    fornecedor: document.getElementById('ep-fornecedor').value,
+    qtd_minima: parseFloat(document.getElementById('ep-qtd-minima').value) || 5,
+    preco_custo: parseFloat(document.getElementById('ep-preco-custo').value) || null,
+    preco_venda: parseFloat(document.getElementById('ep-preco-venda').value) || null
+  };
+
+  apiFetch('/api/estoque/' + id, { method: 'PUT', body: body })
+    .then(function(){
+      toast('Produto atualizado! ✅','ok');
+      closeM('m-editar-produto');
+      loadEst();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 function deletarProduto(id, nome) {
@@ -5582,10 +5621,10 @@ function aplicarPermissoes() {
   }
 
   // "API & Integração" mostra URL do backend e diagnóstico técnico — é
-  // informação de infraestrutura, não faz sentido pra um funcionário comum
-  // ver isso mesmo que ele tenha acesso à página de Config.
+  // informação de infraestrutura, só faz sentido pro DONO DA PLATAFORMA
+  // (super admin), não pra qualquer admin de salão comum.
   var cardApi = document.getElementById('card-api-integracao');
-  if (cardApi) cardApi.style.display = USER_PERFIL === 'admin' ? '' : 'none';
+  if (cardApi) cardApi.style.display = USER_SUPER_ADMIN ? '' : 'none';
 
   // Badge de perfil no topbar
   var perfBadge = document.getElementById('perfil-badge');
@@ -6345,6 +6384,23 @@ function dispensarBannerPWA() {
       <div class="fg"><label class="fl">Preço de Venda (R$)</label><input type="number" class="fc" id="p-pv" step="0.01" placeholder="Preço quando vendido pro cliente"/></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-prod')">Cancelar</button><button class="btn btnp" onclick="saveProd()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-editar-produto">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">Editar Produto</span><button class="mx" onclick="closeM('m-editar-produto')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ep-id"/>
+      <div class="fg"><label class="fl">Nome*</label><input class="fc" id="ep-nome"/></div>
+      <div class="fr"><div class="fg"><label class="fl">Categoria</label><select class="fc" id="ep-categoria"><option>Tintura</option><option>Shampoo</option><option>Tratamento</option><option>Acessório</option><option>Outro</option></select></div><div class="fg"><label class="fl">Fornecedor</label><input class="fc" id="ep-fornecedor"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Qtd. Mínima</label><input type="number" class="fc" id="ep-qtd-minima"/></div><div class="fg"><label class="fl">Preço Custo (R$)</label><input type="number" class="fc" id="ep-preco-custo" step="0.01"/></div></div>
+      <div class="fg"><label class="fl">Preço de Venda (R$)</label><input type="number" class="fc" id="ep-preco-venda" step="0.01" placeholder="Preço quando vendido pro cliente"/>
+        <div style="font-size:.68rem;color:var(--t3);margin-top:4px">É esse valor que preenche sozinho na hora de vender numa comanda. Sem isso preenchido, o preço vem em branco/zero e precisa ser digitado na mão.</div>
+      </div>
+      <div style="font-size:.68rem;color:var(--t3)">A quantidade em estoque não é editada aqui — usa os botões "+"/"−" na lista, pra manter o histórico de movimentação certinho.</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-editar-produto')">Cancelar</button><button class="btn btnp" onclick="salvarEdicaoProduto()">Salvar</button></div>
   </div>
 </div>
 
