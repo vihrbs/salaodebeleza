@@ -240,6 +240,51 @@ async function aplicarTaxaMaquininha(agendamentoId, salaoId, valorTotal, formaPg
   return { taxa_total: taxaTotal, taxa_profissional: taxaProfissional };
 }
 
+// Mesma coisa que aplicarTaxaMaquininha(), mas pra quando o pagamento foi
+// DIVIDIDO em mais de uma forma — a taxa só incide na(s) parcela(s) que
+// realmente foram no cartão, não no valor total do atendimento. Ex.: R$100
+// no total, sendo R$60 em PIX (sem taxa) e R$40 no crédito (com taxa) — só
+// os R$40 entram na conta da taxa.
+async function aplicarTaxaMaquininhaDividida(agendamentoId, salaoId, valorTotal, formasPagamento) {
+  const { data: salao } = await supabase.from('saloes').select('configuracoes').eq('id', salaoId).single();
+  const cfg = salao?.configuracoes || {};
+
+  let taxaTotalGeral = 0;
+  for (const fp of formasPagamento) {
+    if (!FORMAS_PAGAMENTO_CARTAO.has(fp.forma)) continue;
+    const ehDebito = fp.forma === 'Cartão Débito';
+    const pct = Number(
+      ehDebito
+        ? (cfg.taxa_maquininha_debito_pct ?? cfg.taxa_maquininha_pct ?? 0)
+        : (cfg.taxa_maquininha_credito_pct ?? cfg.taxa_maquininha_pct ?? 0)
+    );
+    if (!pct || pct <= 0) continue;
+    taxaTotalGeral += Math.round(Number(fp.valor || 0) * pct / 100 * 100) / 100;
+  }
+  if (taxaTotalGeral <= 0) return { taxa_total: 0, taxa_profissional: 0 };
+
+  const taxaProfissional = Math.round((taxaTotalGeral / 2) * 100) / 100;
+
+  const { data: servicos } = await supabase.from('agendamento_servicos')
+    .select('id, preco, comissao_valor').eq('agendamento_id', agendamentoId);
+  if (servicos && servicos.length) {
+    for (const s of servicos) {
+      const proporcao = Number(s.preco || 0) / valorTotal;
+      const deducao = Math.round(taxaProfissional * proporcao * 100) / 100;
+      const novaComissao = Math.max(0, Number(s.comissao_valor || 0) - deducao);
+      await supabase.from('agendamento_servicos')
+        .update({ comissao_valor: novaComissao }).eq('id', s.id);
+    }
+  }
+
+  try {
+    await supabase.from('agendamentos')
+      .update({ taxa_maquininha_valor: taxaTotalGeral }).eq('id', agendamentoId);
+  } catch(e) { /* coluna pode não existir ainda se a migration não rodou */ }
+
+  return { taxa_total: taxaTotalGeral, taxa_profissional: taxaProfissional };
+}
+
 // Calcula o valor líquido de uma caixinha (gorjeta) — diferente da taxa de
 // maquininha normal (que é dividida meio a meio entre salão e
 // profissional), aqui o desconto da taxa sai TODO da caixinha, porque o
@@ -303,7 +348,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.16.0-comanda-aberta-e-agendar' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.17.0-pagamento-dividido' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1899,9 +1944,20 @@ app.post('/api/agendamentos', auth, async (req, res) => {
 });
 
 app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
-  const { status, forma_pgto, pago } = req.body;
+  const { status, forma_pgto, pago, formas_pagamento } = req.body;
+  const ehPagamentoDividido = Array.isArray(formas_pagamento) && formas_pagamento.length > 1;
+
+  // Se veio pagamento dividido, o "forma_pgto" que se guarda no registro
+  // principal vira um resumo textual (ex.: "PIX + Dinheiro") — só pra
+  // continuar aparecendo algo legível em telas que só mostram uma forma.
+  // O detalhamento de verdade (quem pagou quanto) fica em formas_pagamento.
+  const formaPgtoFinal = ehPagamentoDividido
+    ? formas_pagamento.map(fp => fp.forma).join(' + ')
+    : forma_pgto;
+
   const updates = { status };
-  if (forma_pgto) updates.forma_pgto = forma_pgto;
+  if (formaPgtoFinal) updates.forma_pgto = formaPgtoFinal;
+  if (ehPagamentoDividido) updates.formas_pagamento = formas_pagamento;
 
   let query = supabase.from('agendamentos').update(updates)
     .eq('id', req.params.id).eq('salao_id', req.salao_id);
@@ -1956,18 +2012,31 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     // quem não mandar esse campo.
     const marcarComoPago = pago !== false;
 
+    // Se veio pagamento dividido, confere que a soma bate exatamente com o
+    // valor total (já considerando desconto, se teve) — senão o dinheiro
+    // "some" ou "sobra" sem ninguém perceber.
+    if (ehPagamentoDividido && marcarComoPago) {
+      const somaFormas = formas_pagamento.reduce((s, fp) => s + Number(fp.valor || 0), 0);
+      const diferenca = Math.abs(somaFormas - Number(data.valor_total || 0));
+      if (diferenca > 0.01) {
+        return res.status(422).json({
+          error: 'A soma das formas de pagamento (' + somaFormas.toFixed(2) + ') não bate com o valor total (' + Number(data.valor_total || 0).toFixed(2) + ')'
+        });
+      }
+    }
+
     // Atualiza lancamento — já reflete o valor com desconto (se algum foi aplicado)
     await supabase.from('lancamentos')
-      .update({ pago: marcarComoPago, forma_pgto, valor: data.valor_total }).eq('agendamento_id', req.params.id);
+      .update({ pago: marcarComoPago, forma_pgto: formaPgtoFinal, valor: data.valor_total }).eq('agendamento_id', req.params.id);
 
     // Aplica o desconto da taxa da maquininha na comissão do profissional
     // (só se o pagamento foi no cartão, o salão configurou uma taxa, E o
     // atendimento já foi realmente pago agora — fiado não paga taxa ainda)
     if (marcarComoPago) {
       try {
-        infoTaxaMaquininha = await aplicarTaxaMaquininha(
-          req.params.id, req.salao_id, Number(data.valor_total || 0), forma_pgto
-        );
+        infoTaxaMaquininha = ehPagamentoDividido
+          ? await aplicarTaxaMaquininhaDividida(req.params.id, req.salao_id, Number(data.valor_total || 0), formas_pagamento)
+          : await aplicarTaxaMaquininha(req.params.id, req.salao_id, Number(data.valor_total || 0), forma_pgto);
       } catch(e) { console.error('Erro ao aplicar taxa maquininha:', e.message); }
     }
 
