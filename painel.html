@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.16.3-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.17.0-frontend</div>
       </div>
     </div>
 
@@ -1710,6 +1710,13 @@ function abrirModalConcluir(id) {
   document.getElementById('desc-resumo').textContent = '';
   document.getElementById('caixinha-input').value = '';
   selecionarTipoDesconto('pct');
+  // Reseta o modo de pagamento dividido — sem isso, ficava "vazando" de um
+  // atendimento pro outro se a pessoa tivesse usado antes
+  PGTO_DIVIDIDO_ATIVO = false;
+  PGTO_DIVIDIDO_LINHAS = [];
+  document.getElementById('fpg-options').style.display = 'grid';
+  document.getElementById('pgto-dividido-wrap').style.display = 'none';
+  document.getElementById('btn-dividir-pgto').textContent = '➗ Dividir entre mais de uma forma de pagamento';
   openM('m-concluir');
 }
 
@@ -1740,9 +1747,90 @@ function recalcularDesconto() {
   var valorOriginal = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
   var desconto = calcularDescontoEmReais();
   var resumo = document.getElementById('desc-resumo');
-  if (desconto <= 0) { resumo.textContent = ''; return; }
-  var valorFinal = valorOriginal - desconto;
-  resumo.innerHTML = 'Desconto de ' + brl(desconto) + ' — <strong style="color:var(--ac)">valor final: ' + brl(valorFinal) + '</strong>';
+  if (desconto <= 0) { resumo.textContent = ''; } else {
+    var valorFinal = valorOriginal - desconto;
+    resumo.innerHTML = 'Desconto de ' + brl(desconto) + ' — <strong style="color:var(--ac)">valor final: ' + brl(valorFinal) + '</strong>';
+  }
+  if (PGTO_DIVIDIDO_ATIVO) recalcularResumoPagamentoDividido();
+}
+
+// ── PAGAMENTO DIVIDIDO (mais de uma forma) ───────────
+var PGTO_DIVIDIDO_ATIVO = false;
+var PGTO_DIVIDIDO_LINHAS = []; // [{forma, valor}]
+
+function alternarPagamentoDividido() {
+  PGTO_DIVIDIDO_ATIVO = !PGTO_DIVIDIDO_ATIVO;
+  var wrapNormal = document.getElementById('fpg-options');
+  var wrapDividido = document.getElementById('pgto-dividido-wrap');
+  var btn = document.getElementById('btn-dividir-pgto');
+
+  if (PGTO_DIVIDIDO_ATIVO) {
+    wrapNormal.style.display = 'none';
+    document.getElementById('fiado-aviso').textContent = '';
+    wrapDividido.style.display = 'block';
+    btn.textContent = '↩️ Voltar pra uma forma de pagamento só';
+    if (!PGTO_DIVIDIDO_LINHAS.length) {
+      PGTO_DIVIDIDO_LINHAS = [{ forma: 'PIX', valor: null }, { forma: 'Dinheiro', valor: null }];
+    }
+    renderLinhasPagamentoDividido();
+  } else {
+    wrapNormal.style.display = 'grid';
+    wrapDividido.style.display = 'none';
+    btn.textContent = '➗ Dividir entre mais de uma forma de pagamento';
+  }
+}
+
+function adicionarLinhaPagamentoDividido() {
+  PGTO_DIVIDIDO_LINHAS.push({ forma: 'PIX', valor: null });
+  renderLinhasPagamentoDividido();
+}
+
+function removerLinhaPagamentoDividido(idx) {
+  if (PGTO_DIVIDIDO_LINHAS.length <= 1) { toast('Precisa de pelo menos uma forma','er'); return; }
+  PGTO_DIVIDIDO_LINHAS.splice(idx, 1);
+  renderLinhasPagamentoDividido();
+}
+
+function atualizarLinhaPagamentoDividido(idx, campo, valor) {
+  if (!PGTO_DIVIDIDO_LINHAS[idx]) return;
+  PGTO_DIVIDIDO_LINHAS[idx][campo] = campo === 'valor' ? parseNumeroBR(valor) : valor;
+  recalcularResumoPagamentoDividido();
+}
+
+var OPCOES_FORMA_PAGAMENTO = [
+  { val: 'PIX', label: '💠 PIX' }, { val: 'Dinheiro', label: '💵 Dinheiro' },
+  { val: 'Cartão Débito', label: '💳 Débito' }, { val: 'Cartão Crédito', label: '💳 Crédito' }
+];
+
+function renderLinhasPagamentoDividido() {
+  var wrap = document.getElementById('pgto-dividido-linhas');
+  wrap.innerHTML = PGTO_DIVIDIDO_LINHAS.map(function(linha, idx){
+    return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
+      '<select class="fc" style="flex:1.3" onchange="atualizarLinhaPagamentoDividido(' + idx + ',\'forma\',this.value)">' +
+        OPCOES_FORMA_PAGAMENTO.map(function(o){ return '<option value="' + o.val + '"' + (o.val === linha.forma ? ' selected' : '') + '>' + o.label + '</option>'; }).join('') +
+      '</select>' +
+      '<input type="text" inputmode="decimal" class="fc" style="flex:1" placeholder="Valor R$" value="' + (linha.valor !== null ? brlSemSimbolo(linha.valor) : '') + '" onchange="atualizarLinhaPagamentoDividido(' + idx + ',\'valor\',this.value)"/>' +
+      '<button type="button" class="btnic btn btnsm" style="color:var(--er)" onclick="removerLinhaPagamentoDividido(' + idx + ')">✕</button>' +
+    '</div>';
+  }).join('');
+  recalcularResumoPagamentoDividido();
+}
+
+function recalcularResumoPagamentoDividido() {
+  var valorOriginal = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
+  var desconto = calcularDescontoEmReais();
+  var totalAConcluir = Math.max(0, valorOriginal - desconto);
+  var somaLinhas = PGTO_DIVIDIDO_LINHAS.reduce(function(s, l){ return s + (l.valor || 0); }, 0);
+  var diferenca = Number((totalAConcluir - somaLinhas).toFixed(2));
+
+  var resumo = document.getElementById('pgto-dividido-resumo');
+  if (Math.abs(diferenca) < 0.01) {
+    resumo.innerHTML = '<span style="color:var(--ok)">✅ Confere! Total: ' + brl(totalAConcluir) + '</span>';
+  } else if (diferenca > 0) {
+    resumo.innerHTML = 'Falta alocar <strong style="color:var(--warn)">' + brl(diferenca) + '</strong> (total: ' + brl(totalAConcluir) + ')';
+  } else {
+    resumo.innerHTML = '<span style="color:var(--er)">Passou ' + brl(Math.abs(diferenca)) + ' do total (' + brl(totalAConcluir) + ')</span>';
+  }
 }
 
 function selecionarFpg(btn) {
@@ -1761,14 +1849,34 @@ function selecionarFpg(btn) {
 
 function confirmarConclusao() {
   var id = document.getElementById('concluir-id').value;
+  var desconto = calcularDescontoEmReais();
+  var caixinha = parseFloat(document.getElementById('caixinha-input').value) || 0;
+  var btn = document.getElementById('btn-concluir-ok');
+
+  if (PGTO_DIVIDIDO_ATIVO) {
+    var linhasValidas = PGTO_DIVIDIDO_LINHAS.filter(function(l){ return l.valor && l.valor > 0; });
+    if (linhasValidas.length < 2) { toast('Adicione pelo menos 2 formas de pagamento com valor, ou volte pra uma forma só','er'); return; }
+    var valorOriginal = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
+    var totalAConcluir = Math.max(0, valorOriginal - desconto);
+    var somaLinhas = linhasValidas.reduce(function(s, l){ return s + l.valor; }, 0);
+    if (Math.abs(totalAConcluir - somaLinhas) > 0.01) { toast('A soma das formas de pagamento precisa bater com o total ('+brl(totalAConcluir)+')','er'); return; }
+
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{
+      status:'concluido', formas_pagamento: linhasValidas.map(function(l){ return { forma: l.forma, valor: l.valor }; }),
+      pago: true, desconto: desconto > 0 ? desconto : undefined, caixinha: caixinha > 0 ? caixinha : undefined
+    }})
+      .then(function(r){ tratarSucessoConclusao(r, false); })
+      .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+      .finally(function(){ btn.disabled = false; });
+    return;
+  }
+
   var fpgBtn = document.querySelector('.fpg-btn.on');
   if (!fpgBtn) { toast('Selecione a forma de pagamento (ou fiado)','er'); return; }
   var fpg = fpgBtn.dataset.val;
   var ehFiado = fpg === 'fiado';
-  var desconto = calcularDescontoEmReais();
-  var caixinha = parseFloat(document.getElementById('caixinha-input').value) || 0;
 
-  var btn = document.getElementById('btn-concluir-ok');
   btn.disabled = true; btn.textContent = 'Salvando...';
 
   apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{
@@ -1776,26 +1884,28 @@ function confirmarConclusao() {
     desconto: desconto > 0 ? desconto : undefined,
     caixinha: (!ehFiado && caixinha > 0) ? caixinha : undefined
   }})
-    .then(function(r){
-      closeM('m-concluir');
-      toast(ehFiado ? 'Atendimento concluído — marcado como fiado 🧾' : 'Atendimento concluído! ✅', 'ok');
-      if (r && r.desconto_aplicado > 0) {
-        toast('Desconto de ' + brl(r.desconto_aplicado) + ' aplicado — valor final: ' + brl(r.valor_total), 'inf');
-      }
-      if (r && r.taxa_maquininha && r.taxa_maquininha.taxa_profissional > 0) {
-        toast('Taxa da maquininha: ' + brl(r.taxa_maquininha.taxa_total) + ' (profissional absorveu ' + brl(r.taxa_maquininha.taxa_profissional) + ')', 'inf');
-      }
-      if (r && r.caixinha && r.caixinha.bruta > 0) {
-        var msgCaixinha = r.caixinha.taxa > 0
-          ? 'Caixinha de ' + brl(r.caixinha.bruta) + ' — profissional recebe ' + brl(r.caixinha.liquida) + ' (descontada a taxa da maquininha)'
-          : 'Caixinha de ' + brl(r.caixinha.liquida) + ' — 100% pro profissional 🎁';
-        toast(msgCaixinha, 'inf');
-      }
-      loadDashTl(); loadAgenda(); loadKPIs(); loadCom(); loadFiado();
-      if (r && r.whatsapp_link) mostrarToastWhatsapp(r.whatsapp_link);
-    })
+    .then(function(r){ tratarSucessoConclusao(r, ehFiado); })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
     .finally(function(){ btn.disabled = false; });
+}
+
+function tratarSucessoConclusao(r, ehFiado) {
+  closeM('m-concluir');
+  toast(ehFiado ? 'Atendimento concluído — marcado como fiado 🧾' : 'Atendimento concluído! ✅', 'ok');
+  if (r && r.desconto_aplicado > 0) {
+    toast('Desconto de ' + brl(r.desconto_aplicado) + ' aplicado — valor final: ' + brl(r.valor_total), 'inf');
+  }
+  if (r && r.taxa_maquininha && r.taxa_maquininha.taxa_profissional > 0) {
+    toast('Taxa da maquininha: ' + brl(r.taxa_maquininha.taxa_total) + ' (profissional absorveu ' + brl(r.taxa_maquininha.taxa_profissional) + ')', 'inf');
+  }
+  if (r && r.caixinha && r.caixinha.bruta > 0) {
+    var msgCaixinha = r.caixinha.taxa > 0
+      ? 'Caixinha de ' + brl(r.caixinha.bruta) + ' — profissional recebe ' + brl(r.caixinha.liquida) + ' (descontada a taxa da maquininha)'
+      : 'Caixinha de ' + brl(r.caixinha.liquida) + ' — 100% pro profissional 🎁';
+    toast(msgCaixinha, 'inf');
+  }
+  loadDashTl(); loadAgenda(); loadKPIs(); loadCom(); loadFiado();
+  if (r && r.whatsapp_link) mostrarToastWhatsapp(r.whatsapp_link);
 }
 
 function mostrarToastWhatsapp(link) {
@@ -6308,6 +6418,14 @@ function dispensarBannerPWA() {
           <button type="button" class="fpg-btn" data-val="fiado" style="grid-column:1/-1" onclick="selecionarFpg(this)">🧾 Fiado (vai pagar depois)</button>
         </div>
         <div style="font-size:.68rem;color:var(--t3);margin-top:6px" id="fiado-aviso"></div>
+        <button type="button" onclick="alternarPagamentoDividido()" style="background:none;border:none;color:var(--ac);font-size:.72rem;margin-top:8px;cursor:pointer;padding:0;text-decoration:underline" id="btn-dividir-pgto">➗ Dividir entre mais de uma forma de pagamento</button>
+      </div>
+
+      <div class="fg" id="pgto-dividido-wrap" style="display:none">
+        <label class="fl">Pagamento dividido</label>
+        <div id="pgto-dividido-linhas"></div>
+        <button type="button" class="btn btns btnsm" style="margin-top:6px" onclick="adicionarLinhaPagamentoDividido()">+ Adicionar forma de pagamento</button>
+        <div style="font-size:.78rem;margin-top:8px;padding:8px;background:var(--bg3);border-radius:var(--rs)" id="pgto-dividido-resumo"></div>
       </div>
     </div>
     <div class="mf">
