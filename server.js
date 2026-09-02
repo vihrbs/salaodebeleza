@@ -348,7 +348,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.17.0-pagamento-dividido' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.18.0-fechamento-de-caixa' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2223,6 +2223,99 @@ app.get('/api/dashboard/top-servicos', auth, async (req, res) => {
     map[nome].total += Number(row.preco);
   });
   res.json(Object.values(map).sort((a, b) => b.total - a.total).slice(0, 8));
+});
+
+// Resumo tipo "fechamento de caixa" do dia — faturamento, pagamentos
+// separados por forma, custos, comissões e lucro. Pensado pra dar uma
+// visão rápida de "como foi o dia hoje", sem precisar ir em cada tela
+// separada (Financeiro, Comissões, Estoque) somar tudo na mão.
+app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
+  const data = req.query.data || dataAtualBrasil();
+  const inicioDia = data + 'T03:00:00+00:00';
+  const fimDia = adicionarDia(data) + 'T02:59:59+00:00';
+
+  try {
+    const [
+      { data: lancamentosEntrada },
+      { data: lancamentosSaida },
+      { data: agendamentosConcluidos },
+      { data: movimentacoesVenda },
+      { data: comissoesServicoBrutas }
+    ] = await Promise.all([
+      // Entradas pagas no dia — usadas pro faturado total e pra separar por forma de pagamento
+      supabase.from('lancamentos').select('valor, forma_pgto')
+        .eq('salao_id', req.salao_id).eq('data', data).eq('tipo', 'entrada').eq('pago', true),
+      // Saídas registradas no dia (despesas, sangria)
+      supabase.from('lancamentos').select('valor')
+        .eq('salao_id', req.salao_id).eq('data', data).eq('tipo', 'saida'),
+      // Comandas concluídas no dia — pra contar clientes/ticket médio
+      supabase.from('agendamentos').select('id, cliente_id, valor_total')
+        .eq('salao_id', req.salao_id).eq('status', 'concluido')
+        .gte('data_hora', inicioDia).lte('data_hora', fimDia),
+      // Produtos vendidos no dia — pra separar o custo (preço custo) do que foi vendido
+      supabase.from('movimentacoes_estoque').select('quantidade, produto_id, comissao_valor')
+        .eq('salao_id', req.salao_id).eq('tipo', 'venda')
+        .gte('created_at', inicioDia).lte('created_at', fimDia),
+      // Comissão de serviço do dia (direto pelos itens do agendamento, sem
+      // depender de já ter sido "fechada" no financeiro — é uma prévia)
+      supabase.from('agendamento_servicos')
+        .select('comissao_valor, agendamentos!inner(data_hora, salao_id, status)')
+        .eq('agendamentos.salao_id', req.salao_id).eq('agendamentos.status', 'concluido')
+        .gte('agendamentos.data_hora', inicioDia).lte('agendamentos.data_hora', fimDia)
+    ]);
+
+    const totalFaturado = (lancamentosEntrada || []).reduce((s, l) => s + Number(l.valor || 0), 0);
+
+    // Agrupa por forma de pagamento — junta variações de nome (ex.: "Cartão
+    // Débito" e "Débito") só pelo essencial: Pix, Débito, Crédito, Dinheiro, Outros
+    const pagamentosPorForma = {};
+    (lancamentosEntrada || []).forEach(l => {
+      const forma = l.forma_pgto || 'Não informado';
+      pagamentosPorForma[forma] = (pagamentosPorForma[forma] || 0) + Number(l.valor || 0);
+    });
+
+    const totalDespesas = (lancamentosSaida || []).reduce((s, l) => s + Number(l.valor || 0), 0);
+
+    // Custo dos produtos vendidos (COGS) — busca o preço custo de cada
+    // produto envolvido e multiplica pela quantidade vendida no dia
+    let custoProdutosVendidos = 0;
+    if (movimentacoesVenda && movimentacoesVenda.length) {
+      const idsProdutos = [...new Set(movimentacoesVenda.map(m => m.produto_id))];
+      const { data: produtosInfo } = await supabase.from('produtos')
+        .select('id, preco_custo').in('id', idsProdutos);
+      const custoPorId = {};
+      (produtosInfo || []).forEach(p => { custoPorId[p.id] = Number(p.preco_custo || 0); });
+      custoProdutosVendidos = movimentacoesVenda.reduce((s, m) =>
+        s + (custoPorId[m.produto_id] || 0) * Number(m.quantidade || 0), 0);
+    }
+
+    const totalComissaoServicos = (comissoesServicoBrutas || [])
+      .reduce((s, r) => s + Number(r.comissao_valor || 0), 0);
+    const totalComissaoProdutos = (movimentacoesVenda || [])
+      .reduce((s, m) => s + Number(m.comissao_valor || 0), 0);
+    const totalComissoes = totalComissaoServicos + totalComissaoProdutos;
+
+    const totalCustos = totalDespesas + custoProdutosVendidos;
+    const totalLucro = totalFaturado - totalCustos - totalComissoes;
+
+    const comandasFechadas = (agendamentosConcluidos || []).length;
+    const clientesUnicos = new Set((agendamentosConcluidos || []).map(a => a.cliente_id).filter(Boolean)).size;
+    const ticketMedio = comandasFechadas > 0 ? totalFaturado / comandasFechadas : 0;
+
+    res.json({
+      data,
+      total_lucro: totalLucro,
+      total_faturado: totalFaturado,
+      pagamentos_por_forma: pagamentosPorForma,
+      total_clientes: clientesUnicos,
+      comandas_fechadas: comandasFechadas,
+      ticket_medio: ticketMedio,
+      total_custos: totalCustos,
+      despesas: totalDespesas,
+      produtos_de_venda: custoProdutosVendidos,
+      total_comissoes: totalComissoes
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ═══════════════════════════════════════════════════
