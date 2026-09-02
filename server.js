@@ -348,7 +348,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.18.0-fechamento-de-caixa' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.19.0-fechamento-detalhado' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2248,16 +2248,20 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       // Saídas registradas no dia (despesas, sangria)
       supabase.from('lancamentos').select('valor')
         .eq('salao_id', req.salao_id).eq('data', data).eq('tipo', 'saida'),
-      // Comandas concluídas no dia — pra contar clientes/ticket médio
-      supabase.from('agendamentos').select('id, cliente_id, valor_total')
+      // Comandas concluídas no dia — com tudo que precisa pra listar
+      // detalhado E agrupar por profissional (bater conta com cada um)
+      supabase.from('agendamentos')
+        .select('id, cliente_id, valor_total, forma_pgto, data_hora, profissional_id, clientes(nome), profissionais(nome), agendamento_servicos(servicos(nome), comissao_valor)')
         .eq('salao_id', req.salao_id).eq('status', 'concluido')
-        .gte('data_hora', inicioDia).lte('data_hora', fimDia),
-      // Produtos vendidos no dia — pra separar o custo (preço custo) do que foi vendido
-      supabase.from('movimentacoes_estoque').select('quantidade, produto_id, comissao_valor')
+        .gte('data_hora', inicioDia).lte('data_hora', fimDia).order('data_hora'),
+      // Produtos vendidos no dia — pra separar o custo (preço custo) do que
+      // foi vendido, e também pra somar na comissão de cada profissional
+      supabase.from('movimentacoes_estoque').select('quantidade, produto_id, comissao_valor, profissional_id, produtos(nome)')
         .eq('salao_id', req.salao_id).eq('tipo', 'venda')
         .gte('created_at', inicioDia).lte('created_at', fimDia),
-      // Comissão de serviço do dia (direto pelos itens do agendamento, sem
-      // depender de já ter sido "fechada" no financeiro — é uma prévia)
+      // (mantido por compatibilidade — comissão de serviço já vem embutida
+      // em agendamentosConcluidos agora, mas essa consulta aqui é uma
+      // conferência cruzada independente do mesmo número)
       supabase.from('agendamento_servicos')
         .select('comissao_valor, agendamentos!inner(data_hora, salao_id, status)')
         .eq('agendamentos.salao_id', req.salao_id).eq('agendamentos.status', 'concluido')
@@ -2302,6 +2306,40 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
     const clientesUnicos = new Set((agendamentosConcluidos || []).map(a => a.cliente_id).filter(Boolean)).size;
     const ticketMedio = comandasFechadas > 0 ? totalFaturado / comandasFechadas : 0;
 
+    // Detalhamento por profissional — pra bater conta com cada um (quanto
+    // faturou, quantas comandas, quanto de comissão) sem precisar ir na
+    // tela de Comissões separado.
+    const porProfissional = {};
+    function garanteProfissional(id, nome) {
+      if (!porProfissional[id]) porProfissional[id] = { profissional_id: id, nome: nome || 'Sem profissional', faturado: 0, comandas: 0, comissao: 0 };
+      return porProfissional[id];
+    }
+    (agendamentosConcluidos || []).forEach(ag => {
+      const chave = ag.profissional_id || 'sem-profissional';
+      const p = garanteProfissional(chave, ag.profissionais?.nome);
+      p.faturado += Number(ag.valor_total || 0);
+      p.comandas += 1;
+      p.comissao += (ag.agendamento_servicos || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+    });
+    (movimentacoesVenda || []).forEach(m => {
+      if (!m.profissional_id) return;
+      const p = garanteProfissional(m.profissional_id, null);
+      p.comissao += Number(m.comissao_valor || 0);
+    });
+    const listaPorProfissional = Object.values(porProfissional).sort((a, b) => b.faturado - a.faturado);
+
+    // Lista das comandas do dia, uma por uma — pra conferir item a item se
+    // precisar, sem ter que abrir a tela de Comandas em outra aba
+    const comandasDetalhe = (agendamentosConcluidos || []).map(ag => ({
+      id: ag.id,
+      hora: ag.data_hora,
+      cliente_nome: ag.clientes?.nome || 'Cliente',
+      profissional_nome: ag.profissionais?.nome || '—',
+      servicos: (ag.agendamento_servicos || []).map(sv => sv.servicos?.nome).filter(Boolean).join(', ') || 'Produto/Item avulso',
+      valor_total: Number(ag.valor_total || 0),
+      forma_pgto: ag.forma_pgto || '—'
+    }));
+
     res.json({
       data,
       total_lucro: totalLucro,
@@ -2313,7 +2351,9 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       total_custos: totalCustos,
       despesas: totalDespesas,
       produtos_de_venda: custoProdutosVendidos,
-      total_comissoes: totalComissoes
+      total_comissoes: totalComissoes,
+      por_profissional: listaPorProfissional,
+      comandas_detalhe: comandasDetalhe
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
