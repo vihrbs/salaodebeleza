@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.17.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.18.0-frontend</div>
       </div>
     </div>
 
@@ -529,6 +529,13 @@ select.fc option{background:var(--bg2)}
         <div class="kc c2"><div class="ki c2">💰</div><div><div class="kv" id="k2">—</div><div class="kl">Faturamento hoje</div></div><span class="kd" id="k2d">...</span></div>
         <div class="kc c3"><div class="ki c3">👥</div><div><div class="kv" id="k3">—</div><div class="kl">Clientes ativos</div></div><span class="kd" id="k3d">...</span></div>
         <div class="kc c4"><div class="ki c4">⭐</div><div><div class="kv" id="k4">—</div><div class="kl">Avaliação média</div></div><span class="kd" id="k4d">...</span></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="crow">
+          <span class="ch">💰 Fechamento de Caixa</span>
+          <input type="date" class="fc" id="fc-data" style="max-width:160px" onchange="loadFechamentoCaixa()"/>
+        </div>
+        <div id="fechamento-caixa"><div class="lc"><div class="spin"></div></div></div>
       </div>
       <div class="g31" style="margin-bottom:14px">
         <div class="card">
@@ -1367,7 +1374,7 @@ var D = {
 
 // ── LOAD ALL ────────────────────────────────────────────
 function loadAll() {
-  loadKPIs(); loadDashTl(); loadTopSvc(); loadAlertas(); loadAvaliacoes();
+  loadKPIs(); loadDashTl(); loadTopSvc(); loadAlertas(); loadAvaliacoes(); loadFechamentoCaixa();
   loadAgenda(); loadClientes(); loadFin(); loadEst();
   loadCom(); loadPros(); loadSvcs(); loadPacotes();
   renderCal(); renderDashChart();
@@ -1413,6 +1420,55 @@ function pararAtualizacaoAutomatica() {
 }
 
 // ── DASHBOARD ───────────────────────────────────────────
+// ── FECHAMENTO DE CAIXA (resumo do dia no Dashboard) ─
+function loadFechamentoCaixa() {
+  var campoData = document.getElementById('fc-data');
+  if (!campoData.value) campoData.value = today();
+  var el = document.getElementById('fechamento-caixa');
+  el.innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  apiFetch('/api/dashboard/fechamento-caixa?data=' + campoData.value)
+    .then(function(r){ renderFechamentoCaixa(r); })
+    .catch(function(){ el.innerHTML = '<div class="empty">Erro ao carregar o fechamento de caixa.</div>'; });
+}
+
+var ICONE_FORMA_PGTO = { 'PIX':'💠', 'Dinheiro':'💵', 'Cartão Débito':'💳', 'Cartão Crédito':'💳' };
+
+function renderFechamentoCaixa(r) {
+  var el = document.getElementById('fechamento-caixa');
+  if (!r) { el.innerHTML = '<div class="empty">Sem dados pra essa data.</div>'; return; }
+
+  var linhasPagamento = Object.keys(r.pagamentos_por_forma || {}).map(function(forma){
+    var valor = r.pagamentos_por_forma[forma];
+    return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem">' +
+      '<span>' + (ICONE_FORMA_PGTO[forma] || '💳') + ' ' + esc(forma) + '</span>' +
+      '<strong>' + brl(valor) + '</strong>' +
+    '</div>';
+  }).join('') || '<div style="font-size:.78rem;color:var(--t3)">Nenhum pagamento registrado nessa data.</div>';
+
+  el.innerHTML =
+    '<div style="background:linear-gradient(135deg,rgba(74,222,128,.15),rgba(74,222,128,.05));border:1px solid rgba(74,222,128,.3);border-radius:var(--rs);padding:14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">' +
+      '<span style="font-size:.85rem;color:var(--t2)">Total de Lucro</span>' +
+      '<strong style="font-size:1.4rem;color:var(--ok)">' + brl(r.total_lucro) + '</strong>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">' +
+      '<div>' +
+        '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd2)"><span style="font-size:.82rem;font-weight:700">📊 Total Faturado</span><strong style="color:var(--ac)">' + brl(r.total_faturado) + '</strong></div>' +
+        '<div style="margin-top:8px"><div style="font-size:.7rem;color:var(--t3);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">💳 Pagamentos</div>' + linhasPagamento + '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem"><span>👥 Total de Clientes</span><strong>' + r.total_clientes + '</strong></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem"><span>🧾 Comandas Fechadas</span><strong>' + r.comandas_fechadas + '</strong></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem"><span>🎫 Ticket Médio</span><strong>' + brl(r.ticket_medio) + '</strong></div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;color:var(--er)"><span>💸 Total de Custos</span><strong>' + brl(r.total_custos) + '</strong></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 14px;font-size:.72rem;color:var(--t3)"><span>📦 Produtos de Venda</span><span>' + brl(r.produtos_de_venda) + '</span></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 14px;font-size:.72rem;color:var(--t3)"><span>📄 Despesas</span><span>' + brl(r.despesas) + '</span></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:8px 0 4px;margin-top:6px;border-top:1px solid var(--bd2);font-size:.8rem"><span>🤝 Total de Comissões</span><strong style="color:var(--warn)">' + brl(r.total_comissoes) + '</strong></div>' +
+      '</div>' +
+    '</div>';
+}
+
 function loadKPIs() {
   apiFetch('/api/dashboard/kpis').then(function(r){
     var d = r || (DEMO ? D.kpis : {agendamentos_hoje:0,faturamento_hoje:0,clientes_ativos:0,novos_clientes_mes:0});
