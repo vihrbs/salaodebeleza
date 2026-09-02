@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.18.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.19.0-frontend</div>
       </div>
     </div>
 
@@ -533,7 +533,10 @@ select.fc option{background:var(--bg2)}
       <div class="card" style="margin-bottom:14px">
         <div class="crow">
           <span class="ch">💰 Fechamento de Caixa</span>
-          <input type="date" class="fc" id="fc-data" style="max-width:160px" onchange="loadFechamentoCaixa()"/>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btns btnsm" onclick="copiarResumoFechamentoCaixa()">📋 Copiar resumo</button>
+            <input type="date" class="fc" id="fc-data" style="max-width:160px" onchange="loadFechamentoCaixa()"/>
+          </div>
         </div>
         <div id="fechamento-caixa"><div class="lc"><div class="spin"></div></div></div>
       </div>
@@ -1432,18 +1435,40 @@ function loadFechamentoCaixa() {
 }
 
 var ICONE_FORMA_PGTO = { 'PIX':'💠', 'Dinheiro':'💵', 'Cartão Débito':'💳', 'Cartão Crédito':'💳' };
+var FECHAMENTO_CAIXA_ATUAL = null; // guardado pro botão "Copiar resumo" usar sem refazer a consulta
 
 function renderFechamentoCaixa(r) {
+  FECHAMENTO_CAIXA_ATUAL = r;
   var el = document.getElementById('fechamento-caixa');
   if (!r) { el.innerHTML = '<div class="empty">Sem dados pra essa data.</div>'; return; }
 
   var linhasPagamento = Object.keys(r.pagamentos_por_forma || {}).map(function(forma){
     var valor = r.pagamentos_por_forma[forma];
-    return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem">' +
-      '<span>' + (ICONE_FORMA_PGTO[forma] || '💳') + ' ' + esc(forma) + '</span>' +
+    var ehDinheiro = forma === 'Dinheiro';
+    // Dinheiro é destacado — é a ÚNICA forma que precisa contar fisicamente
+    // na gaveta pra bater com o sistema; as outras (PIX, cartão) já ficam
+    // registradas automaticamente no extrato do banco/maquininha.
+    return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem' + (ehDinheiro ? ';background:rgba(251,191,36,.1);border-radius:6px;padding:5px 8px;margin:2px -8px' : '') + '">' +
+      '<span>' + (ICONE_FORMA_PGTO[forma] || '💳') + ' ' + esc(forma) + (ehDinheiro ? ' <span style="font-size:.62rem;color:var(--warn)">(conferir na gaveta)</span>' : '') + '</span>' +
       '<strong>' + brl(valor) + '</strong>' +
     '</div>';
   }).join('') || '<div style="font-size:.78rem;color:var(--t3)">Nenhum pagamento registrado nessa data.</div>';
+
+  var linhasProfissional = (r.por_profissional || []).map(function(p){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd2)">' +
+      '<div><div style="font-size:.82rem;font-weight:700">' + esc(p.nome) + '</div><div style="font-size:.68rem;color:var(--t3)">' + p.comandas + ' comanda(s)</div></div>' +
+      '<div style="text-align:right"><div style="font-size:.85rem;font-weight:700;color:var(--ac)">' + brl(p.faturado) + '</div><div style="font-size:.68rem;color:var(--warn)">comissão: ' + brl(p.comissao) + '</div></div>' +
+    '</div>';
+  }).join('') || '<div style="font-size:.78rem;color:var(--t3)">Nenhuma comanda fechada nessa data.</div>';
+
+  var linhasComandas = (r.comandas_detalhe || []).map(function(c){
+    var hora = c.hora ? new Date(c.hora).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '--:--';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.78rem">' +
+      '<div style="min-width:0"><span style="color:var(--t3)">' + hora + '</span> — <strong>' + esc(c.cliente_nome) + '</strong>' +
+        '<div style="font-size:.68rem;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.servicos) + ' · ' + esc(c.profissional_nome) + ' · ' + esc(c.forma_pgto) + '</div></div>' +
+      '<strong style="white-space:nowrap;margin-left:8px">' + brl(c.valor_total) + '</strong>' +
+    '</div>';
+  }).join('') || '<div style="font-size:.78rem;color:var(--t3)">Nenhuma comanda fechada nessa data.</div>';
 
   el.innerHTML =
     '<div style="background:linear-gradient(135deg,rgba(74,222,128,.15),rgba(74,222,128,.05));border:1px solid rgba(74,222,128,.3);border-radius:var(--rs);padding:14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">' +
@@ -1466,7 +1491,69 @@ function renderFechamentoCaixa(r) {
         '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 14px;font-size:.72rem;color:var(--t3)"><span>📄 Despesas</span><span>' + brl(r.despesas) + '</span></div>' +
         '<div style="display:flex;justify-content:space-between;padding:8px 0 4px;margin-top:6px;border-top:1px solid var(--bd2);font-size:.8rem"><span>🤝 Total de Comissões</span><strong style="color:var(--warn)">' + brl(r.total_comissoes) + '</strong></div>' +
       '</div>' +
+    '</div>' +
+    '<div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--bd)">' +
+      '<div style="font-size:.78rem;font-weight:700;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="alternarSecaoFechamento(\'fc-sec-prof\')"><span id="fc-seta-prof">▸</span> 👤 Por profissional — bate conta com cada um</div>' +
+      '<div id="fc-sec-prof" style="display:none">' + linhasProfissional + '</div>' +
+    '</div>' +
+    '<div style="margin-top:10px">' +
+      '<div style="font-size:.78rem;font-weight:700;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="alternarSecaoFechamento(\'fc-sec-comandas\')"><span id="fc-seta-comandas">▸</span> 📋 Comandas do dia, uma por uma</div>' +
+      '<div id="fc-sec-comandas" style="display:none;max-height:320px;overflow-y:auto">' + linhasComandas + '</div>' +
     '</div>';
+}
+
+function alternarSecaoFechamento(id) {
+  var el = document.getElementById(id);
+  var seta = document.getElementById(id.replace('fc-sec-', 'fc-seta-'));
+  var abrindo = el.style.display === 'none';
+  el.style.display = abrindo ? 'block' : 'none';
+  if (seta) seta.textContent = abrindo ? '▾' : '▸';
+}
+
+// Monta um resumo em texto simples — pronto pra colar no WhatsApp e mandar
+// pro dono conferir, sem precisar tirar print de tela nenhuma.
+function copiarResumoFechamentoCaixa() {
+  var r = FECHAMENTO_CAIXA_ATUAL;
+  if (!r) { toast('Aguarda o fechamento carregar primeiro','er'); return; }
+
+  var dataFormatada = new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' });
+  var linhas = [];
+  linhas.push('💰 *FECHAMENTO DE CAIXA*');
+  linhas.push(dataFormatada.charAt(0).toUpperCase() + dataFormatada.slice(1));
+  linhas.push('');
+  linhas.push('📊 Faturado: ' + brl(r.total_faturado));
+  linhas.push('💚 Lucro: ' + brl(r.total_lucro));
+  linhas.push('');
+  linhas.push('*Pagamentos:*');
+  Object.keys(r.pagamentos_por_forma || {}).forEach(function(forma){
+    linhas.push((ICONE_FORMA_PGTO[forma] || '💳') + ' ' + forma + ': ' + brl(r.pagamentos_por_forma[forma]) + (forma === 'Dinheiro' ? ' (conferir na gaveta)' : ''));
+  });
+  linhas.push('');
+  linhas.push('🧾 Comandas fechadas: ' + r.comandas_fechadas);
+  linhas.push('👥 Clientes: ' + r.total_clientes);
+  linhas.push('🎫 Ticket médio: ' + brl(r.ticket_medio));
+  linhas.push('');
+  linhas.push('💸 Custos: ' + brl(r.total_custos) + ' (produtos: ' + brl(r.produtos_de_venda) + ' + despesas: ' + brl(r.despesas) + ')');
+  linhas.push('🤝 Comissões: ' + brl(r.total_comissoes));
+
+  if ((r.por_profissional || []).length) {
+    linhas.push('');
+    linhas.push('*Por profissional:*');
+    r.por_profissional.forEach(function(p){
+      linhas.push('• ' + p.nome + ' — ' + p.comandas + ' comanda(s), faturou ' + brl(p.faturado) + ', comissão ' + brl(p.comissao));
+    });
+  }
+
+  var texto = linhas.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(function(){
+      toast('Resumo copiado! Já pode colar no WhatsApp 📋', 'ok');
+    }).catch(function(){
+      toast('Não consegui copiar automaticamente — seleciona o texto na tela','er');
+    });
+  } else {
+    toast('Seu navegador não suporta copiar automaticamente','er');
+  }
 }
 
 function loadKPIs() {
