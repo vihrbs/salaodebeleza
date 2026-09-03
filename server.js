@@ -365,7 +365,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.20.0-admin-full' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.20.1-pacote-nao-admin' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1139,8 +1139,7 @@ app.get('/api/pacotes', auth, async (req, res) => {
   res.json(comSinal);
 });
 
-app.post('/api/pacotes', auth, async (req, res) => {
-  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode criar pacotes' });
+app.post('/api/pacotes', auth, requirePermissao('pacotes'), async (req, res) => {
   const { nome, descricao, preco, validade_dias, servicos, verificar_duplicidade } = req.body;
   if (!nome || !preco) {
     return res.status(422).json({ error: 'Nome e preço são obrigatórios' });
@@ -1178,8 +1177,7 @@ app.post('/api/pacotes', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/pacotes/:id', auth, async (req, res) => {
-  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode editar pacotes' });
+app.put('/api/pacotes/:id', auth, requirePermissao('pacotes'), async (req, res) => {
   const { nome, descricao, preco, validade_dias, servicos, ativo } = req.body;
   const updates = {};
   if (nome !== undefined) updates.nome = nome;
@@ -1194,8 +1192,7 @@ app.put('/api/pacotes/:id', auth, async (req, res) => {
   res.json(data);
 });
 
-app.delete('/api/pacotes/:id', auth, async (req, res) => {
-  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode remover pacotes' });
+app.delete('/api/pacotes/:id', auth, requirePermissao('pacotes'), async (req, res) => {
   await supabase.from('pacotes').update({ ativo: false }).eq('id', req.params.id).eq('salao_id', req.salao_id);
   res.json({ message: 'Pacote desativado' });
 });
@@ -1237,8 +1234,7 @@ async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago
 }
 
 // Marca um pacote vendido "pra pagar depois" como pago (quita o lançamento junto)
-app.patch('/api/pacotes-clientes/:id/pagar', auth, async (req, res) => {
-  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode confirmar pagamento de pacotes' });
+app.patch('/api/pacotes-clientes/:id/pagar', auth, requirePermissao('pacotes'), async (req, res) => {
   try {
     const { data: pc } = await supabase.from('pacotes_clientes')
       .select('id, pago, lancamento_id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
@@ -1316,8 +1312,7 @@ app.post('/api/pacotes-clientes/lote', auth, async (req, res) => {
   }
 });
 
-app.post('/api/clientes/:id/pacotes', auth, async (req, res) => {
-  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Apenas o administrador pode vender pacotes' });
+app.post('/api/clientes/:id/pacotes', auth, requirePermissao('pacotes'), async (req, res) => {
   const { pacote_id, valor_pago, data_compra, pago } = req.body;
   if (!pacote_id) return res.status(422).json({ error: 'pacote_id é obrigatório' });
   try {
