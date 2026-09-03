@@ -6,6 +6,23 @@ const crypto   = require('crypto');
 const fs       = require('fs');
 const path     = require('path');
 
+// ── LOGS EM TEMPO REAL (buffer em memória, só pra super admin ver) ──
+// Guarda os últimos erros do sistema pra ficar visível no painel de admin
+// sem precisar de um serviço externo de logging — só sobrescreve
+// console.error pra também empilhar aqui, mantendo o comportamento normal
+// de log no terminal/Railway intacto.
+const LOGS_ERRO_BUFFER = [];
+const MAX_LOGS_BUFFER = 300;
+const _consoleErrorOriginal = console.error.bind(console);
+console.error = function(...args) {
+  _consoleErrorOriginal(...args);
+  try {
+    const mensagem = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    LOGS_ERRO_BUFFER.push({ timestamp: new Date().toISOString(), mensagem });
+    if (LOGS_ERRO_BUFFER.length > MAX_LOGS_BUFFER) LOGS_ERRO_BUFFER.shift();
+  } catch(e) { /* nunca deixa o log quebrar a aplicação */ }
+};
+
 const app = express();
 app.use(cors());
 // Limite bem generoso — necessário pra importações em lote (ex.: histórico
@@ -348,7 +365,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.19.0-fechamento-detalhado' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.20.0-admin-full' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -3648,6 +3665,99 @@ app.post('/api/super-admin/saloes/:id/status', auth, requireSuperAdmin, async (r
     if (error) throw error;
     res.json(data);
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Visão geral da plataforma inteira — quantos salões ativos, em trial,
+// trial vencendo essa semana, receita estimada (soma do preço do plano de
+// quem já não tá mais em trial), e engajamento geral (profissionais
+// cadastrados, agendamentos no mês). Dá o "estado geral do negócio" numa
+// olhada só, sem precisar somar salão por salão na mão.
+app.get('/api/super-admin/visao-geral', auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const agora = new Date();
+    const em7dias = new Date(); em7dias.setDate(em7dias.getDate() + 7);
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString();
+
+    const [{ data: saloes }, { count: totalProfissionais }, { count: totalAgendamentosMes }] = await Promise.all([
+      supabase.from('saloes').select('id, ativo, trial_ate, plano_id, planos(nome, preco)'),
+      supabase.from('profissionais').select('id', { count: 'exact', head: true }).eq('ativo', true),
+      supabase.from('agendamentos').select('id', { count: 'exact', head: true }).gte('data_hora', inicioMes)
+    ]);
+
+    let saloesAtivos = 0, saloesEmTrial = 0, trialsVencendoSemana = 0, receitaEstimada = 0;
+    (saloes || []).forEach(s => {
+      const trial = s.trial_ate ? new Date(s.trial_ate) : null;
+      const emTrial = !!(trial && trial > agora);
+      if (s.ativo) saloesAtivos++;
+      if (emTrial) saloesEmTrial++;
+      if (trial && trial > agora && trial <= em7dias) trialsVencendoSemana++;
+      // Só conta como receita quem tá ativo E já passou do trial — presume
+      // que quem chegou até aqui pagando de verdade (não é garantia
+      // absoluta sem integração com o gateway de pagamento, mas é a melhor
+      // estimativa disponível com os dados que o sistema já tem).
+      if (s.ativo && !emTrial) receitaEstimada += Number(s.planos?.preco) || 0;
+    });
+
+    res.json({
+      total_saloes: (saloes || []).length,
+      saloes_ativos: saloesAtivos,
+      saloes_em_trial: saloesEmTrial,
+      trials_vencendo_semana: trialsVencendoSemana,
+      receita_estimada: receitaEstimada,
+      total_profissionais: totalProfissionais || 0,
+      total_agendamentos_mes: totalAgendamentosMes || 0
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Gera um token de sessão pro admin daquele salão específico, sem precisar
+// da senha dele — é uma sessão de suporte, expira rápido (2h) pra não
+// virar um acesso permanente esquecido em algum lugar.
+app.post('/api/super-admin/saloes/:id/entrar-como', auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { data: usuarioAdmin } = await supabase.from('usuarios')
+      .select('id, nome, email, perfil, salao_id, profissional_id, email_verificado')
+      .eq('salao_id', req.params.id).eq('perfil', 'admin').eq('ativo', true).limit(1).maybeSingle();
+    if (!usuarioAdmin) return res.status(404).json({ error: 'Esse salão não tem um usuário admin ativo pra entrar como' });
+
+    const token = jwt.sign({ sub: usuarioAdmin.id }, JWT_SECRET, { expiresIn: '2h' });
+    res.json({ token, usuario_nome: usuarioAdmin.nome, usuario_email: usuarioAdmin.email });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Edita qualquer dado de qualquer salão diretamente — nome, telefone,
+// plano. Igual ao PUT /api/estoque/:id, mas restrito a super admin e
+// mexendo na tabela de salões em vez de produtos.
+app.put('/api/super-admin/saloes/:id', auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const updates = {};
+    if (req.body.nome !== undefined) updates.nome = req.body.nome;
+    if (req.body.telefone !== undefined) updates.telefone = req.body.telefone;
+    if (req.body.plano_id !== undefined) updates.plano_id = req.body.plano_id;
+    if (!Object.keys(updates).length) return res.status(422).json({ error: 'Nada pra atualizar' });
+
+    const { data, error } = await supabase.from('saloes')
+      .update(updates).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Lista de planos disponíveis — usado no formulário de editar salão, pra
+// dar pra escolher o plano por nome em vez de digitar um UUID na mão.
+app.get('/api/super-admin/planos', auth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('planos').select('id, nome, preco').order('preco', { ascending: true, nullsFirst: true });
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Últimos erros registrados no sistema (buffer em memória, reseta quando o
+// servidor reinicia) — pra acompanhar se tem algo quebrando sem precisar
+// de acesso ao terminal do Railway.
+app.get('/api/super-admin/logs', auth, requireSuperAdmin, (req, res) => {
+  res.json(LOGS_ERRO_BUFFER.slice().reverse());
 });
 
 // ═══════════════════════════════════════════════════
