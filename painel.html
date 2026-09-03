@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.19.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.20.0-frontend</div>
       </div>
     </div>
 
@@ -507,6 +507,12 @@ select.fc option{background:var(--bg2)}
           <button class="ib" onclick="abrirNovoAgendamento()" title="Novo Agendamento">📅</button>
           <button class="ib" onclick="toast('Sem notificações novas','inf')" title="Notificações">🔔</button>
         </div>
+      </div>
+
+      <!-- BANNER MODO SUPORTE (super admin logado como outro salão) -->
+      <div id="modo-suporte-banner" style="display:none;background:linear-gradient(90deg,rgba(251,191,36,.2),rgba(251,191,36,.1));border-bottom:1px solid rgba(251,191,36,.35);padding:10px 20px;align-items:center;justify-content:space-between;font-size:.8rem;gap:12px;flex-wrap:wrap;color:var(--warn)">
+        <span id="modo-suporte-msg">🔑 Você está vendo o sistema como outro salão (modo suporte)</span>
+        <button onclick="voltarModoSuperAdmin()" style="background:var(--warn);color:#0F0E0C;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">← Voltar ao meu modo</button>
       </div>
 
       <!-- BANNER TRIAL -->
@@ -866,11 +872,29 @@ select.fc option{background:var(--bg2)}
 
     <!-- SUPER ADMIN — gerenciar todos os salões (clientes) -->
     <div class="page" id="page-super-admin">
-      <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
-        <input class="fc" id="sa-busca" placeholder="🔍 Buscar salão pelo nome..." style="max-width:280px" oninput="deb(loadSuperAdminSaloes,350)()"/>
-        <div style="margin-left:auto;font-size:.78rem;color:var(--t3)" id="sa-resumo"></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btnp btnsm" id="sa-tab-saloes" onclick="alternarAbaSuperAdmin('saloes')">🏢 Salões</button>
+        <button class="btn btns btnsm" id="sa-tab-logs" onclick="alternarAbaSuperAdmin('logs')">🩺 Logs do Sistema</button>
       </div>
-      <div id="sa-lista"><div class="lc"><div class="spin"></div></div></div>
+
+      <div id="sa-secao-saloes">
+        <div id="sa-visao-geral" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">
+          <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
+        </div>
+        <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
+          <input class="fc" id="sa-busca" placeholder="🔍 Buscar salão pelo nome..." style="max-width:280px" oninput="deb(loadSuperAdminSaloes,350)()"/>
+          <div style="margin-left:auto;font-size:.78rem;color:var(--t3)" id="sa-resumo"></div>
+        </div>
+        <div id="sa-lista"><div class="lc"><div class="spin"></div></div></div>
+      </div>
+
+      <div id="sa-secao-logs" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:.78rem;color:var(--t3)">Últimos erros registrados no servidor (reseta quando o Railway reinicia)</div>
+          <button class="btn btns btnsm" onclick="loadLogsSistema()">🔄 Atualizar</button>
+        </div>
+        <div id="sa-logs-lista"><div class="lc"><div class="spin"></div></div></div>
+      </div>
     </div>
 
   </div>
@@ -1188,6 +1212,19 @@ function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado,
   USER_EMAIL_VERIFICADO = (emailVerificado === undefined || emailVerificado === null) ? true : !!emailVerificado;
   USER_SUPER_ADMIN = !!superAdmin;
   document.getElementById('sb-super-admin').style.display = USER_SUPER_ADMIN ? '' : 'none';
+  // Se estiver no meio de uma sessão "entrar como" (modo suporte), mostra
+  // o banner de aviso com o nome do salão que tá sendo visualizado, e o
+  // botão de voltar pro modo super admin original.
+  var nomeModoSuporteSalao = localStorage.getItem('bpro_super_admin_nome_salao');
+  var bannerSuporte = document.getElementById('modo-suporte-banner');
+  if (bannerSuporte) {
+    if (localStorage.getItem('bpro_tk_super_admin_original') && nomeModoSuporteSalao) {
+      bannerSuporte.style.display = 'flex';
+      document.getElementById('modo-suporte-msg').textContent = '🔑 Você está vendo o sistema como "' + nomeModoSuporteSalao + '" (modo suporte)';
+    } else {
+      bannerSuporte.style.display = 'none';
+    }
+  }
   if (permissoes && permissoes.length) {
     USER_PERMISSOES = permissoes;
   } else if (perfil === 'admin') {
@@ -3110,7 +3147,43 @@ function abrirHistoricoComissoes() {
 }
 
 // ── SUPER ADMIN — gerenciar todos os salões (clientes) ──
+function alternarAbaSuperAdmin(aba) {
+  var ehSaloes = aba === 'saloes';
+  document.getElementById('sa-secao-saloes').style.display = ehSaloes ? 'block' : 'none';
+  document.getElementById('sa-secao-logs').style.display = ehSaloes ? 'none' : 'block';
+  document.getElementById('sa-tab-saloes').className = 'btn btnsm ' + (ehSaloes ? 'btnp' : 'btns');
+  document.getElementById('sa-tab-logs').className = 'btn btnsm ' + (ehSaloes ? 'btns' : 'btnp');
+  if (!ehSaloes) loadLogsSistema();
+}
+
+function loadVisaoGeral() {
+  apiFetch('/api/super-admin/visao-geral').then(function(r){ renderVisaoGeral(r); }).catch(function(){
+    document.getElementById('sa-visao-geral').innerHTML = '<div class="empty" style="grid-column:1/-1">Erro ao carregar a visão geral.</div>';
+  });
+}
+
+function renderVisaoGeral(r) {
+  var el = document.getElementById('sa-visao-geral');
+  if (!r) { el.innerHTML = ''; return; }
+  var cartoes = [
+    { label: 'Salões Ativos', valor: r.saloes_ativos, cor: 'var(--ok)', icone: '🏢' },
+    { label: 'Em Trial', valor: r.saloes_em_trial, cor: 'var(--ac)', icone: '⏳' },
+    { label: 'Trial vencendo em 7 dias', valor: r.trials_vencendo_semana, cor: r.trials_vencendo_semana > 0 ? 'var(--warn)' : 'var(--t2)', icone: '⚠️' },
+    { label: 'Receita Estimada/mês', valor: brl(r.receita_estimada), cor: 'var(--ok)', icone: '💰' },
+    { label: 'Profissionais na Plataforma', valor: r.total_profissionais, cor: 'var(--t2)', icone: '👤' },
+    { label: 'Agendamentos este mês', valor: r.total_agendamentos_mes, cor: 'var(--t2)', icone: '📅' }
+  ];
+  el.innerHTML = cartoes.map(function(c){
+    return '<div class="card" style="padding:12px">' +
+      '<div style="font-size:1.3rem">' + c.icone + '</div>' +
+      '<div style="font-size:1.15rem;font-weight:800;color:' + c.cor + ';margin-top:4px">' + c.valor + '</div>' +
+      '<div style="font-size:.68rem;color:var(--t3)">' + c.label + '</div>' +
+    '</div>';
+  }).join('');
+}
+
 function loadSuperAdminSaloes() {
+  loadVisaoGeral();
   var busca = document.getElementById('sa-busca').value.trim();
   document.getElementById('sa-lista').innerHTML = '<div class="lc"><div class="spin"></div></div>';
   apiFetch('/api/super-admin/saloes' + (busca ? '?q=' + encodeURIComponent(busca) : ''))
@@ -3162,11 +3235,85 @@ function renderSuperAdminSaloes(lista) {
         '<span style="color:' + (semAcessoRecente ? 'var(--warn)' : 'var(--t2)') + '">🕒 Último acesso: ' + ultimoAcessoTexto + '</span>' +
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-        '<button class="btn btnp btnsm" onclick="abrirEstenderTrial(\'' + s.id + '\',\'' + escAttr(s.nome) + '\')">⏳ Estender Trial</button>' +
+        '<button class="btn btnp btnsm" onclick="entrarComoSalao(\'' + s.id + '\',\'' + escAttr(s.nome) + '\')">🔑 Entrar como</button>' +
+        '<button class="btn btns btnsm" onclick="abrirEditarSalao(\'' + s.id + '\',\'' + escAttr(s.nome) + '\',\'' + escAttr(s.telefone||'') + '\',\'' + (s.plano_id||'') + '\')">✏️ Editar</button>' +
+        '<button class="btn btns btnsm" onclick="abrirEstenderTrial(\'' + s.id + '\',\'' + escAttr(s.nome) + '\')">⏳ Estender Trial</button>' +
         (s.ativo
           ? '<button class="btn btns btnsm" style="color:var(--er)" onclick="alternarStatusSalao(\'' + s.id + '\',\'' + escAttr(s.nome) + '\',false)">🔒 Desativar</button>'
           : '<button class="btn btns btnsm" style="color:var(--ok)" onclick="alternarStatusSalao(\'' + s.id + '\',\'' + escAttr(s.nome) + '\',true)">🔓 Reativar</button>') +
       '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// "Entrar como" — guarda a sessão de super admin de lado, troca pro token
+// do salão escolhido, e recarrega a página já logado como aquele admin.
+// Um aviso fixo fica na tela avisando "modo suporte", com botão de voltar.
+function entrarComoSalao(salaoId, salaoNome) {
+  if (!confirm('Entrar como administrador de "' + salaoNome + '"?\n\nVocê vai ver o sistema exatamente como esse salão vê. Pra voltar ao seu modo normal, use o botão que vai aparecer no topo da tela.')) return;
+  apiFetch('/api/super-admin/saloes/' + salaoId + '/entrar-como', { method: 'POST' })
+    .then(function(r){
+      localStorage.setItem('bpro_tk_super_admin_original', localStorage.getItem('bpro_tk'));
+      localStorage.setItem('bpro_super_admin_nome_salao', salaoNome);
+      localStorage.setItem('bpro_tk', r.token);
+      window.location.reload();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+}
+
+function voltarModoSuperAdmin() {
+  var tokenOriginal = localStorage.getItem('bpro_tk_super_admin_original');
+  if (!tokenOriginal) return;
+  localStorage.setItem('bpro_tk', tokenOriginal);
+  localStorage.removeItem('bpro_tk_super_admin_original');
+  localStorage.removeItem('bpro_super_admin_nome_salao');
+  window.location.reload();
+}
+
+function abrirEditarSalao(salaoId, salaoNome, telefone, planoId) {
+  document.getElementById('es-salao-id').value = salaoId;
+  document.getElementById('es-nome').value = salaoNome;
+  document.getElementById('es-telefone').value = telefone || '';
+  var sel = document.getElementById('es-plano');
+  sel.innerHTML = '<option value="">Carregando...</option>';
+  openM('m-editar-salao');
+  apiFetch('/api/super-admin/planos').then(function(planos){
+    sel.innerHTML = '<option value="">Sem plano definido</option>' +
+      (planos || []).map(function(p){ return '<option value="' + p.id + '"' + (p.id === planoId ? ' selected' : '') + '>' + esc(p.nome) + (p.preco ? ' — ' + brl(p.preco) + '/mês' : '') + '</option>'; }).join('');
+  }).catch(function(){ sel.innerHTML = '<option value="">Erro ao carregar planos</option>'; });
+}
+
+function confirmarEditarSalao() {
+  var salaoId = document.getElementById('es-salao-id').value;
+  var nome = document.getElementById('es-nome').value.trim();
+  if (!nome) { toast('Informe o nome do salão','er'); return; }
+  apiFetch('/api/super-admin/saloes/' + salaoId, { method: 'PUT', body: {
+    nome: nome, telefone: document.getElementById('es-telefone').value.trim(),
+    plano_id: document.getElementById('es-plano').value || null
+  }})
+    .then(function(){
+      toast('Salão atualizado ✅','ok');
+      closeM('m-editar-salao');
+      loadSuperAdminSaloes();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+}
+
+function loadLogsSistema() {
+  var el = document.getElementById('sa-logs-lista');
+  el.innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  apiFetch('/api/super-admin/logs').then(function(r){ renderLogsSistema(r || []); })
+    .catch(function(){ el.innerHTML = '<div class="empty">Erro ao carregar os logs.</div>'; });
+}
+
+function renderLogsSistema(lista) {
+  var el = document.getElementById('sa-logs-lista');
+  if (!lista.length) { el.innerHTML = '<div class="empty">✅ Nenhum erro registrado desde o último reinício do servidor.</div>'; return; }
+  el.innerHTML = lista.map(function(log){
+    var hora = new Date(log.timestamp).toLocaleString('pt-BR');
+    return '<div style="padding:10px;background:var(--bg3);border-left:3px solid var(--er);border-radius:4px;margin-bottom:6px;font-family:monospace;font-size:.74rem">' +
+      '<div style="color:var(--t3);margin-bottom:3px">' + hora + '</div>' +
+      '<div style="color:var(--t1);word-break:break-word">' + esc(log.mensagem) + '</div>' +
     '</div>';
   }).join('');
 }
@@ -6752,6 +6899,19 @@ function dispensarBannerPWA() {
       <div style="font-size:.7rem;color:var(--t3)">Se o trial ainda não venceu, soma a partir do vencimento atual (não perde os dias que já restavam). Se já venceu, conta a partir de hoje.</div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-estender-trial')">Cancelar</button><button class="btn btnp" onclick="confirmarEstenderTrial()">Confirmar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-editar-salao">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">✏️ Editar Salão</span><button class="mx" onclick="closeM('m-editar-salao')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="es-salao-id"/>
+      <div class="fg"><label class="fl">Nome do salão</label><input class="fc" id="es-nome"/></div>
+      <div class="fg"><label class="fl">Telefone</label><input class="fc" id="es-telefone" placeholder="(11) 99999-9999"/></div>
+      <div class="fg"><label class="fl">Plano</label><select class="fc" id="es-plano"><option value="">Carregando...</option></select></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-editar-salao')">Cancelar</button><button class="btn btnp" onclick="confirmarEditarSalao()">Salvar</button></div>
   </div>
 </div>
 
