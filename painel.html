@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.23.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.24.0-frontend</div>
       </div>
     </div>
 
@@ -6358,41 +6358,90 @@ var TUT_PASSOS = [
   {
     icon: '👋',
     titulo: 'Bem-vindo ao Beleza Pro!',
-    desc: 'Seu sistema completo de gestão para salões. Vamos te mostrar os módulos principais em poucos passos.',
+    desc: 'Seu sistema completo de gestão para salões. Vamos te mostrar os módulos principais em poucos passos — pode pular quando quiser.',
     alvo: null
+  },
+  {
+    icon: '🏠',
+    titulo: 'Dashboard',
+    desc: 'Visão geral do seu dia: faturamento, próximos agendamentos, e o Fechamento de Caixa — lucro, pagamentos por forma, e quanto cada profissional fez, tudo pronto pra copiar e mandar no WhatsApp.',
+    alvo: '.sb-item[data-page="dashboard"]',
+    pagina: 'dashboard'
   },
   {
     icon: '📅',
     titulo: 'Agenda',
-    desc: 'Aqui ficam todos os agendamentos. Você vê os próximos 3 dias automaticamente, e pode filtrar por data ou profissional.',
-    alvo: '#tb-nav .nb:nth-child(2)',
+    desc: 'Todos os agendamentos futuros. Marque, remarque, ou conclua um atendimento direto por aqui.',
+    alvo: '.sb-item[data-page="agenda"]',
     pagina: 'agenda'
+  },
+  {
+    icon: '🧾',
+    titulo: 'Comandas',
+    desc: 'Cliente chegou sem hora marcada? Venda na hora — serviço, produto ou pacote, junto ou separado. Também dá pra deixar em aberto e fechar o pagamento depois.',
+    alvo: '.sb-item[data-page="comandas"]',
+    pagina: 'comandas'
   },
   {
     icon: '👥',
     titulo: 'Clientes',
-    desc: 'Cadastro completo dos seus clientes. O sistema conta visitas, total gasto e avisa quem está inativo há mais de 60 dias.',
-    alvo: '#tb-nav .nb:nth-child(3)',
+    desc: 'Cadastro completo. O sistema conta visitas, total gasto, e avisa quem está inativo há mais de 60 dias.',
+    alvo: '.sb-item[data-page="clientes"]',
     pagina: 'clientes'
+  },
+  {
+    icon: '💳',
+    titulo: 'Fiado',
+    desc: 'Cliente ficou de pagar depois? Fica registrado aqui até você marcar como pago.',
+    alvo: '.sb-item[data-page="fiado"]',
+    pagina: 'fiado'
   },
   {
     icon: '💰',
     titulo: 'Financeiro',
-    desc: 'Controle entradas e saídas. Clique em "Pendente" para marcar um lançamento como pago.',
-    alvo: '#tb-nav .nb:nth-child(4)',
+    desc: 'Todas as entradas e saídas do salão. Clique em "Pendente" pra marcar um lançamento como pago.',
+    alvo: '.sb-item[data-page="financeiro"]',
     pagina: 'financeiro'
+  },
+  {
+    icon: '💸',
+    titulo: 'Comissões',
+    desc: 'Acompanhe e feche a comissão de cada profissional — de serviço e de produto vendido, separadas. Dá pra descontar compras pendentes na hora de pagar.',
+    alvo: '.sb-item[data-page="comissoes"]',
+    pagina: 'comissoes'
+  },
+  {
+    icon: '📦',
+    titulo: 'Estoque',
+    desc: 'Controle de produtos, com alerta automático quando algo está acabando.',
+    alvo: '.sb-item[data-page="estoque"]',
+    pagina: 'estoque'
+  },
+  {
+    icon: '👤',
+    titulo: 'Profissionais',
+    desc: 'Cadastre sua equipe, defina a comissão de cada um (de serviço e de produto), e controle o que cada usuário pode acessar no sistema.',
+    alvo: '.sb-item[data-page="profissionais"]',
+    pagina: 'profissionais'
+  },
+  {
+    icon: '🎁',
+    titulo: 'Serviços e Pacotes',
+    desc: 'Cadastre seus serviços com preço e comissão. Em Pacotes, monte combos (tipo "4 cortes") pra vender de uma vez — o cliente vai usando as sessões aos poucos.',
+    alvo: '.sb-item[data-page="servicos"]',
+    pagina: 'servicos'
   },
   {
     icon: '🔗',
     titulo: 'Link de Agendamento',
-    desc: 'Vá em Config para pegar o link do seu salão. Mande para clientes agendarem sozinhos, sem precisar te ligar.',
-    alvo: '#tb-nav .nb:last-child',
+    desc: 'Em Config, pegue o link do seu salão. Mande pros clientes agendarem sozinhos, sem precisar te ligar.',
+    alvo: '.sb-item[data-page="config"]',
     pagina: 'config'
   },
   {
     icon: '🎉',
     titulo: 'Tudo pronto!',
-    desc: 'Você já sabe o essencial. Explore à vontade — qualquer dúvida, clique no ícone ❓ no canto superior direito.',
+    desc: 'Você já sabe o essencial. Explore à vontade — qualquer dúvida, é só chamar o suporte.',
     alvo: null
   }
 ];
