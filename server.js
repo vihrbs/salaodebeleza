@@ -365,7 +365,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.20.1-pacote-nao-admin' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.21.0-pacote-na-comanda' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1674,15 +1674,16 @@ async function criarAgendamentoUnico({
 // criação de agendamento (pra manter a comissão contando certinho) e a
 // mesma lógica de venda de produto (pra descontar do estoque igual sempre).
 app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, res) => {
-  const { cliente_id, profissional_id, servicos, produtos, forma_pgto, pago, deixar_aberto } = req.body;
+  const { cliente_id, profissional_id, servicos, produtos, pacotes, forma_pgto, pago, deixar_aberto } = req.body;
   const servicosIds = Array.isArray(servicos) ? servicos.filter(Boolean) : [];
   const produtosLista = Array.isArray(produtos) ? produtos.filter(p => p && p.produto_id) : [];
+  const pacotesLista = Array.isArray(pacotes) ? pacotes.filter(p => p && p.pacote_id) : [];
 
   if (!cliente_id || !profissional_id) {
     return res.status(422).json({ error: 'Cliente e profissional são obrigatórios' });
   }
-  if (!servicosIds.length && !produtosLista.length) {
-    return res.status(422).json({ error: 'Selecione ao menos um serviço ou produto' });
+  if (!servicosIds.length && !produtosLista.length && !pacotesLista.length) {
+    return res.status(422).json({ error: 'Selecione ao menos um serviço, produto ou pacote' });
   }
   if (!deixar_aberto && !forma_pgto) {
     return res.status(422).json({ error: 'Informe a forma de pagamento, ou marque "deixar em aberto" pra cobrar depois' });
@@ -1756,6 +1757,27 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
       produtosVendidos.push({ produto_id: item.produto_id, nome: prod.nome, quantidade, valor: valorProduto, comissao: comissaoProdutoValor });
     }
 
+    // Adiciona cada pacote vendido — reaproveita a mesma função usada na
+    // venda avulsa de pacote (tela de Pacotes), só que agora sem precisar
+    // sair da Nova Comanda pra fazer isso separado.
+    const pacotesVendidos = [];
+    for (const item of pacotesLista) {
+      try {
+        const valorPacote = (item.valor !== undefined && item.valor !== null && item.valor !== '') ? Number(item.valor) : undefined;
+        const vendido = await venderPacoteParaCliente({
+          salaoId: req.salao_id, clienteId: cliente_id, pacoteId: item.pacote_id,
+          valorPago: valorPacote, dataCompra: agora.split('T')[0], pagoAgora: deixar_aberto ? false : (pago !== false)
+        });
+        valorTotalAtual += Number(vendido.valor_pago || 0);
+        pacotesVendidos.push({ pacote_id: item.pacote_id, nome: vendido.nome_snapshot, valor: Number(vendido.valor_pago || 0) });
+      } catch(e) {
+        return res.status(e.status || 500).json({ error: e.message });
+      }
+    }
+    if (pacotesVendidos.length) {
+      await supabase.from('agendamentos').update({ valor_total: valorTotalAtual }).eq('id', agendamentoId);
+    }
+
     // Se pediu pra deixar em aberto, NÃO conclui agora — fica como
     // "em_atendimento" (cliente já chegou, comanda existe, mas ainda vai
     // decidir/pagar depois). Nesse caso não mexe em forma de pagamento nem
@@ -1784,7 +1806,7 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
 
     res.status(201).json({
       id: agendamentoId, valor_total: valorTotalAtual, status: statusFinal,
-      produtos_vendidos: produtosVendidos, taxa_maquininha: infoTaxaMaquininha
+      produtos_vendidos: produtosVendidos, pacotes_vendidos: pacotesVendidos, taxa_maquininha: infoTaxaMaquininha
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
