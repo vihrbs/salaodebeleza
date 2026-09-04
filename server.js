@@ -365,7 +365,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.23.0-usar-pacote-e-reabrir' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.23.1-performance' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2350,8 +2350,7 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       { data: lancamentosEntrada },
       { data: lancamentosSaida },
       { data: agendamentosConcluidos },
-      { data: movimentacoesVenda },
-      { data: comissoesServicoBrutas }
+      { data: movimentacoesVenda }
     ] = await Promise.all([
       // Entradas pagas no dia — usadas pro faturado total e pra separar por forma de pagamento
       supabase.from('lancamentos').select('valor, forma_pgto')
@@ -2360,7 +2359,9 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       supabase.from('lancamentos').select('valor')
         .eq('salao_id', req.salao_id).eq('data', data).eq('tipo', 'saida'),
       // Comandas concluídas no dia — com tudo que precisa pra listar
-      // detalhado E agrupar por profissional (bater conta com cada um)
+      // detalhado E agrupar por profissional (bater conta com cada um).
+      // A comissão de serviço já vem embutida aqui (agendamento_servicos),
+      // não precisa de outra consulta separada só pra somar a mesma coisa.
       supabase.from('agendamentos')
         .select('id, cliente_id, valor_total, forma_pgto, data_hora, profissional_id, clientes(nome), profissionais(nome), agendamento_servicos(servicos(nome), comissao_valor)')
         .eq('salao_id', req.salao_id).eq('status', 'concluido')
@@ -2369,14 +2370,7 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       // foi vendido, e também pra somar na comissão de cada profissional
       supabase.from('movimentacoes_estoque').select('quantidade, produto_id, comissao_valor, profissional_id, produtos(nome)')
         .eq('salao_id', req.salao_id).eq('tipo', 'venda')
-        .gte('created_at', inicioDia).lte('created_at', fimDia),
-      // (mantido por compatibilidade — comissão de serviço já vem embutida
-      // em agendamentosConcluidos agora, mas essa consulta aqui é uma
-      // conferência cruzada independente do mesmo número)
-      supabase.from('agendamento_servicos')
-        .select('comissao_valor, agendamentos!inner(data_hora, salao_id, status)')
-        .eq('agendamentos.salao_id', req.salao_id).eq('agendamentos.status', 'concluido')
-        .gte('agendamentos.data_hora', inicioDia).lte('agendamentos.data_hora', fimDia)
+        .gte('created_at', inicioDia).lte('created_at', fimDia)
     ]);
 
     const totalFaturado = (lancamentosEntrada || []).reduce((s, l) => s + Number(l.valor || 0), 0);
@@ -2404,8 +2398,8 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
         s + (custoPorId[m.produto_id] || 0) * Number(m.quantidade || 0), 0);
     }
 
-    const totalComissaoServicos = (comissoesServicoBrutas || [])
-      .reduce((s, r) => s + Number(r.comissao_valor || 0), 0);
+    const totalComissaoServicos = (agendamentosConcluidos || []).reduce((s, ag) =>
+      s + (ag.agendamento_servicos || []).reduce((s2, sv) => s2 + Number(sv.comissao_valor || 0), 0), 0);
     const totalComissaoProdutos = (movimentacoesVenda || [])
       .reduce((s, m) => s + Number(m.comissao_valor || 0), 0);
     const totalComissoes = totalComissaoServicos + totalComissaoProdutos;
@@ -3002,21 +2996,24 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
   }
 
   const resultado = await Promise.all(profissionais.map(async p => {
-    // Verifica se ESSE PERÍODO EXATO já foi fechado/pago (início E fim
-    // precisam bater — só o início não basta, senão "mês inteiro" que
-    // começa no mesmo dia 1 de uma "semana" já paga seria confundido com
-    // ela, escondendo o resto do mês que ainda está pendente)
-    const { data: fechamento } = await supabase.from('fechamentos_comissao')
-      .select('id, status, pago_em, total_comissao, total_bruto, total_servicos')
-      .eq('salao_id', req.salao_id)
-      .eq('profissional_id', p.id).eq('periodo_inicio', ini).eq('periodo_fim', fim).maybeSingle();
-
-    // Soma as parcelas de compras parceladas ainda pendentes desse profissional
-    // (ex: produto que ele comprou parcelado) — pra ficar visível na hora de
-    // fechar a comissão que existe um desconto a combinar.
-    const { data: comprasDoProfissional } = await supabase.from('compras_profissional')
-      .select('parcelas_compra_profissional(valor, status)')
-      .eq('salao_id', req.salao_id).eq('profissional_id', p.id);
+    // As duas primeiras consultas não dependem uma da outra — roda junto
+    // em vez de esperar uma terminar pra começar a próxima.
+    const [{ data: fechamento }, { data: comprasDoProfissional }] = await Promise.all([
+      // Verifica se ESSE PERÍODO EXATO já foi fechado/pago (início E fim
+      // precisam bater — só o início não basta, senão "mês inteiro" que
+      // começa no mesmo dia 1 de uma "semana" já paga seria confundido com
+      // ela, escondendo o resto do mês que ainda está pendente)
+      supabase.from('fechamentos_comissao')
+        .select('id, status, pago_em, total_comissao, total_bruto, total_servicos')
+        .eq('salao_id', req.salao_id)
+        .eq('profissional_id', p.id).eq('periodo_inicio', ini).eq('periodo_fim', fim).maybeSingle(),
+      // Soma as parcelas de compras parceladas ainda pendentes desse profissional
+      // (ex: produto que ele comprou parcelado) — pra ficar visível na hora de
+      // fechar a comissão que existe um desconto a combinar.
+      supabase.from('compras_profissional')
+        .select('parcelas_compra_profissional(valor, status)')
+        .eq('salao_id', req.salao_id).eq('profissional_id', p.id)
+    ]);
     const compras_pendentes_total = (comprasDoProfissional || []).reduce((soma, compra) => {
       const pendentesDaCompra = (compra.parcelas_compra_profissional || [])
         .filter(parcela => parcela.status === 'pendente')
@@ -3024,44 +3021,52 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
       return soma + pendentesDaCompra;
     }, 0);
 
-    // Se já está pago, mostra zerado (já foi quitado, não soma de novo)
+    // Se já está pago, mostra zerado (já foi quitado, não soma de novo) —
+    // e nem precisa rodar as outras 4 consultas abaixo nesse caso
     if (fechamento && fechamento.status === 'pago') {
       return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, total_comissao_produtos: 0, total_caixinhas: 0, fechamento, compras_pendentes_total };
     }
 
-    // Senão, calcula normalmente a partir dos agendamentos concluídos
-    const { data: svcsBrutos } = await supabase.from('agendamento_servicos')
-      .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
-      .eq('agendamentos.profissional_id', p.id)
-      .eq('agendamentos.status', 'concluido')
-      .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
-      .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
-    // Mesma proteção contra período sobreposto que existe no fechamento de
-    // verdade — pra tela de visualização já mostrar o valor certo, sem
-    // contar de novo o que já foi pago num período anterior que se cruza
-    const periodosPagos = await periodosJaPagos(req.salao_id, p.id);
+    // As 4 consultas daqui pra baixo também não dependem uma da outra —
+    // mesma ideia, roda tudo junto em vez de uma fila sequencial
+    const [
+      { data: svcsBrutos }, periodosPagos, { data: agsComCaixinhaBrutos }, { data: vendasProdutoBrutas }
+    ] = await Promise.all([
+      // Calcula normalmente a partir dos agendamentos concluídos
+      supabase.from('agendamento_servicos')
+        .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
+        .eq('agendamentos.profissional_id', p.id)
+        .eq('agendamentos.status', 'concluido')
+        .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
+        .lte('agendamentos.data_hora', adicionarDia(fim) + 'T02:59:59+00:00'),
+      // Mesma proteção contra período sobreposto que existe no fechamento de
+      // verdade — pra tela de visualização já mostrar o valor certo, sem
+      // contar de novo o que já foi pago num período anterior que se cruza
+      periodosJaPagos(req.salao_id, p.id),
+      // Caixinhas (gorjetas) desse profissional no período — somadas à parte,
+      // porque são 100% dele, não fazem parte do cálculo normal de comissão
+      // (que é uma % do serviço). Fica separado no fechamento de propósito,
+      // pra ficar claro pro dono e pro profissional quanto foi cada coisa.
+      supabase.from('agendamentos')
+        .select('data_hora, caixinha_liquida')
+        .eq('profissional_id', p.id).eq('status', 'concluido').eq('salao_id', req.salao_id)
+        .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00'),
+      // Comissão de venda de produto — soma à parte pra mostrar transparente
+      // pro dono e pro profissional (ex.: "R$X foi de serviço, R$Y foi de
+      // produto vendido"), mas entra junto no total_comissao final a pagar.
+      supabase.from('movimentacoes_estoque')
+        .select('created_at, comissao_valor')
+        .eq('profissional_id', p.id).eq('tipo', 'venda').eq('salao_id', req.salao_id)
+        .gte('created_at', ini + 'T03:00:00+00:00').lte('created_at', adicionarDia(fim) + 'T02:59:59+00:00')
+    ]);
+
     const svcs = (svcsBrutos || []).filter(sv => !servicoJaPago(sv.agendamentos.data_hora, periodosPagos));
     const total_bruto    = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
     const total_comissao = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
 
-    // Caixinhas (gorjetas) desse profissional no período — somadas à parte,
-    // porque são 100% dele, não fazem parte do cálculo normal de comissão
-    // (que é uma % do serviço). Fica separado no fechamento de propósito,
-    // pra ficar claro pro dono e pro profissional quanto foi cada coisa.
-    const { data: agsComCaixinhaBrutos } = await supabase.from('agendamentos')
-      .select('data_hora, caixinha_liquida')
-      .eq('profissional_id', p.id).eq('status', 'concluido').eq('salao_id', req.salao_id)
-      .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
     const agsComCaixinha = (agsComCaixinhaBrutos || []).filter(a => !servicoJaPago(a.data_hora, periodosPagos));
     const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
 
-    // Comissão de venda de produto — soma à parte pra mostrar transparente
-    // pro dono e pro profissional (ex.: "R$X foi de serviço, R$Y foi de
-    // produto vendido"), mas entra junto no total_comissao final a pagar.
-    const { data: vendasProdutoBrutas } = await supabase.from('movimentacoes_estoque')
-      .select('created_at, comissao_valor')
-      .eq('profissional_id', p.id).eq('tipo', 'venda').eq('salao_id', req.salao_id)
-      .gte('created_at', ini + 'T03:00:00+00:00').lte('created_at', adicionarDia(fim) + 'T02:59:59+00:00');
     const vendasProduto = (vendasProdutoBrutas || []).filter(v => !servicoJaPago(v.created_at, periodosPagos));
     const total_comissao_produtos = vendasProduto.reduce((s, v) => s + Number(v.comissao_valor || 0), 0);
 
