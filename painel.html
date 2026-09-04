@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.20.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.21.0-frontend</div>
       </div>
     </div>
 
@@ -3868,9 +3868,10 @@ function abrirVenderPacote(pacoteId, pacoteNome, preco) {
   document.getElementById('vpac-pacote-nome').textContent = pacoteNome;
   document.getElementById('vpac-valor').value = preco;
   document.getElementById('vpac-pagar-depois').checked = false;
-  var sel = document.getElementById('vpac-cliente');
-  sel.innerHTML = '<option value="">Selecionar cliente...</option>' +
-    CLIS.map(function(c){ return '<option value="' + c.id + '">' + esc(c.nome) + '</option>'; }).join('');
+  document.getElementById('vpac-cliente').value = '';
+  document.getElementById('vpac-cliente-busca').value = '';
+  var resultados = document.getElementById('vpac-cliente-resultados');
+  if (resultados) { resultados.style.display = 'none'; resultados.innerHTML = ''; }
   openM('m-vender-pacote');
 }
 
@@ -4021,7 +4022,9 @@ function abrirNovaComanda() {
   document.getElementById('va-cli-id').value = '';
   document.getElementById('va-svc-busca').value = '';
   VENDA_AVULSA_PRODUTOS = [];
+  VENDA_AVULSA_PACOTES = [];
   renderProdutosVendaAvulsa();
+  renderPacotesVendaAvulsa();
   document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('va-fpg-aberto').classList.remove('on');
 
@@ -4040,6 +4043,13 @@ function abrirNovaComanda() {
     sel.innerHTML = '<option value="">+ Adicionar produto do estoque...</option>' +
       window._estoqueCache.filter(function(p){ return p.qtd_atual > 0; })
         .map(function(p){ return '<option value="' + p.id + '" data-preco="' + (p.preco_venda||0) + '" data-nome="' + escAttr(p.nome) + '">' + esc(p.nome) + ' (' + p.qtd_atual + ' em estoque)</option>'; }).join('');
+  }).catch(function(){});
+
+  apiFetch('/api/pacotes').then(function(r){
+    var sel = document.getElementById('va-pacote-select');
+    sel.innerHTML = '<option value="">+ Vender um pacote...</option>' +
+      (r || []).filter(function(p){ return p.ativo !== false; })
+        .map(function(p){ return '<option value="' + p.id + '" data-preco="' + p.preco + '" data-nome="' + escAttr(p.nome) + '">' + esc(p.nome) + ' — ' + brl(p.preco) + '</option>'; }).join('');
   }).catch(function(){});
 
   recalcularTotalVendaAvulsa();
@@ -4090,6 +4100,59 @@ function selecionarClienteVendaAvulsa(id, nome) {
   document.getElementById('va-cli-id').value = id;
   document.getElementById('va-cli-busca').value = nome;
   var resultados = document.getElementById('va-cli-resultados');
+  resultados.style.display = 'none';
+  resultados.innerHTML = '';
+}
+
+// ── Busca ao vivo de cliente no modal "Vender Pacote" — mesmo padrão da
+// Nova Comanda. Antes usava um <select> preenchido só com os clientes que
+// já estavam carregados em memória (no máximo 100, e só se alguém tivesse
+// visitado a aba Clientes antes) — por isso sumiam clientes da lista. Com
+// busca ao vivo, sempre traz do banco de dados na hora, sem depender de
+// cache nenhum.
+var TIMER_BUSCA_CLIENTE_VENDER_PACOTE = null;
+function filtrarClientesVenderPacote(termo) {
+  clearTimeout(TIMER_BUSCA_CLIENTE_VENDER_PACOTE);
+  var termoNorm = (termo || '').trim();
+  var resultados = document.getElementById('vpac-cliente-resultados');
+  if (!resultados) return;
+  if (!termoNorm) { resultados.style.display = 'none'; resultados.innerHTML = ''; return; }
+
+  TIMER_BUSCA_CLIENTE_VENDER_PACOTE = setTimeout(function() {
+    apiFetch('/api/clientes?q=' + encodeURIComponent(termoNorm) + '&limit=30')
+      .then(function(r) {
+        var lista = (r && r.data) || (Array.isArray(r) ? r : []);
+        renderResultadosClienteVenderPacote(lista);
+      })
+      .catch(function() {
+        resultados.innerHTML = '<div style="padding:12px;font-size:.8rem;color:var(--er)">Erro ao buscar. Tenta de novo.</div>';
+        resultados.style.display = 'block';
+      });
+  }, 300);
+}
+
+function renderResultadosClienteVenderPacote(lista) {
+  var resultados = document.getElementById('vpac-cliente-resultados');
+  if (!resultados) return;
+  if (!lista.length) {
+    resultados.innerHTML = '<div style="padding:12px;font-size:.8rem;color:var(--t3)">Nenhum cliente encontrado.</div>';
+    resultados.style.display = 'block';
+    return;
+  }
+  resultados.innerHTML = lista.map(function(c) {
+    return '<div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bd2)" ' +
+      'onmousedown="selecionarClienteVenderPacote(\'' + c.id + '\',\'' + escAttr(c.nome) + '\')">' +
+      '<div style="font-weight:600;font-size:.84rem">' + esc(c.nome) + '</div>' +
+      (c.telefone ? '<div style="font-size:.72rem;color:var(--t3)">' + esc(c.telefone) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  resultados.style.display = 'block';
+}
+
+function selecionarClienteVenderPacote(id, nome) {
+  document.getElementById('vpac-cliente').value = id;
+  document.getElementById('vpac-cliente-busca').value = nome;
+  var resultados = document.getElementById('vpac-cliente-resultados');
   resultados.style.display = 'none';
   resultados.innerHTML = '';
 }
@@ -4157,6 +4220,51 @@ function atualizarPrecoProdutoVendaAvulsa(produtoId, novoValor) {
   recalcularTotalVendaAvulsa();
 }
 
+// ── Pacotes na Nova Comanda — mesmo padrão dos produtos, só que sem
+// quantidade (pacote é sempre 1 por venda) e sem descontar estoque nenhum.
+var VENDA_AVULSA_PACOTES = []; // [{pacote_id, nome, valor}]
+
+function adicionarPacoteVendaAvulsa() {
+  var sel = document.getElementById('va-pacote-select');
+  var opcao = sel.options[sel.selectedIndex];
+  var id = sel.value;
+  if (!id) return;
+  if (VENDA_AVULSA_PACOTES.some(function(p){ return p.pacote_id === id; })) {
+    toast('Esse pacote já foi adicionado','inf');
+    sel.value = '';
+    return;
+  }
+  VENDA_AVULSA_PACOTES.push({ pacote_id: id, nome: opcao.dataset.nome, valor: Number(opcao.dataset.preco || 0) });
+  sel.value = '';
+  renderPacotesVendaAvulsa();
+  recalcularTotalVendaAvulsa();
+}
+
+function removerPacoteVendaAvulsa(pacoteId) {
+  VENDA_AVULSA_PACOTES = VENDA_AVULSA_PACOTES.filter(function(p){ return p.pacote_id !== pacoteId; });
+  renderPacotesVendaAvulsa();
+  recalcularTotalVendaAvulsa();
+}
+
+function atualizarPrecoPacoteVendaAvulsa(pacoteId, novoValor) {
+  var item = VENDA_AVULSA_PACOTES.find(function(p){ return p.pacote_id === pacoteId; });
+  if (item) item.valor = Math.max(0, parseNumeroBR(novoValor));
+  renderPacotesVendaAvulsa();
+  recalcularTotalVendaAvulsa();
+}
+
+function renderPacotesVendaAvulsa() {
+  var wrap = document.getElementById('va-pacotes-lista');
+  if (!wrap) return;
+  wrap.innerHTML = VENDA_AVULSA_PACOTES.map(function(p){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
+      '<span style="flex:1">🎁 ' + esc(p.nome) + '</span>' +
+      '<input type="text" inputmode="decimal" value="' + brlSemSimbolo(p.valor) + '" style="width:90px;padding:4px 6px;font-size:.78rem" class="fc" title="Valor pago — pode ajustar se der desconto" onfocus="this.select()" onchange="atualizarPrecoPacoteVendaAvulsa(\'' + p.pacote_id + '\',this.value)"/>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerPacoteVendaAvulsa(\'' + p.pacote_id + '\')">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
 function selecionarFpgVendaAvulsa(btn) {
   document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('va-fpg-aberto').classList.remove('on');
@@ -4175,10 +4283,11 @@ function recalcularTotalVendaAvulsa() {
     totalServicos += Number(pill.dataset.preco || 0);
   });
   var totalProdutos = VENDA_AVULSA_PRODUTOS.reduce(function(s, p){ return s + (p.preco_unit * p.quantidade); }, 0);
+  var totalPacotes = VENDA_AVULSA_PACOTES.reduce(function(s, p){ return s + p.valor; }, 0);
   var totalEl = document.getElementById('va-total');
-  if (totalEl) totalEl.textContent = brl(totalServicos + totalProdutos);
+  if (totalEl) totalEl.textContent = brl(totalServicos + totalProdutos + totalPacotes);
 
-  var qtdTotal = qtdServicos + VENDA_AVULSA_PRODUTOS.length;
+  var qtdTotal = qtdServicos + VENDA_AVULSA_PRODUTOS.length + VENDA_AVULSA_PACOTES.length;
   var qtdEl = document.getElementById('va-qtd-itens');
   if (qtdEl) {
     if (qtdTotal === 0) {
@@ -4205,6 +4314,12 @@ function sincronizarProdutosVendaAvulsaComDOM() {
     if (inputs[0]) item.quantidade = Math.max(1, parseInt(inputs[0].value) || 1);
     if (inputs[1]) item.preco_unit = Math.max(0, parseNumeroBR(inputs[1].value));
   });
+  document.querySelectorAll('#va-pacotes-lista > div').forEach(function(linha, idx){
+    var item = VENDA_AVULSA_PACOTES[idx];
+    if (!item) return;
+    var input = linha.querySelector('input');
+    if (input) item.valor = Math.max(0, parseNumeroBR(input.value));
+  });
 }
 
 function confirmarVendaAvulsa() {
@@ -4216,9 +4331,13 @@ function confirmarVendaAvulsa() {
   sincronizarProdutosVendaAvulsaComDOM();
   var servicos = Array.from(document.querySelectorAll('#va-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
   var produtos = VENDA_AVULSA_PRODUTOS.map(function(p){ return { produto_id: p.produto_id, quantidade: p.quantidade, valor: p.preco_unit * p.quantidade }; });
-  if (!servicos.length && !produtos.length) { toast('Selecione ao menos um serviço ou produto','er'); return; }
+  var pacotes = VENDA_AVULSA_PACOTES.map(function(p){ return { pacote_id: p.pacote_id, valor: p.valor }; });
+  if (!servicos.length && !produtos.length && !pacotes.length) { toast('Selecione ao menos um serviço, produto ou pacote','er'); return; }
   if (produtos.some(function(p){ return p.valor <= 0; })) {
     toast('Tem produto com valor R$ 0,00 na lista — corrige o preço antes de confirmar','er'); return;
+  }
+  if (pacotes.some(function(p){ return p.valor <= 0; })) {
+    toast('Tem pacote com valor R$ 0,00 na lista — corrige o preço antes de confirmar','er'); return;
   }
 
   var fpgBtn = document.querySelector('#va-fpg-options .fpg-btn.on');
@@ -4229,14 +4348,14 @@ function confirmarVendaAvulsa() {
   btn.disabled = true; btn.textContent = 'Salvando...';
 
   apiFetch('/api/vendas-avulsas', { method: 'POST', body: {
-    cliente_id: clienteId, profissional_id: profId, servicos: servicos, produtos: produtos,
+    cliente_id: clienteId, profissional_id: profId, servicos: servicos, produtos: produtos, pacotes: pacotes,
     forma_pgto: deixarAberto ? null : fpgBtn.dataset.val, pago: !deixarAberto, deixar_aberto: deixarAberto
   }})
     .then(function(r){
       var msg = deixarAberto ? 'Comanda criada e deixada em aberto ⏳' : 'Comanda criada! ✅ Total: ' + brl(r.valor_total);
       toast(msg, 'ok');
       closeM('m-nova-comanda');
-      loadComandas(); loadDashTl(); loadKPIs(); loadEst();
+      loadComandas(); loadDashTl(); loadKPIs(); loadEst(); loadFin();
     })
     .catch(function(e){ toast('Erro: ' + (e.message || 'tente novamente'), 'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda ✅'; });
@@ -6641,6 +6760,12 @@ function dispensarBannerPWA() {
       </div>
 
       <div class="fg">
+        <label class="fl">Pacotes (opcional)</label>
+        <select class="fc" id="va-pacote-select" onchange="adicionarPacoteVendaAvulsa()"><option value="">+ Vender um pacote...</option></select>
+        <div id="va-pacotes-lista" style="margin-top:8px"></div>
+      </div>
+
+      <div class="fg">
         <label class="fl">Forma de pagamento</label>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="va-fpg-options">
           <button type="button" class="fpg-btn" data-val="PIX" onclick="selecionarFpgVendaAvulsa(this)">💠 PIX</button>
@@ -7357,8 +7482,13 @@ function dispensarBannerPWA() {
     <div class="mb">
       <input type="hidden" id="vpac-pacote-id"/>
       <div style="font-size:.85rem;font-weight:700;margin-bottom:14px" id="vpac-pacote-nome">—</div>
-      <div class="fg"><label class="fl">Cliente*</label>
-        <select class="fc" id="vpac-cliente"><option value="">Selecionar cliente...</option></select>
+      <div class="fg" style="position:relative">
+        <label class="fl">Cliente*</label>
+        <input class="fc" id="vpac-cliente-busca" placeholder="🔍 Buscar por nome ou telefone..." autocomplete="off"
+          oninput="filtrarClientesVenderPacote(this.value)" onfocus="filtrarClientesVenderPacote(this.value)"
+          onblur="setTimeout(function(){ var r=document.getElementById('vpac-cliente-resultados'); if(r) r.style.display='none'; }, 150)"/>
+        <input type="hidden" id="vpac-cliente"/>
+        <div id="vpac-cliente-resultados" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;margin-top:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--rs);max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)"></div>
       </div>
       <div class="fg"><label class="fl">Valor pago (R$)</label><input type="number" class="fc" id="vpac-valor" step="0.01"/></div>
       <div style="font-size:.7rem;color:var(--t3);margin-bottom:12px">Pode ajustar o valor se der um desconto pontual — por padrão vem o preço cheio do pacote.</div>
