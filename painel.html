@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.21.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.22.0-frontend</div>
       </div>
     </div>
 
@@ -3870,6 +3870,7 @@ function abrirVenderPacote(pacoteId, pacoteNome, preco) {
   document.getElementById('vpac-pagar-depois').checked = false;
   document.getElementById('vpac-cliente').value = '';
   document.getElementById('vpac-cliente-busca').value = '';
+  document.getElementById('vpac-data').value = today();
   var resultados = document.getElementById('vpac-cliente-resultados');
   if (resultados) { resultados.style.display = 'none'; resultados.innerHTML = ''; }
   openM('m-vender-pacote');
@@ -3880,12 +3881,14 @@ function salvarVendaPacote() {
   var clienteId = document.getElementById('vpac-cliente').value;
   var valor = document.getElementById('vpac-valor').value;
   var pagarDepois = document.getElementById('vpac-pagar-depois').checked;
+  var data = document.getElementById('vpac-data').value;
   if (!clienteId) { toast('Selecione o cliente','er'); return; }
 
   var btn = document.querySelector('#m-vender-pacote .btnp');
   btn.disabled = true; btn.textContent = 'Salvando...';
   apiFetch('/api/clientes/' + clienteId + '/pacotes', { method: 'POST', body: {
-    pacote_id: pacoteId, valor_pago: valor ? parseFloat(valor) : undefined, pago: !pagarDepois
+    pacote_id: pacoteId, valor_pago: valor ? parseFloat(valor) : undefined, pago: !pagarDepois,
+    data_compra: data || undefined
   } })
   .then(function(){
     toast(pagarDepois ? 'Pacote vendido — marcado como a receber! ⏳' : 'Pacote vendido! ✅', 'ok');
@@ -4222,7 +4225,7 @@ function atualizarPrecoProdutoVendaAvulsa(produtoId, novoValor) {
 
 // ── Pacotes na Nova Comanda — mesmo padrão dos produtos, só que sem
 // quantidade (pacote é sempre 1 por venda) e sem descontar estoque nenhum.
-var VENDA_AVULSA_PACOTES = []; // [{pacote_id, nome, valor}]
+var VENDA_AVULSA_PACOTES = []; // [{pacote_id, nome, valor, data}]
 
 function adicionarPacoteVendaAvulsa() {
   var sel = document.getElementById('va-pacote-select');
@@ -4234,7 +4237,7 @@ function adicionarPacoteVendaAvulsa() {
     sel.value = '';
     return;
   }
-  VENDA_AVULSA_PACOTES.push({ pacote_id: id, nome: opcao.dataset.nome, valor: Number(opcao.dataset.preco || 0) });
+  VENDA_AVULSA_PACOTES.push({ pacote_id: id, nome: opcao.dataset.nome, valor: Number(opcao.dataset.preco || 0), data: today() });
   sel.value = '';
   renderPacotesVendaAvulsa();
   recalcularTotalVendaAvulsa();
@@ -4253,12 +4256,18 @@ function atualizarPrecoPacoteVendaAvulsa(pacoteId, novoValor) {
   recalcularTotalVendaAvulsa();
 }
 
+function atualizarDataPacoteVendaAvulsa(pacoteId, novaData) {
+  var item = VENDA_AVULSA_PACOTES.find(function(p){ return p.pacote_id === pacoteId; });
+  if (item) item.data = novaData || today();
+}
+
 function renderPacotesVendaAvulsa() {
   var wrap = document.getElementById('va-pacotes-lista');
   if (!wrap) return;
   wrap.innerHTML = VENDA_AVULSA_PACOTES.map(function(p){
-    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
-      '<span style="flex:1">🎁 ' + esc(p.nome) + '</span>' +
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem;flex-wrap:wrap">' +
+      '<span style="flex:1;min-width:120px">🎁 ' + esc(p.nome) + '</span>' +
+      '<input type="date" value="' + (p.data || today()) + '" style="width:132px;padding:4px 6px;font-size:.72rem" class="fc" title="Data da venda — pode registrar retroativo" onchange="atualizarDataPacoteVendaAvulsa(\'' + p.pacote_id + '\',this.value)"/>' +
       '<input type="text" inputmode="decimal" value="' + brlSemSimbolo(p.valor) + '" style="width:90px;padding:4px 6px;font-size:.78rem" class="fc" title="Valor pago — pode ajustar se der desconto" onfocus="this.select()" onchange="atualizarPrecoPacoteVendaAvulsa(\'' + p.pacote_id + '\',this.value)"/>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerPacoteVendaAvulsa(\'' + p.pacote_id + '\')">✕</button>' +
     '</div>';
@@ -4317,8 +4326,9 @@ function sincronizarProdutosVendaAvulsaComDOM() {
   document.querySelectorAll('#va-pacotes-lista > div').forEach(function(linha, idx){
     var item = VENDA_AVULSA_PACOTES[idx];
     if (!item) return;
-    var input = linha.querySelector('input');
-    if (input) item.valor = Math.max(0, parseNumeroBR(input.value));
+    var inputs = linha.querySelectorAll('input'); // [0] = data, [1] = valor
+    if (inputs[0] && inputs[0].value) item.data = inputs[0].value;
+    if (inputs[1]) item.valor = Math.max(0, parseNumeroBR(inputs[1].value));
   });
 }
 
@@ -4331,7 +4341,7 @@ function confirmarVendaAvulsa() {
   sincronizarProdutosVendaAvulsaComDOM();
   var servicos = Array.from(document.querySelectorAll('#va-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
   var produtos = VENDA_AVULSA_PRODUTOS.map(function(p){ return { produto_id: p.produto_id, quantidade: p.quantidade, valor: p.preco_unit * p.quantidade }; });
-  var pacotes = VENDA_AVULSA_PACOTES.map(function(p){ return { pacote_id: p.pacote_id, valor: p.valor }; });
+  var pacotes = VENDA_AVULSA_PACOTES.map(function(p){ return { pacote_id: p.pacote_id, valor: p.valor, data_compra: p.data }; });
   if (!servicos.length && !produtos.length && !pacotes.length) { toast('Selecione ao menos um serviço, produto ou pacote','er'); return; }
   if (produtos.some(function(p){ return p.valor <= 0; })) {
     toast('Tem produto com valor R$ 0,00 na lista — corrige o preço antes de confirmar','er'); return;
@@ -7492,6 +7502,7 @@ function dispensarBannerPWA() {
       </div>
       <div class="fg"><label class="fl">Valor pago (R$)</label><input type="number" class="fc" id="vpac-valor" step="0.01"/></div>
       <div style="font-size:.7rem;color:var(--t3);margin-bottom:12px">Pode ajustar o valor se der um desconto pontual — por padrão vem o preço cheio do pacote.</div>
+      <div class="fg"><label class="fl">Data da venda</label><input type="date" class="fc" id="vpac-data"/></div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;padding:10px 12px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs)">
         <input type="checkbox" id="vpac-pagar-depois" style="accent-color:var(--warn)"/> ⏳ Cliente vai pagar depois (fica como "a receber" no Financeiro)
       </label>
