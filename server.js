@@ -365,7 +365,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.21.0-pacote-na-comanda' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.22.0-data-retroativa-pacote' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1764,9 +1764,13 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
     for (const item of pacotesLista) {
       try {
         const valorPacote = (item.valor !== undefined && item.valor !== null && item.valor !== '') ? Number(item.valor) : undefined;
+        // Aceita uma data de compra específica pro pacote (independente da
+        // hora "agora" do resto da comanda) — útil quando alguém esqueceu
+        // de lançar ontem e precisa registrar retroativo.
+        const dataCompraPacote = item.data_compra || agora.split('T')[0];
         const vendido = await venderPacoteParaCliente({
           salaoId: req.salao_id, clienteId: cliente_id, pacoteId: item.pacote_id,
-          valorPago: valorPacote, dataCompra: agora.split('T')[0], pagoAgora: deixar_aberto ? false : (pago !== false)
+          valorPago: valorPacote, dataCompra: dataCompraPacote, pagoAgora: deixar_aberto ? false : (pago !== false)
         });
         valorTotalAtual += Number(vendido.valor_pago || 0);
         pacotesVendidos.push({ pacote_id: item.pacote_id, nome: vendido.nome_snapshot, valor: Number(vendido.valor_pago || 0) });
