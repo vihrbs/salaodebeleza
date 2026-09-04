@@ -490,7 +490,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.22.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.23.0-frontend</div>
       </div>
     </div>
 
@@ -1763,6 +1763,7 @@ function renderDetalhesAgendamento(ag) {
     '</div>' +
     '<div style="display:flex;flex-direction:column;gap:8px">' +
       (podeConcluir ? '<button class="btn btnp btnsm" onclick="closeM(\'m-detalhes-ag\');abrirModalConcluir(\'' + ag.id + '\')">✅ Concluir Atendimento</button>' : '') +
+      (ag.status === 'concluido' && USER_PERFIL === 'admin' ? '<button class="btn btns btnsm" onclick="abrirReabrirComanda(\'' + ag.id + '\')">🔓 Reabrir Comanda</button>' : '') +
       '<button class="btn btns btnsm" onclick="closeM(\'m-detalhes-ag\');abrirEditarClientePorId(\'' + (cliente.id||'') + '\')">✏️ Editar Cliente</button>' +
       (podeCancelar ? '<button class="btn btns btnsm" style="color:var(--er)" onclick="cancelarAgendamentoDetalhes(\'' + ag.id + '\')">🗑️ Cancelar Agendamento</button>' : '') +
     '</div>';
@@ -1860,6 +1861,36 @@ function mudaStatus(id, status) {
     .then(function(){ loadDashTl(); loadAgenda(); })
     .catch(function(){});
   toast('Status: ' + (SL[status]||status), 'ok');
+}
+
+// ── Reabrir comanda concluída (admin only) ───────────
+function abrirReabrirComanda(id) {
+  var ag = DETALHES_AG_ATUAL;
+  if (!ag || ag.id !== id) { toast('Recarrega a comanda e tenta de novo','er'); return; }
+  document.getElementById('rc-ag-id').value = id;
+  var dt = new Date(ag.data_hora);
+  document.getElementById('rc-data').value = dt.toISOString().split('T')[0];
+  document.getElementById('rc-hora').value = String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+  closeM('m-detalhes-ag');
+  openM('m-reabrir-comanda');
+}
+
+function confirmarReabrirComanda() {
+  var id = document.getElementById('rc-ag-id').value;
+  var data = document.getElementById('rc-data').value;
+  var hora = document.getElementById('rc-hora').value;
+  var novaDataHora = (data && hora) ? new Date(data + 'T' + hora + ':00').toISOString() : undefined;
+
+  var btn = document.querySelector('#m-reabrir-comanda .btnp');
+  btn.disabled = true; btn.textContent = 'Reabrindo...';
+  apiFetch('/api/agendamentos/' + id + '/reabrir', { method: 'PATCH', body: { nova_data_hora: novaDataHora } })
+    .then(function(){
+      toast('Comanda reaberta! 🔓', 'ok');
+      closeM('m-reabrir-comanda');
+      loadAgenda(); loadComandas(); loadDashTl(); loadKPIs();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Reabrir'; });
 }
 
 function abrirModalConcluir(id) {
@@ -4026,8 +4057,11 @@ function abrirNovaComanda() {
   document.getElementById('va-svc-busca').value = '';
   VENDA_AVULSA_PRODUTOS = [];
   VENDA_AVULSA_PACOTES = [];
+  SESSOES_PACOTE_DISPONIVEIS_VENDA_AVULSA = [];
+  SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA = {};
   renderProdutosVendaAvulsa();
   renderPacotesVendaAvulsa();
+  renderSessoesPacoteVendaAvulsa();
   document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('va-fpg-aberto').classList.remove('on');
 
@@ -4037,7 +4071,7 @@ function abrirNovaComanda() {
 
   var svcsWrap = document.getElementById('va-svcs');
   svcsWrap.innerHTML = (SVCS || []).map(function(s){
-    return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="this.classList.toggle(\'on\');recalcularTotalVendaAvulsa()">' + esc(s.nome) + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
+    return '<span class="svc-pill" data-id="' + s.id + '" data-preco="' + s.preco + '" onclick="alternarPillServicoVendaAvulsa(this)">' + esc(s.nome) + ' <span style="font-size:.68rem;opacity:.7">' + brl(s.preco) + '</span></span>';
   }).join('');
 
   apiFetch('/api/estoque').then(function(r){
@@ -4099,12 +4133,86 @@ function renderResultadosClienteVendaAvulsa(lista) {
   resultados.style.display = 'block';
 }
 
+// ── Sessões de pacote disponíveis pro cliente selecionado na Nova
+// Comanda — pra usar como pagamento de um serviço em vez de cobrar de
+// novo (o cliente já pagou isso quando comprou o pacote).
+var SESSOES_PACOTE_DISPONIVEIS_VENDA_AVULSA = []; // [{pacote_cliente_id, pacote_nome, servico_id, servico_nome, restantes}]
+var SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA = {}; // { [servico_id]: pacote_cliente_id }
+
 function selecionarClienteVendaAvulsa(id, nome) {
   document.getElementById('va-cli-id').value = id;
   document.getElementById('va-cli-busca').value = nome;
   var resultados = document.getElementById('va-cli-resultados');
   resultados.style.display = 'none';
   resultados.innerHTML = '';
+  carregarSessoesPacoteDisponiveisVendaAvulsa(id);
+}
+
+function carregarSessoesPacoteDisponiveisVendaAvulsa(clienteId) {
+  SESSOES_PACOTE_DISPONIVEIS_VENDA_AVULSA = [];
+  SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA = {};
+  renderSessoesPacoteVendaAvulsa();
+  if (!clienteId) return;
+
+  apiFetch('/api/clientes/' + clienteId + '/pacotes').then(function(lista){
+    var hoje = today();
+    var disponiveis = [];
+    (lista || []).forEach(function(pc){
+      if (pc.status !== 'ativo') return;
+      if (pc.validade && pc.validade < hoje) return;
+      (pc.sessoes || []).forEach(function(s){
+        var restantes = (s.qtd_total || 0) - (s.qtd_usada || 0);
+        if (restantes <= 0) return;
+        var svc = (SVCS || []).find(function(sv){ return sv.id === s.servico_id; });
+        disponiveis.push({
+          pacote_cliente_id: pc.id, pacote_nome: pc.nome_snapshot || 'Pacote',
+          servico_id: s.servico_id, servico_nome: svc ? svc.nome : 'Serviço', restantes: restantes
+        });
+      });
+    });
+    SESSOES_PACOTE_DISPONIVEIS_VENDA_AVULSA = disponiveis;
+    renderSessoesPacoteVendaAvulsa();
+  }).catch(function(){});
+}
+
+function renderSessoesPacoteVendaAvulsa() {
+  var wrap = document.getElementById('va-sessoes-pacote-wrap');
+  if (!wrap) return;
+  if (!SESSOES_PACOTE_DISPONIVEIS_VENDA_AVULSA.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = '<label class="fl">🎁 Sessões de pacote disponíveis</label>' +
+    SESSOES_PACOTE_DISPONIVEIS_VENDA_AVULSA.map(function(s){
+      var jaUsando = SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA[s.servico_id] === s.pacote_cliente_id;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg3);border-radius:var(--rs);margin-bottom:6px;font-size:.78rem">' +
+        '<div><strong>' + esc(s.servico_nome) + '</strong><div style="font-size:.68rem;color:var(--t3)">' + esc(s.pacote_nome) + ' · ' + s.restantes + ' restante(s)</div></div>' +
+        (jaUsando
+          ? '<span style="color:var(--ok);font-weight:700;font-size:.74rem">✅ Usando</span>'
+          : '<button type="button" class="btn btnp btnsm" onclick="usarSessaoPacoteVendaAvulsa(\'' + s.pacote_cliente_id + '\',\'' + s.servico_id + '\')">Usar sessão</button>') +
+      '</div>';
+    }).join('');
+}
+
+function usarSessaoPacoteVendaAvulsa(pacoteClienteId, servicoId) {
+  SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA[servicoId] = pacoteClienteId;
+  // Marca o pill do serviço como selecionado (se ainda não estivesse)
+  var pill = document.querySelector('#va-svcs .svc-pill[data-id="' + servicoId + '"]');
+  if (pill) pill.classList.add('on');
+  renderSessoesPacoteVendaAvulsa();
+  recalcularTotalVendaAvulsa();
+  toast('Sessão de pacote aplicada — esse serviço fica grátis nessa comanda ✅','ok');
+}
+
+// Alterna a seleção de um serviço na Nova Comanda — se esse serviço estava
+// marcado como "pago via pacote" e a pessoa desmarca ele, remove essa
+// marcação também (senão ficava um estado "fantasma" sem o pill ligado)
+function alternarPillServicoVendaAvulsa(pill) {
+  pill.classList.toggle('on');
+  if (!pill.classList.contains('on') && SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA[pill.dataset.id]) {
+    delete SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA[pill.dataset.id];
+    renderSessoesPacoteVendaAvulsa();
+  }
+  recalcularTotalVendaAvulsa();
 }
 
 // ── Busca ao vivo de cliente no modal "Vender Pacote" — mesmo padrão da
@@ -4289,6 +4397,9 @@ function recalcularTotalVendaAvulsa() {
   var qtdServicos = document.querySelectorAll('#va-svcs .svc-pill.on').length;
   var totalServicos = 0;
   document.querySelectorAll('#va-svcs .svc-pill.on').forEach(function(pill){
+    // Serviço pago com sessão de pacote não entra no total — o cliente já
+    // pagou isso quando comprou o pacote, cobrar de novo seria cobrar duas vezes
+    if (SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA[pill.dataset.id]) return;
     totalServicos += Number(pill.dataset.preco || 0);
   });
   var totalProdutos = VENDA_AVULSA_PRODUTOS.reduce(function(s, p){ return s + (p.preco_unit * p.quantidade); }, 0);
@@ -4342,6 +4453,9 @@ function confirmarVendaAvulsa() {
   var servicos = Array.from(document.querySelectorAll('#va-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
   var produtos = VENDA_AVULSA_PRODUTOS.map(function(p){ return { produto_id: p.produto_id, quantidade: p.quantidade, valor: p.preco_unit * p.quantidade }; });
   var pacotes = VENDA_AVULSA_PACOTES.map(function(p){ return { pacote_id: p.pacote_id, valor: p.valor, data_compra: p.data }; });
+  var pacotesUtilizados = Object.keys(SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA).map(function(servicoId){
+    return { servico_id: servicoId, pacote_cliente_id: SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA[servicoId] };
+  });
   if (!servicos.length && !produtos.length && !pacotes.length) { toast('Selecione ao menos um serviço, produto ou pacote','er'); return; }
   if (produtos.some(function(p){ return p.valor <= 0; })) {
     toast('Tem produto com valor R$ 0,00 na lista — corrige o preço antes de confirmar','er'); return;
@@ -4359,6 +4473,7 @@ function confirmarVendaAvulsa() {
 
   apiFetch('/api/vendas-avulsas', { method: 'POST', body: {
     cliente_id: clienteId, profissional_id: profId, servicos: servicos, produtos: produtos, pacotes: pacotes,
+    pacotes_utilizados: pacotesUtilizados,
     forma_pgto: deixarAberto ? null : fpgBtn.dataset.val, pago: !deixarAberto, deixar_aberto: deixarAberto
   }})
     .then(function(r){
@@ -6763,6 +6878,8 @@ function dispensarBannerPWA() {
         <div id="va-svcs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
       </div>
 
+      <div class="fg" id="va-sessoes-pacote-wrap" style="display:none"></div>
+
       <div class="fg">
         <label class="fl">Produtos (opcional)</label>
         <select class="fc" id="va-produto-select" onchange="adicionarProdutoVendaAvulsa()"><option value="">+ Adicionar produto do estoque...</option></select>
@@ -6793,6 +6910,22 @@ function dispensarBannerPWA() {
       </div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-nova-comanda')">Cancelar</button><button class="btn btnp" id="va-btn-confirmar" onclick="confirmarVendaAvulsa()">Confirmar Venda ✅</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-reabrir-comanda">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">🔓 Reabrir Comanda</span><button class="mx" onclick="closeM('m-reabrir-comanda')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="rc-ag-id"/>
+      <div style="font-size:.78rem;color:var(--t3);margin-bottom:14px">A comanda volta pro status "em atendimento" — você pode ajustar a data/hora se precisar corrigir algo, e concluir de novo depois.</div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Data</label><input type="date" class="fc" id="rc-data"/></div>
+        <div class="fg"><label class="fl">Hora</label><input type="time" class="fc" id="rc-hora"/></div>
+      </div>
+      <div style="font-size:.68rem;color:var(--warn);background:rgba(251,191,36,.1);padding:8px 10px;border-radius:var(--rs)">⚠️ Só administradores podem reabrir e alterar a data de uma comanda já concluída — isso é registrado no log do sistema.</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-reabrir-comanda')">Cancelar</button><button class="btn btnp" onclick="confirmarReabrirComanda()">Reabrir</button></div>
   </div>
 </div>
 
