@@ -365,7 +365,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.22.0-data-retroativa-pacote' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.23.0-usar-pacote-e-reabrir' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1674,10 +1674,11 @@ async function criarAgendamentoUnico({
 // criação de agendamento (pra manter a comissão contando certinho) e a
 // mesma lógica de venda de produto (pra descontar do estoque igual sempre).
 app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, res) => {
-  const { cliente_id, profissional_id, servicos, produtos, pacotes, forma_pgto, pago, deixar_aberto } = req.body;
+  const { cliente_id, profissional_id, servicos, produtos, pacotes, pacotes_utilizados, forma_pgto, pago, deixar_aberto } = req.body;
   const servicosIds = Array.isArray(servicos) ? servicos.filter(Boolean) : [];
   const produtosLista = Array.isArray(produtos) ? produtos.filter(p => p && p.produto_id) : [];
   const pacotesLista = Array.isArray(pacotes) ? pacotes.filter(p => p && p.pacote_id) : [];
+  const pacotesUsadosLista = Array.isArray(pacotes_utilizados) ? pacotes_utilizados.filter(p => p && p.pacote_cliente_id && p.servico_id) : [];
 
   if (!cliente_id || !profissional_id) {
     return res.status(422).json({ error: 'Cliente e profissional são obrigatórios' });
@@ -1704,10 +1705,37 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
     }
 
     const agora = new Date().toISOString();
+    const dataBaseISO = agora.split('T')[0];
+
+    // Serviço pago com uma sessão de pacote que o cliente já comprou antes
+    // — o serviço entra na comanda normal (conta pra agenda/duração/
+    // comissão do profissional), só que com valor R$0 pro cliente, porque
+    // ele já pagou isso quando comprou o pacote.
+    const pacotePorServico = {};
+    const consumosParaAplicar = [];
+    for (const uso of pacotesUsadosLista) {
+      if (!servicosIds.includes(uso.servico_id)) {
+        return res.status(422).json({ error: 'Serviço do pacote não faz parte dos serviços selecionados na comanda' });
+      }
+      const { data: pc } = await supabase.from('pacotes_clientes')
+        .select('*').eq('id', uso.pacote_cliente_id).eq('salao_id', req.salao_id).eq('cliente_id', cliente_id).single();
+      if (!pc) return res.status(404).json({ error: 'Pacote do cliente não encontrado' });
+      if (pc.status !== 'ativo') return res.status(422).json({ error: 'Este pacote não está mais ativo' });
+      if (pc.validade && pc.validade < dataBaseISO) return res.status(422).json({ error: 'Este pacote está vencido' });
+
+      const sessoes = pc.sessoes || [];
+      const linha = sessoes.find(s => s.servico_id === uso.servico_id);
+      if (!linha || linha.qtd_usada >= linha.qtd_total) {
+        return res.status(422).json({ error: 'Este pacote não tem mais sessões disponíveis para o serviço selecionado' });
+      }
+      pacotePorServico[uso.servico_id] = pc.id;
+      consumosParaAplicar.push({ pacoteCliente: pc, servicoId: uso.servico_id });
+    }
+
     const resultado = await criarAgendamentoUnico({
       salaoId: req.salao_id, clienteId: cliente_id, profissionalId: profissional_id,
       dataHora: agora, servicosInfo: srvcs, profComissaoPct: prof?.comissao_pct,
-      origem: 'backoffice', pularChecagemConflito: true
+      origem: 'backoffice', pularChecagemConflito: true, pacotePorServico
     });
     if (resultado.status === 'conflito') {
       const msg = resultado.motivo === 'almoco'
@@ -1717,6 +1745,18 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
     }
     const agendamentoId = resultado.agendamento.id;
     let valorTotalAtual = Number(resultado.agendamento.valor_total || 0);
+
+    // Comanda criada com sucesso — agora sim debita as sessões usadas do(s) pacote(s)
+    for (const consumo of consumosParaAplicar) {
+      const sessoesAtualizadas = (consumo.pacoteCliente.sessoes || []).map(s =>
+        s.servico_id === consumo.servicoId ? { ...s, qtd_usada: s.qtd_usada + 1 } : s
+      );
+      const todasEsgotadas = sessoesAtualizadas.every(s => s.qtd_usada >= s.qtd_total);
+      await supabase.from('pacotes_clientes').update({
+        sessoes: sessoesAtualizadas,
+        status: todasEsgotadas ? 'finalizado' : 'ativo'
+      }).eq('id', consumo.pacoteCliente.id);
+    }
 
     // Adiciona cada produto vendido — mesma lógica de "vender produto na
     // comanda": desconta do estoque, gera lançamento vinculado, soma no total
@@ -1979,6 +2019,39 @@ app.post('/api/agendamentos', auth, async (req, res) => {
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Reabre uma comanda já concluída — SÓ admin pode, e essa restrição é
+// fixa (não passa pelo sistema normal de permissões por checkbox). É de
+// propósito: se um funcionário pudesse editar a data de uma comanda já
+// fechada, ele poderia "mover" um atendimento pra outro dia da semana pra
+// inflar a comissão em algum período de fechamento — exatamente o tipo de
+// brecha que essa restrição existe pra evitar.
+app.patch('/api/agendamentos/:id/reabrir', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') {
+    return res.status(403).json({ error: 'Só o administrador pode reabrir uma comanda' });
+  }
+  try {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select('id, status, salao_id, cliente_id, data_hora').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!ag) return res.status(404).json({ error: 'Comanda não encontrada' });
+    if (ag.status !== 'concluido') return res.status(422).json({ error: 'Essa comanda não está concluída — não há o que reabrir' });
+
+    const updates = { status: 'em_atendimento' };
+    if (req.body.nova_data_hora) updates.data_hora = req.body.nova_data_hora;
+
+    const { data, error } = await supabase.from('agendamentos')
+      .update(updates).eq('id', req.params.id).select().single();
+    if (error) throw error;
+
+    // Registro de auditoria — quem reabriu, quando, e se mudou a data. Não
+    // é um "erro" de verdade, mas aproveita o mesmo buffer de logs (visível
+    // no painel de Super Admin) pra deixar rastro de uma ação sensível.
+    console.error('[AUDITORIA] Comanda ' + req.params.id + ' reaberta por ' + (req.user.nome || req.user.id) +
+      (req.body.nova_data_hora ? (' — data alterada de ' + ag.data_hora + ' para ' + req.body.nova_data_hora) : ' — sem alteração de data'));
+
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
