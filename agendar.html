@@ -58,14 +58,74 @@ header{
 @keyframes riseIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)}}
 
 /* GALERIA DE FOTOS DO SALÃO */
-.galeria-scroll{
-  display:flex; gap:8px; overflow-x:auto; padding:2px 2px 20px;
-  scrollbar-width:none; opacity:0; animation:riseIn .6s ease-out .45s forwards;
+.galeria-wrap{opacity:0; animation:riseIn .6s ease-out .45s forwards; margin-bottom:24px}
+.galeria-hero{
+  position:relative; width:100%; aspect-ratio:16/10; border-radius:var(--r);
+  overflow:hidden; background:var(--accent-soft); box-shadow:var(--shadow-lift);
+  cursor:pointer;
 }
-.galeria-scroll::-webkit-scrollbar{display:none}
-.galeria-foto{
-  flex:0 0 auto; width:104px; height:104px; border-radius:var(--rs);
-  object-fit:cover; border:1px solid var(--line); cursor:pointer;
+.galeria-hero-img{
+  width:100%; height:100%; object-fit:cover; display:block;
+  transition:opacity .25s ease, transform .5s cubic-bezier(.2,.7,.3,1);
+}
+.galeria-hero:active .galeria-hero-img{transform:scale(1.02)}
+.galeria-contador{
+  position:absolute; bottom:12px; right:12px; background:rgba(28,26,23,.55);
+  backdrop-filter:blur(4px); color:#fff; font-size:.72rem; font-weight:700;
+  padding:5px 11px; border-radius:50px; letter-spacing:.02em;
+}
+.galeria-expandir{
+  position:absolute; bottom:12px; left:12px; background:rgba(28,26,23,.55);
+  backdrop-filter:blur(4px); color:#fff; font-size:.72rem; font-weight:600;
+  padding:5px 11px; border-radius:50px; display:flex; align-items:center; gap:5px;
+}
+.galeria-thumbs{
+  display:flex; gap:8px; overflow-x:auto; padding:10px 2px 2px;
+  scrollbar-width:none;
+}
+.galeria-thumbs::-webkit-scrollbar{display:none}
+.galeria-thumb{
+  flex:0 0 auto; width:68px; height:68px; border-radius:10px;
+  object-fit:cover; cursor:pointer; opacity:.55;
+  border:2px solid transparent; transition:opacity .2s, border-color .2s, transform .2s;
+}
+.galeria-thumb:active{transform:scale(.94)}
+.galeria-thumb.on{opacity:1; border-color:var(--accent)}
+
+/* LIGHTBOX — visualizador em tela cheia */
+.lightbox-overlay{
+  position:fixed; inset:0; background:rgba(15,13,11,.96); z-index:9999;
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; animation:lbFade .2s ease forwards;
+}
+@keyframes lbFade{to{opacity:1}}
+.lightbox-img{
+  max-width:92vw; max-height:78vh; object-fit:contain;
+  border-radius:10px; user-select:none; -webkit-user-drag:none;
+}
+.lightbox-close{
+  position:absolute; top:18px; right:18px; width:40px; height:40px;
+  border-radius:50%; border:none; background:rgba(255,255,255,.12);
+  color:#fff; font-size:1.1rem; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; backdrop-filter:blur(4px);
+}
+.lightbox-nav{
+  position:absolute; top:50%; transform:translateY(-50%);
+  width:44px; height:44px; border-radius:50%; border:none;
+  background:rgba(255,255,255,.12); color:#fff; font-size:1.5rem;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(4px);
+}
+.lightbox-nav:active{background:rgba(255,255,255,.22)}
+.lightbox-prev{left:14px}
+.lightbox-next{right:14px}
+.lightbox-contador{
+  position:absolute; bottom:24px; left:50%; transform:translateX(-50%);
+  color:rgba(255,255,255,.8); font-size:.78rem; font-weight:600; letter-spacing:.03em;
+}
+@media(max-width:420px){
+  .lightbox-nav{width:38px;height:38px;font-size:1.25rem}
+  .lightbox-close{width:36px;height:36px}
 }
 
 /* STEPS INDICATOR */
@@ -310,7 +370,22 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     <div class="salon-meta" id="salon-meta"></div>
   </header>
 
-  <div class="galeria-scroll" id="galeria-fotos" style="display:none"></div>
+  <div class="galeria-wrap" id="galeria-wrap" style="display:none">
+    <div class="galeria-hero" id="galeria-hero" onclick="abrirLightbox(GALERIA_INDICE_ATUAL)">
+      <img class="galeria-hero-img" id="galeria-hero-img" src="" alt=""/>
+      <div class="galeria-expandir">⛶ Ampliar</div>
+      <div class="galeria-contador" id="galeria-contador" style="display:none"></div>
+    </div>
+    <div class="galeria-thumbs" id="galeria-thumbs"></div>
+  </div>
+
+  <div class="lightbox-overlay" id="lightbox-overlay" style="display:none" onclick="if(event.target===this)fecharLightbox()">
+    <button class="lightbox-close" onclick="fecharLightbox()">✕</button>
+    <button class="lightbox-nav lightbox-prev" id="lightbox-prev" onclick="navegarLightbox(-1)">‹</button>
+    <img class="lightbox-img" id="lightbox-img" src="" alt=""/>
+    <button class="lightbox-nav lightbox-next" id="lightbox-next" onclick="navegarLightbox(1)">›</button>
+    <div class="lightbox-contador" id="lightbox-contador"></div>
+  </div>
 
   <div class="steps-ind" id="steps-ind">
     <div class="step-dot on" data-s="1"></div>
@@ -329,7 +404,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     </div>
   </div>
 
-  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.6.0-agendar</div></footer>
+  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.7.0-agendar</div></footer>
 </div>
 
 <a id="wa-fab" class="wa-fab" style="display:none" target="_blank" title="Falar no WhatsApp">
@@ -344,6 +419,121 @@ var STATE = { servico:null, profissional:null, data:null, hora:null, servicos:[]
 // Ícone por categoria de serviço — só visual, não muda a lógica de nada
 var ICONES_CATEGORIA = { 'Cabelo':'✂️', 'Barba':'🪒', 'Unhas':'💅', 'Estética':'✨', 'Sobrancelha':'✨' };
 function iconeServico(categoria) { return ICONES_CATEGORIA[categoria] || '✂️'; }
+
+// ── GALERIA DE FOTOS — hero grande + miniaturas + visualizador em tela cheia ──
+var GALERIA_FOTOS = [];
+var GALERIA_NOME_SALAO = '';
+var GALERIA_INDICE_ATUAL = 0;
+
+function renderGaleria(fotos, nomeSalao) {
+  GALERIA_FOTOS = fotos;
+  GALERIA_NOME_SALAO = nomeSalao;
+  GALERIA_INDICE_ATUAL = 0;
+
+  selecionarFotoHero(0);
+
+  var thumbsWrap = document.getElementById('galeria-thumbs');
+  if (fotos.length > 1) {
+    thumbsWrap.style.display = 'flex';
+    thumbsWrap.innerHTML = fotos.map(function(f, i){
+      return '<img class="galeria-thumb' + (i === 0 ? ' on' : '') + '" src="' + f.url + '" alt="" loading="lazy" onclick="selecionarFotoHero(' + i + ')"/>';
+    }).join('');
+  } else {
+    thumbsWrap.style.display = 'none';
+  }
+
+  document.getElementById('galeria-wrap').style.display = 'block';
+}
+
+function selecionarFotoHero(indice) {
+  GALERIA_INDICE_ATUAL = indice;
+  var foto = GALERIA_FOTOS[indice];
+  if (!foto) return;
+
+  var img = document.getElementById('galeria-hero-img');
+  img.style.opacity = '0';
+  setTimeout(function(){
+    img.src = foto.url;
+    img.alt = GALERIA_NOME_SALAO;
+    img.style.opacity = '1';
+  }, 120);
+
+  var contador = document.getElementById('galeria-contador');
+  if (GALERIA_FOTOS.length > 1) {
+    contador.textContent = (indice + 1) + '/' + GALERIA_FOTOS.length;
+    contador.style.display = 'block';
+  }
+
+  document.querySelectorAll('.galeria-thumb').forEach(function(t, i){
+    t.classList.toggle('on', i === indice);
+  });
+}
+
+function abrirLightbox(indice) {
+  GALERIA_INDICE_ATUAL = indice;
+  document.getElementById('lightbox-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  atualizarImagemLightbox();
+}
+
+function fecharLightbox() {
+  document.getElementById('lightbox-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function navegarLightbox(direcao) {
+  GALERIA_INDICE_ATUAL = (GALERIA_INDICE_ATUAL + direcao + GALERIA_FOTOS.length) % GALERIA_FOTOS.length;
+  atualizarImagemLightbox();
+}
+
+function atualizarImagemLightbox() {
+  var foto = GALERIA_FOTOS[GALERIA_INDICE_ATUAL];
+  if (!foto) return;
+  document.getElementById('lightbox-img').src = foto.url;
+  document.getElementById('lightbox-img').alt = GALERIA_NOME_SALAO;
+
+  var multiplasFotos = GALERIA_FOTOS.length > 1;
+  document.getElementById('lightbox-prev').style.display = multiplasFotos ? 'flex' : 'none';
+  document.getElementById('lightbox-next').style.display = multiplasFotos ? 'flex' : 'none';
+  var contador = document.getElementById('lightbox-contador');
+  if (multiplasFotos) {
+    contador.textContent = (GALERIA_INDICE_ATUAL + 1) + ' de ' + GALERIA_FOTOS.length;
+    contador.style.display = 'block';
+  } else {
+    contador.style.display = 'none';
+  }
+
+  // Também mantém a foto principal da página sincronizada com o que foi
+  // visto no lightbox, pra não voltar pra uma foto "antiga" ao fechar
+  selecionarFotoHero(GALERIA_INDICE_ATUAL);
+}
+
+// Teclado (desktop) — setas pra navegar, Esc pra fechar
+document.addEventListener('keydown', function(e){
+  var overlay = document.getElementById('lightbox-overlay');
+  if (!overlay || overlay.style.display !== 'flex') return;
+  if (e.key === 'Escape') fecharLightbox();
+  if (e.key === 'ArrowLeft') navegarLightbox(-1);
+  if (e.key === 'ArrowRight') navegarLightbox(1);
+});
+
+// Swipe (celular) — arrasta o dedo pra esquerda/direita dentro do lightbox
+(function(){
+  var inicioX = null;
+  document.addEventListener('touchstart', function(e){
+    var overlay = document.getElementById('lightbox-overlay');
+    if (!overlay || overlay.style.display !== 'flex') return;
+    inicioX = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', function(e){
+    if (inicioX === null) return;
+    var overlay = document.getElementById('lightbox-overlay');
+    if (!overlay || overlay.style.display !== 'flex') { inicioX = null; return; }
+    var deltaX = e.changedTouches[0].clientX - inicioX;
+    if (Math.abs(deltaX) > 50) navegarLightbox(deltaX > 0 ? -1 : 1);
+    inicioX = null;
+  }, { passive: true });
+})();
 
 // Troca o conteúdo do card com uma transição suave (sai deslizando, entra
 // deslizando) em vez de trocar seco — é o "passo a passo" ficando com
@@ -421,11 +611,7 @@ function init() {
 
       // Galeria de fotos do salão — só aparece se tiver alguma cadastrada
       if (salao.fotos && salao.fotos.length) {
-        var galeria = document.getElementById('galeria-fotos');
-        galeria.innerHTML = salao.fotos.map(function(f){
-          return '<img class="galeria-foto" src="' + f.url + '" alt="' + (salao.nome||'') + '" loading="lazy"/>';
-        }).join('');
-        galeria.style.display = 'flex';
+        renderGaleria(salao.fotos, salao.nome || '');
       }
 
       // Botão flutuante de WhatsApp, só aparece se o salão tiver telefone cadastrado
