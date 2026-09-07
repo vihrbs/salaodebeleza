@@ -197,21 +197,31 @@ header{
 /* PROFISSIONAL GRID */
 .pro-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 .pro-item{
-  display:flex; flex-direction:column; align-items:center; gap:10px;
-  padding:20px 12px; border:1.5px solid var(--line);
-  border-radius:var(--rs); cursor:pointer; transition:all .15s; text-align:center;
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  padding:22px 12px 18px; border:1.5px solid var(--line);
+  border-radius:var(--rs); cursor:pointer; transition:all .2s cubic-bezier(.2,.7,.3,1);
+  text-align:center; background:var(--card);
 }
-.pro-item:hover{border-color:var(--accent); transform:translateY(-2px); box-shadow:var(--shadow-lift)}
-.pro-item:active{transform:translateY(0) scale(.99)}
+.pro-item:hover{border-color:var(--accent); transform:translateY(-3px); box-shadow:var(--shadow-lift)}
+.pro-item:active{transform:translateY(-1px) scale(.98)}
 .pro-item.sel{border-color:var(--accent); background:var(--accent-soft)}
-.pro-av{
-  width:52px; height:52px; border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  font-family:'Fraunces',serif; font-weight:600; font-size:1.15rem; color:#fff;
+.pro-av-wrap{
+  width:76px; height:76px; border-radius:50%; position:relative;
   box-shadow:0 0 0 3px var(--card), 0 0 0 4.5px var(--line2);
-  position:relative;
+  transition:box-shadow .2s ease;
+  overflow:hidden;
 }
-.pro-item.sel .pro-av{box-shadow:0 0 0 3px var(--card), 0 0 0 4.5px var(--accent)}
+.pro-item:hover .pro-av-wrap{box-shadow:0 0 0 3px var(--card), 0 0 0 4.5px var(--accent-soft)}
+.pro-item.sel .pro-av-wrap{box-shadow:0 0 0 3px var(--card), 0 0 0 4.5px var(--accent)}
+.pro-av{
+  width:100%; height:100%; object-fit:cover; display:block;
+  transition:transform .35s cubic-bezier(.2,.7,.3,1);
+}
+.pro-item:hover .pro-av{transform:scale(1.08)}
+.pro-av-inicial{
+  width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces',serif; font-weight:600; font-size:1.6rem; color:#fff;
+}
 .pro-name{font-weight:600; font-size:.84rem}
 .pro-esp{font-size:.7rem; color:var(--muted)}
 
@@ -404,7 +414,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     </div>
   </div>
 
-  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.7.0-agendar</div></footer>
+  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.8.0-agendar</div></footer>
 </div>
 
 <a id="wa-fab" class="wa-fab" style="display:none" target="_blank" title="Falar no WhatsApp">
@@ -688,6 +698,17 @@ function loadProfissionais() {
     .catch(function(){ showError('Erro ao carregar profissionais.'); });
 }
 
+// Escurece um pouco uma cor hex — usado pra criar um gradiente sutil no
+// círculo de inicial (quando o profissional não tem foto), em vez de uma
+// cor lisa e chapada.
+function escurecerCor(hex, quantidade) {
+  hex = (hex || '#9A5B3F').replace('#', '');
+  var r = Math.max(0, parseInt(hex.substr(0,2), 16) - quantidade);
+  var g = Math.max(0, parseInt(hex.substr(2,2), 16) - quantidade);
+  var b = Math.max(0, parseInt(hex.substr(4,2), 16) - quantidade);
+  return '#' + [r,g,b].map(function(v){ return v.toString(16).padStart(2,'0'); }).join('');
+}
+
 function renderProfissionais(list) {
   var html = '<div class="card-hd"><div class="eyebrow">Passo 2 de 4</div><div class="card-title">Com quem você quer ser atendido?</div></div><div class="card-bd">';
   if (!list.length) {
@@ -696,13 +717,13 @@ function renderProfissionais(list) {
     html += '<div class="pro-grid">';
     list.forEach(function(p){
       var cor = p.cor_agenda || '#9A5B3F';
-      // Foto de verdade se o profissional tiver, senão continua a
-      // bolinha colorida com a inicial (comportamento de antes preservado)
+      // Foto de verdade se o profissional tiver, senão um círculo com
+      // gradiente sutil (mais elegante que uma cor lisa) e a inicial
       var avatar = p.foto_url
-        ? '<img class="pro-av" src="' + p.foto_url + '" alt="' + p.nome + '" style="object-fit:cover"/>'
-        : '<div class="pro-av" style="background:'+cor+'">' + p.nome[0].toUpperCase() + '</div>';
+        ? '<img class="pro-av" src="' + p.foto_url + '" alt="' + p.nome + '" loading="lazy"/>'
+        : '<div class="pro-av-inicial" style="background:linear-gradient(135deg,' + cor + ',' + escurecerCor(cor, 35) + ')">' + p.nome[0].toUpperCase() + '</div>';
       html += '<div class="pro-item" onclick="selectProfissional(\''+p.id+'\')">' +
-        avatar +
+        '<div class="pro-av-wrap">' + avatar + '</div>' +
         '<div class="pro-name">' + p.nome + '</div>' +
         '<div class="pro-esp">' + (p.especialidade||'') + '</div></div>';
     });
