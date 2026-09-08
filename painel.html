@@ -66,6 +66,10 @@ input,select,textarea{font-family:inherit}
 .l-btn:hover{background:var(--ac2);transform:translateY(-1px)}
 .l-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .l-hint{margin-top:14px;padding:11px;background:var(--bg3);border-radius:var(--rs);font-size:.72rem;color:var(--t3);text-align:center;line-height:1.6}
+.l-social-btns{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.l-social-btns > div{display:flex;justify-content:center;min-height:40px}
+.l-ou{display:flex;align-items:center;gap:10px;margin-bottom:16px;font-size:.7rem;color:var(--t3)}
+.l-ou::before,.l-ou::after{content:'';flex:1;height:1px;background:var(--bd)}
 .trial{background:rgba(201,169,110,.1);color:var(--ac);border:1px solid rgba(201,169,110,.2);padding:10px;border-radius:var(--rs);font-size:.78rem;text-align:center;font-weight:600;margin-bottom:14px}
 
 /* ── APP SHELL ─────────────────────────────── */
@@ -353,6 +357,8 @@ select.fc option{background:var(--bg2)}
     gtag('js', new Date());
     gtag('config', 'G-JGXF0WHVYX');
   </script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js" async defer></script>
 </head>
 <body>
 
@@ -378,6 +384,11 @@ select.fc option{background:var(--bg2)}
         <div style="font-size:1.2rem;font-weight:800;margin-bottom:4px;color:var(--tx)">Bem-vindo 👋</div>
         <div style="font-size:.78rem;color:var(--t2);margin-bottom:18px">Entre com suas credenciais</div>
         <div class="l-err" id="err-in"></div>
+        <div class="l-social-btns">
+          <div id="g_id_btn_in"></div>
+          <div id="apple_id_btn_in"></div>
+        </div>
+        <div class="l-ou"><span>ou entre com e-mail</span></div>
         <label class="lbl" style="margin-top:0">E-mail</label>
         <input class="inp" type="email" id="in-email" placeholder="seu@email.com"/>
         <label class="lbl">Senha</label>
@@ -392,6 +403,11 @@ select.fc option{background:var(--bg2)}
       <div class="l-pane" id="pane-up">
         <div class="trial">🎉 14 dias grátis — sem cartão de crédito</div>
         <div class="l-err" id="err-up"></div>
+        <div class="l-social-btns">
+          <div id="g_id_btn_up"></div>
+          <div id="apple_id_btn_up"></div>
+        </div>
+        <div class="l-ou"><span>ou cadastre com e-mail</span></div>
         <label class="lbl" style="margin-top:0">Nome do Salão*</label>
         <input class="inp" id="up-salao" placeholder="Ex.: Studio Luna Hair"/>
         <input type="hidden" id="up-api" value=""/>
@@ -406,6 +422,22 @@ select.fc option{background:var(--bg2)}
         <button class="l-btn" id="btn-up" onclick="doRegister()">Criar Conta Grátis</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Modal Completar Cadastro (após login social de conta nova) -->
+<div class="mov" id="m-completar-cadastro-social">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">🎉 Quase lá!</span></div>
+    <div class="mb">
+      <div style="font-size:.82rem;color:var(--t2);margin-bottom:14px">Confirmamos sua conta <strong id="cs-email-confirmado"></strong> — só falta o nome do seu salão pra terminar.</div>
+      <input type="hidden" id="cs-provider"/>
+      <input type="hidden" id="cs-credential"/>
+      <input type="hidden" id="cs-nome"/>
+      <input type="hidden" id="cs-email"/>
+      <div class="fg"><label class="fl">Nome do Salão*</label><input class="fc" id="cs-nome-salao" placeholder="Ex.: Studio Luna Hair"/></div>
+    </div>
+    <div class="mf"><button class="btn btnp" style="width:100%" onclick="confirmarCompletarCadastroSocial()">Criar minha conta →</button></div>
   </div>
 </div>
 
@@ -490,7 +522,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.24.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.25.0-frontend</div>
       </div>
     </div>
 
@@ -940,11 +972,19 @@ var API = localStorage.getItem('bpro_api') || API_FIXA;
 var TK  = localStorage.getItem('bpro_tk')  || '';
 var DEMO = false; // nunca entra em demo se API_FIXA estiver definida
 var PROS = [], SVCS = [], CLIS = [];
+
+// Login social — o Client ID do Google é seguro de deixar público (é
+// assim que a Google espera que funcione). Troque pelos valores reais
+// depois de criar as credenciais (veja instruções que te mandei).
+var GOOGLE_CLIENT_ID = ''; // ex.: '123456789-abc.apps.googleusercontent.com'
+var APPLE_CLIENT_ID  = ''; // o "Services ID" criado no painel da Apple, ex.: 'com.belezapro.web'
+var APPLE_REDIRECT_URI = 'https://belezaprooficial.com.br/painel.html'; // precisa bater com o cadastrado na Apple
 var COR_SEL = '#6C63FF';
 var USER_PERFIL = 'admin'; // 'admin' ou 'recepcionista'
 var USER_EMAIL = '';
 var USER_EMAIL_VERIFICADO = true; // otimista até o login/registro dizer o contrário
 var USER_SUPER_ADMIN = false; // dono da plataforma (não é a mesma coisa que "admin" de UM salão)
+var USER_PROFISSIONAL_ID = null; // se a conta logada é vinculada a um profissional
 
 // Permissões do usuário atual (carregadas do login)
 var USER_PERMISSOES = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
@@ -1072,6 +1112,108 @@ function tab(t) {
   document.getElementById('pane-up').classList.toggle('on', t==='up');
 }
 
+// ── LOGIN SOCIAL (Google / Apple) ────────────────────
+// Chamado uma vez, assim que a página carrega — prepara os dois provedores
+// e desenha os botões oficiais deles nos dois lugares (aba Entrar e aba
+// Criar Conta). Se as credenciais ainda não foram configuradas (Client ID
+// vazio), simplesmente não mostra os botões, sem quebrar nada.
+function inicializarLoginSocial() {
+  if (GOOGLE_CLIENT_ID && window.google && google.accounts && google.accounts.id) {
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredentialResponse
+    });
+    ['g_id_btn_in', 'g_id_btn_up'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 300, text: 'continue_with', locale: 'pt-BR' });
+    });
+  }
+
+  if (APPLE_CLIENT_ID && window.AppleID) {
+    AppleID.auth.init({
+      clientId: APPLE_CLIENT_ID, scope: 'name email',
+      redirectURI: APPLE_REDIRECT_URI, usePopup: true
+    });
+  }
+}
+// Os scripts do Google/Apple carregam de forma assíncrona (async defer) —
+// pode ser que ainda não estejam prontos quando a página termina de
+// carregar, então tenta de novo depois de um instante.
+window.addEventListener('load', function(){ setTimeout(inicializarLoginSocial, 400); });
+
+function handleGoogleCredentialResponse(response) {
+  processarLoginSocial('google', response.credential);
+}
+
+document.addEventListener('AppleIDSignInOnSuccess', function(event){
+  var authData = event.detail.authorization;
+  // Nome e e-mail só vêm nessa primeira resposta (não vêm de novo depois) —
+  // por isso já manda junto, mesmo que ainda não seja usado num cadastro novo
+  var nome = event.detail.user && event.detail.user.name
+    ? (event.detail.user.name.firstName + ' ' + (event.detail.user.name.lastName||'')).trim() : null;
+  processarLoginSocial('apple', authData.id_token, { nome: nome });
+});
+document.addEventListener('AppleIDSignInOnFailure', function(event){
+  if (event.detail && event.detail.error === 'popup_closed_by_user') return; // usuário só desistiu, não é erro de verdade
+  toast('Não foi possível entrar com a Apple. Tenta de novo.', 'er');
+});
+
+var SOCIAL_LOGIN_PENDENTE = null; // guarda credential+provider entre "precisa completar cadastro" e a confirmação
+
+function processarLoginSocial(provider, credential, extras) {
+  extras = extras || {};
+  var rota = provider === 'google' ? '/api/auth/google' : '/api/auth/apple';
+  var corpo = provider === 'google' ? { credential: credential } : { id_token: credential, nome: extras.nome };
+
+  apiFetch(rota, { method: 'POST', body: corpo })
+    .then(function(r){
+      if (r.precisa_completar_cadastro) {
+        SOCIAL_LOGIN_PENDENTE = { provider: provider, credential: credential, nome: r.nome, email: r.email, extrasNome: extras.nome };
+        document.getElementById('cs-email-confirmado').textContent = r.email;
+        document.getElementById('cs-nome-salao').value = '';
+        openM('m-completar-cadastro-social');
+        return;
+      }
+      finalizarLoginComToken(r, provider);
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message || 'tente de novo'), 'er'); });
+}
+
+function confirmarCompletarCadastroSocial() {
+  if (!SOCIAL_LOGIN_PENDENTE) return;
+  var nomeSalao = document.getElementById('cs-nome-salao').value.trim();
+  if (!nomeSalao) { toast('Informe o nome do seu salão', 'er'); return; }
+
+  var p = SOCIAL_LOGIN_PENDENTE;
+  var rota = p.provider === 'google' ? '/api/auth/google' : '/api/auth/apple';
+  var corpo = p.provider === 'google'
+    ? { credential: p.credential, nome_salao: nomeSalao }
+    : { id_token: p.credential, nome_salao: nomeSalao, nome: p.extrasNome, email: p.email };
+
+  apiFetch(rota, { method: 'POST', body: corpo })
+    .then(function(r){
+      closeM('m-completar-cadastro-social');
+      SOCIAL_LOGIN_PENDENTE = null;
+      finalizarLoginComToken(r, p.provider);
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message || 'tente de novo'), 'er'); });
+}
+
+function finalizarLoginComToken(r, provider) {
+  TK = r.token;
+  localStorage.setItem('bpro_tk', TK);
+  localStorage.setItem('bpro_api', API);
+  var _perfil = r.usuario.perfil || 'admin';
+  var _perms  = r.usuario.permissoes || null;
+  if (_perms) localStorage.setItem('bpro_permissoes', JSON.stringify(_perms));
+  localStorage.setItem('bpro_perfil', _perfil);
+  if (r.usuario.salao_id) localStorage.setItem('bpro_salao_id', r.usuario.salao_id);
+  if (r.usuario.saloes && r.usuario.saloes.id) localStorage.setItem('bpro_salao_id', r.usuario.saloes.id);
+  DEMO = false;
+  toast(r.novo_cadastro ? 'Conta criada com ' + (provider === 'google' ? 'Google' : 'Apple') + '! 🎉' : 'Login feito! ✅', 'ok');
+  enterApp(r.usuario.nome || 'Admin', (r.usuario.saloes && r.usuario.saloes.nome) || r.salao?.nome || 'Meu Salão', 'LIVE', _perfil, _perms, r.usuario.email, r.usuario.email_verificado, r.usuario.super_admin, r.usuario.profissional_id);
+}
+
 function doLogin() {
   var email = document.getElementById('in-email').value.trim();
   var pw    = document.getElementById('in-pw').value;
@@ -1100,7 +1242,7 @@ function doLogin() {
       if (data.usuario && data.usuario.salao_id) localStorage.setItem('bpro_salao_id', data.usuario.salao_id);
       if (data.usuario && data.usuario.saloes && data.usuario.saloes.id) localStorage.setItem('bpro_salao_id', data.usuario.saloes.id);
       DEMO = false;
-      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms, data.usuario && data.usuario.email, data.usuario && data.usuario.email_verificado, data.usuario && data.usuario.super_admin);
+      enterApp(data.usuario && data.usuario.nome || 'Admin', data.usuario && data.usuario.saloes && data.usuario.saloes.nome || 'Meu Salão', 'LIVE', _perfil, _perms, data.usuario && data.usuario.email, data.usuario && data.usuario.email_verificado, data.usuario && data.usuario.super_admin, data.usuario && data.usuario.profissional_id);
     } else {
       DEMO = true;
       enterApp(email ? email.split('@')[0] : 'Admin Demo', 'Studio Demo', 'DEMO');
@@ -1206,11 +1348,12 @@ function doRegister() {
   .finally(function(){ btn.disabled=false; btn.textContent='Criar Conta Grátis'; });
 }
 
-function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado, superAdmin) {
+function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado, superAdmin, profissionalId) {
   USER_PERFIL = perfil || 'admin';
   USER_EMAIL = email || '';
   USER_EMAIL_VERIFICADO = (emailVerificado === undefined || emailVerificado === null) ? true : !!emailVerificado;
   USER_SUPER_ADMIN = !!superAdmin;
+  USER_PROFISSIONAL_ID = profissionalId || null;
   document.getElementById('sb-super-admin').style.display = USER_SUPER_ADMIN ? '' : 'none';
   // Se estiver no meio de uma sessão "entrar como" (modo suporte), mostra
   // o banner de aviso com o nome do salão que tá sendo visualizado, e o
@@ -6679,7 +6822,7 @@ window.addEventListener('load', function(){
         var _p  = d.perfil || localStorage.getItem('bpro_perfil') || 'admin';
         var _pm = d.permissoes || (function(){ try{ return JSON.parse(localStorage.getItem('bpro_permissoes')||'null'); }catch(e){ return null; } })();
         if (d.saloes && d.saloes.id) localStorage.setItem('bpro_salao_id', d.saloes.id);
-        enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE', _p, _pm, d.email, d.email_verificado, d.super_admin);
+        enterApp(d.nome||'Admin', d.saloes&&d.saloes.nome||'Meu Salão','LIVE', _p, _pm, d.email, d.email_verificado, d.super_admin, d.profissional_id);
       })
       .catch(function(){ localStorage.removeItem('bpro_tk'); TK=''; });
   }
