@@ -306,6 +306,8 @@ select.fc option{background:var(--bg2)}
 .ag-block-nao_compareceu{background:rgba(251,191,36,.14);border-left-color:#FBBF24;color:#FEF3C7;opacity:.7}
 @media(max-width:880px){
   .ag-grid-scroll{max-height:60vh}
+  #cmd-layout{grid-template-columns:1fr !important}
+  #cmd-resumo-dia{position:static !important}
 }
 
 /* ── MOBILE ──────────────────────────────── */
@@ -522,7 +524,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.25.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.26.0-frontend</div>
       </div>
     </div>
 
@@ -649,7 +651,7 @@ select.fc option{background:var(--bg2)}
     <!-- COMANDAS -->
     <div class="page" id="page-comandas">
       <div style="display:flex;gap:9px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
-        <input type="date" class="fc" id="cmd-data" style="max-width:170px" onchange="loadComandas()"/>
+        <input type="date" class="fc" id="cmd-data" style="max-width:170px" onchange="loadComandas();loadResumoDiaComandas()"/>
         <div style="display:flex;gap:6px;flex-wrap:wrap" id="cmd-filtros">
           <button class="btn btnp btnsm" data-status="" onclick="filtrarComandasPorStatus('')">Todas</button>
           <button class="btn btns btnsm" data-status="a_concluir" onclick="filtrarComandasPorStatus('a_concluir')">A Concluir</button>
@@ -659,8 +661,14 @@ select.fc option{background:var(--bg2)}
         <button class="btn btns" style="margin-left:auto" onclick="abrirNovoAgendamento()">📅 Agendar</button>
         <button class="btn btnp" onclick="abrirNovaComanda()">+ Nova Comanda</button>
       </div>
-      <div id="cmd-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
-        <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;align-items:start" id="cmd-layout">
+        <div id="cmd-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+          <div class="lc" style="grid-column:1/-1"><div class="spin"></div></div>
+        </div>
+        <div class="card" id="cmd-resumo-dia" style="padding:16px;position:sticky;top:0">
+          <div style="font-size:.82rem;font-weight:700;margin-bottom:12px">📊 Resumo do dia</div>
+          <div class="lc"><div class="spin"></div></div>
+        </div>
       </div>
     </div>
 
@@ -1125,7 +1133,7 @@ function inicializarLoginSocial() {
     });
     ['g_id_btn_in', 'g_id_btn_up'].forEach(function(id){
       var el = document.getElementById(id);
-      if (el) google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 300, text: 'continue_with', locale: 'pt-BR' });
+      if (el) { el.innerHTML = ''; google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', width: 300, text: 'continue_with', locale: 'pt-BR' }); }
     });
   }
 
@@ -1136,10 +1144,23 @@ function inicializarLoginSocial() {
     });
   }
 }
-// Os scripts do Google/Apple carregam de forma assíncrona (async defer) —
-// pode ser que ainda não estejam prontos quando a página termina de
-// carregar, então tenta de novo depois de um instante.
-window.addEventListener('load', function(){ setTimeout(inicializarLoginSocial, 400); });
+// Os scripts do Google/Apple carregam de fora (async defer) — em conexão
+// de celular pode demorar mais que um instante só. Em vez de tentar UMA
+// vez e desistir se não der (o que deixava o botão nunca aparecer em
+// conexão mais lenta), tenta de novo a cada 300ms, até 20 vezes (6s no
+// total) ou até os dois carregarem certinho.
+function tentarInicializarLoginSocial(tentativasRestantes) {
+  if (tentativasRestantes === undefined) tentativasRestantes = 20;
+  var googlePronto = !GOOGLE_CLIENT_ID || (window.google && google.accounts && google.accounts.id);
+  var applePronto  = !APPLE_CLIENT_ID  || window.AppleID;
+
+  inicializarLoginSocial(); // sempre chama — se algum já estiver pronto, mostra ele já
+
+  if ((!googlePronto || !applePronto) && tentativasRestantes > 0) {
+    setTimeout(function(){ tentarInicializarLoginSocial(tentativasRestantes - 1); }, 300);
+  }
+}
+window.addEventListener('load', function(){ tentarInicializarLoginSocial(); });
 
 function handleGoogleCredentialResponse(response) {
   processarLoginSocial('google', response.credential);
@@ -1466,7 +1487,7 @@ function nav(page, el) {
 
   // Ações especiais por página
   if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
-  if (page==='comandas') { loadComandas(); }
+  if (page==='comandas') { loadComandas(); loadResumoDiaComandas(); }
   if (page==='super-admin') { loadSuperAdminSaloes(); }
 
   // Reavalia as sombras de rolagem das tabelas da página que acabou de abrir
@@ -2030,7 +2051,7 @@ function confirmarReabrirComanda() {
     .then(function(){
       toast('Comanda reaberta! 🔓', 'ok');
       closeM('m-reabrir-comanda');
-      loadAgenda(); loadComandas(); loadDashTl(); loadKPIs();
+      loadAgenda(); loadComandas(); loadResumoDiaComandas(); loadDashTl(); loadKPIs();
     })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Reabrir'; });
@@ -2439,6 +2460,40 @@ function loadComandas() {
   });
 }
 var COMPRAS_PROF_DO_DIA = [];
+
+// Resumo do dia na lateral da tela de Comandas — reaproveita a MESMA
+// rota do Fechamento de Caixa (Dashboard), só que renderizada de forma
+// mais compacta, num cartão fixo do lado, pra não precisar sair da tela
+// de Comandas pra saber como o dia tá indo.
+function loadResumoDiaComandas() {
+  var data = document.getElementById('cmd-data').value || today();
+  var el = document.getElementById('cmd-resumo-dia');
+  if (!el) return;
+  apiFetch('/api/dashboard/fechamento-caixa?data=' + data)
+    .then(function(r){ renderResumoDiaComandas(r); })
+    .catch(function(){ el.innerHTML = '<div style="font-size:.78rem;font-weight:700;margin-bottom:12px">📊 Resumo do dia</div><div class="empty" style="font-size:.74rem">Erro ao carregar.</div>'; });
+}
+
+function renderResumoDiaComandas(r) {
+  var el = document.getElementById('cmd-resumo-dia');
+  if (!el) return;
+  if (!r) { el.innerHTML = '<div style="font-size:.82rem;font-weight:700;margin-bottom:12px">📊 Resumo do dia</div><div class="empty" style="font-size:.74rem">Sem dados.</div>'; return; }
+
+  el.innerHTML =
+    '<div style="font-size:.82rem;font-weight:700;margin-bottom:12px">📊 Resumo do dia</div>' +
+    '<div style="background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.25);border-radius:var(--rs);padding:10px;margin-bottom:12px">' +
+      '<div style="font-size:.66rem;color:var(--t3)">Lucro</div>' +
+      '<div style="font-size:1.1rem;font-weight:800;color:var(--ok)">' + brl(r.total_lucro) + '</div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;border-bottom:1px solid var(--bd2)"><span>Faturado</span><strong>' + brl(r.total_faturado) + '</strong></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;border-bottom:1px solid var(--bd2)"><span>Comandas</span><strong>' + r.comandas_fechadas + '</strong></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;border-bottom:1px solid var(--bd2)"><span>Ticket médio</span><strong>' + brl(r.ticket_medio) + '</strong></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;color:var(--warn)"><span>Comissão a pagar</span><strong>' + brl(r.total_comissoes) + '</strong></div>' +
+    (r.despesas > 0 || r.produtos_de_venda > 0
+      ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;color:var(--er)"><span>Custos</span><strong>' + brl(r.total_custos) + '</strong></div>'
+      : '') +
+    '<button class="btn btns btnsm" style="width:100%;margin-top:10px" onclick="nav(\'dashboard\',null)">Ver detalhado →</button>';
+}
 
 function filtrarComandasPorStatus(status) {
   COMANDAS_FILTRO_ATUAL = status;
@@ -3795,7 +3850,7 @@ function confirmarComandaProfissional() {
     // Se a comanda foi feita hoje e a tela de Comandas está aberta, já
     // recarrega ela também — pra aparecer junto com as comandas de cliente
     var pageComandas = document.getElementById('page-comandas');
-    if (pageComandas && pageComandas.classList.contains('on')) loadComandas();
+    if (pageComandas && pageComandas.classList.contains('on')) { loadComandas(); loadResumoDiaComandas(); }
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled = false; btn.textContent = 'Registrar Comanda'; });
@@ -3855,7 +3910,7 @@ function pagarParcela(parcelaId, profId) {
     // Mesma coisa pra Comandas — o card de "compra do profissional" mostra
     // quanto falta pagar, então também precisa recarregar
     var pageComandas = document.getElementById('page-comandas');
-    if (pageComandas && pageComandas.classList.contains('on')) loadComandas();
+    if (pageComandas && pageComandas.classList.contains('on')) { loadComandas(); loadResumoDiaComandas(); }
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
@@ -4623,7 +4678,7 @@ function confirmarVendaAvulsa() {
       var msg = deixarAberto ? 'Comanda criada e deixada em aberto ⏳' : 'Comanda criada! ✅ Total: ' + brl(r.valor_total);
       toast(msg, 'ok');
       closeM('m-nova-comanda');
-      loadComandas(); loadDashTl(); loadKPIs(); loadEst(); loadFin();
+      loadComandas(); loadResumoDiaComandas(); loadDashTl(); loadKPIs(); loadEst(); loadFin();
     })
     .catch(function(e){ toast('Erro: ' + (e.message || 'tente novamente'), 'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda ✅'; });
