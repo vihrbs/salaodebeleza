@@ -28,6 +28,38 @@
   --sb:240px;
 }
 html,body{height:100%;width:100%;max-width:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--tx);font-size:14px;-webkit-font-smoothing:antialiased;margin:0;padding:0}
+
+/* ── TEMAS DE COR (Config → Aparência) ────────────────
+   Mantém tudo escuro (não vira tema "claro" — isso exigiria reescrever a
+   cor do texto em centenas de lugares) — só troca a cor de destaque e o
+   tom de fundo, pra pessoa deixar com a cara do salão dela. */
+body.tema-azul{
+  --ac:#5B8DEF;--ac2:#8FB3F5;--ac3:#7EC8A4;--ac4:#5B8DEF;
+  --bg:#0A0E14;--bg2:#131A24;--bg3:#1B2432;
+  --bd:#232E3D;--bd2:#2E3B4D;
+}
+body.tema-verde{
+  --ac:#3EBD93;--ac2:#6FD4B3;--ac3:#3EBD93;--ac4:#F4A261;
+  --bg:#0A120F;--bg2:#131F19;--bg3:#1B2C23;
+  --bd:#233830;--bd2:#2E463C;
+}
+body.tema-rose{
+  --ac:#E893A8;--ac2:#F2B8C6;--ac3:#7EC8A4;--ac4:#E893A8;
+  --bg:#140C10;--bg2:#211318;--bg3:#2E1B22;
+  --bd:#3A2530;--bd2:#48303D;
+}
+body.tema-roxo{
+  --ac:#9B7EDE;--ac2:#BBA5EA;--ac3:#7EC8A4;--ac4:#9B7EDE;
+  --bg:#0F0C14;--bg2:#191320;--bg3:#231B2E;
+  --bd:#2E263A;--bd2:#3A3048;
+}
+
+/* Seletor de tema (Config → Aparência) */
+.tema-opcao{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:8px;border-radius:var(--rs);border:1.5px solid transparent;transition:border-color .15s}
+.tema-opcao.on{border-color:var(--ac)}
+.tema-bolinha{width:36px;height:36px;border-radius:50%;box-shadow:0 0 0 2px var(--bg2),0 0 0 3px var(--bd2)}
+.tema-opcao.on .tema-bolinha{box-shadow:0 0 0 2px var(--bg2),0 0 0 3px var(--ac)}
+.tema-nome{font-size:.7rem;color:var(--t2)}
 a{text-decoration:none;color:inherit}
 button{font-family:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit}
@@ -524,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.26.1-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.27.0-frontend</div>
       </div>
     </div>
 
@@ -582,7 +614,7 @@ select.fc option{background:var(--bg2)}
       </div>
       <div class="g31" style="margin-bottom:14px">
         <div class="card">
-          <div class="crow"><span class="ch">Próximos 3 Dias</span><button class="btn btnp btnsm" onclick="abrirNovoAgendamento()">+ Novo</button></div>
+          <div class="crow"><span class="ch">Próximos 3 Dias</span></div>
           <div id="dash-tl"><div class="lc"><div class="spin"></div></div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:13px">
@@ -813,6 +845,32 @@ select.fc option{background:var(--bg2)}
           <button class="btn btnp" onclick="saveConfig()">Salvar Alterações</button>
         </div>
         <div class="card">
+          <div class="ct">🎨 Aparência</div>
+          <div style="font-size:.72rem;color:var(--t3);margin-bottom:14px">Escolha a cor de destaque do seu painel — fica salvo só nesse navegador/dispositivo, cada pessoa pode escolher a sua.</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px" id="temas-grid">
+            <div class="tema-opcao" data-tema="" onclick="aplicarTema('')">
+              <div class="tema-bolinha" style="background:linear-gradient(135deg,#C9A96E,#7A5C3A)"></div>
+              <div class="tema-nome">Dourado</div>
+            </div>
+            <div class="tema-opcao" data-tema="azul" onclick="aplicarTema('azul')">
+              <div class="tema-bolinha" style="background:linear-gradient(135deg,#5B8DEF,#2E4E8C)"></div>
+              <div class="tema-nome">Azul</div>
+            </div>
+            <div class="tema-opcao" data-tema="verde" onclick="aplicarTema('verde')">
+              <div class="tema-bolinha" style="background:linear-gradient(135deg,#3EBD93,#1F6E52)"></div>
+              <div class="tema-nome">Verde</div>
+            </div>
+            <div class="tema-opcao" data-tema="rose" onclick="aplicarTema('rose')">
+              <div class="tema-bolinha" style="background:linear-gradient(135deg,#E893A8,#A84D63)"></div>
+              <div class="tema-nome">Rosé</div>
+            </div>
+            <div class="tema-opcao" data-tema="roxo" onclick="aplicarTema('roxo')">
+              <div class="tema-bolinha" style="background:linear-gradient(135deg,#9B7EDE,#5C3F9E)"></div>
+              <div class="tema-nome">Roxo</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
           <div class="ct">📸 Fotos do Salão</div>
           <div style="font-size:.72rem;color:var(--t3);margin-bottom:12px">Aparecem pros clientes na tela de agendamento. Até 12 fotos, 8MB cada.</div>
           <input type="file" id="cfg-foto-input" accept="image/*" style="display:none" onchange="enviarFotoSalao(this)"/>
@@ -980,6 +1038,20 @@ var API = localStorage.getItem('bpro_api') || API_FIXA;
 var TK  = localStorage.getItem('bpro_tk')  || '';
 var DEMO = false; // nunca entra em demo se API_FIXA estiver definida
 var PROS = [], SVCS = [], CLIS = [];
+
+// Tema de cor — restaura o escolhido antes de qualquer coisa aparecer, pra
+// não dar um "flash" da cor padrão e trocar de repente.
+var TEMA_SALVO = localStorage.getItem('bpro_tema') || '';
+if (TEMA_SALVO) document.body.classList.add('tema-' + TEMA_SALVO);
+
+function aplicarTema(tema) {
+  document.body.classList.remove('tema-azul', 'tema-verde', 'tema-rose', 'tema-roxo');
+  if (tema) document.body.classList.add('tema-' + tema);
+  localStorage.setItem('bpro_tema', tema);
+  document.querySelectorAll('.tema-opcao').forEach(function(el){
+    el.classList.toggle('on', el.dataset.tema === tema);
+  });
+}
 
 // Login social — o Client ID do Google é seguro de deixar público (é
 // assim que a Google espera que funcione). Troque pelos valores reais
@@ -1486,7 +1558,7 @@ function nav(page, el) {
   if (tbTitle) tbTitle.textContent = PAGE_TITLES[page] || page;
 
   // Ações especiais por página
-  if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); }
+  if (page==='config') { updateApiStatus(); loadUsuarios(); preencherLinkAgendamento(); carregarHorarioFuncionamento(); aplicarTema(TEMA_SALVO); }
   if (page==='comandas') { loadComandas(); loadResumoDiaComandas(); }
   if (page==='super-admin') { loadSuperAdminSaloes(); }
 
@@ -6324,12 +6396,15 @@ function toggleTipoAcesso() {
   document.getElementById('nu-permissoes-wrap').style.display = mostrarPersonalizacao ? 'block' : 'none';
   document.getElementById('nu-profissional-wrap').style.display = isAdmin ? 'none' : 'block';
 
-  document.getElementById('tipo-admin-lbl').style.background = isAdmin ? '#EDE9FF' : '';
+  document.getElementById('tipo-admin-lbl').style.background = isAdmin ? 'rgba(201,169,110,.18)' : '';
   document.getElementById('tipo-admin-lbl').style.borderColor = isAdmin ? 'var(--ac)' : 'var(--bd)';
-  document.getElementById('tipo-recepcionista-lbl').style.background = isRecepcionista ? '#EDE9FF' : '';
+  document.getElementById('tipo-admin-lbl').style.color = isAdmin ? 'var(--tx)' : '';
+  document.getElementById('tipo-recepcionista-lbl').style.background = isRecepcionista ? 'rgba(201,169,110,.18)' : '';
   document.getElementById('tipo-recepcionista-lbl').style.borderColor = isRecepcionista ? 'var(--ac)' : 'var(--bd)';
-  document.getElementById('tipo-custom-lbl').style.background = (!isAdmin && !isRecepcionista) ? '#EDE9FF' : '';
+  document.getElementById('tipo-recepcionista-lbl').style.color = isRecepcionista ? 'var(--tx)' : '';
+  document.getElementById('tipo-custom-lbl').style.background = (!isAdmin && !isRecepcionista) ? 'rgba(201,169,110,.18)' : '';
   document.getElementById('tipo-custom-lbl').style.borderColor = (!isAdmin && !isRecepcionista) ? 'var(--ac)' : 'var(--bd)';
+  document.getElementById('tipo-custom-lbl').style.color = (!isAdmin && !isRecepcionista) ? 'var(--tx)' : '';
 
   // Ao escolher "Recepcionista", pré-marca o modelo recomendado — a pessoa
   // ainda pode ajustar manualmente antes de salvar.
@@ -6345,7 +6420,8 @@ function toggleTipoAcesso() {
 function updatePermLabel(cb) {
   var lbl = cb.closest('label');
   lbl.style.borderColor = cb.checked ? 'var(--ac)' : 'var(--bd)';
-  lbl.style.background = cb.checked ? '#EDE9FF' : '';
+  lbl.style.background = cb.checked ? 'rgba(201,169,110,.18)' : '';
+  lbl.style.color = cb.checked ? 'var(--tx)' : '';
 }
 
 // Abre o modal de novo usuário já preenchendo a lista de profissionais pra vincular
@@ -6513,10 +6589,12 @@ function abrirEditPerms(uid, nome) {
       cb.checked = perms.indexOf(cb.value) >= 0;
       var lbl = cb.closest('label');
       lbl.style.borderColor = cb.checked ? 'var(--ac)' : 'var(--bd)';
-      lbl.style.background  = cb.checked ? '#EDE9FF'  : '';
+      lbl.style.background  = cb.checked ? 'rgba(201,169,110,.18)' : '';
+      lbl.style.color       = cb.checked ? 'var(--tx)' : '';
       cb.onchange = function() {
         lbl.style.borderColor = this.checked ? 'var(--ac)' : 'var(--bd)';
-        lbl.style.background  = this.checked ? '#EDE9FF'  : '';
+        lbl.style.background  = this.checked ? 'rgba(201,169,110,.18)' : '';
+        lbl.style.color       = this.checked ? 'var(--tx)' : '';
       };
     });
     document.getElementById('ep-fechar-comissao').checked = perms.indexOf('fechar_comissao') >= 0;
@@ -7596,7 +7674,7 @@ function dispensarBannerPWA() {
   <div class="mbox lg">
     <div class="mh"><span class="mt">Novo Usuário</span><button class="mx" onclick="closeM('m-novo-user')">✕</button></div>
     <div class="mb">
-      <div style="background:#EDE9FF;border-radius:var(--rs);padding:10px 12px;font-size:.78rem;color:#6C63FF;margin-bottom:14px">
+      <div style="background:rgba(201,169,110,.12);border:1px solid rgba(201,169,110,.3);border-radius:var(--rs);padding:10px 12px;font-size:.78rem;color:var(--tx);margin-bottom:14px">
         ℹ️ Configure o acesso para cada funcionário. O Admin tem acesso total e não pode ser limitado.
       </div>
       <div class="fr">
@@ -7616,7 +7694,7 @@ function dispensarBannerPWA() {
             <input type="radio" name="nu-tipo" value="recepcionista" id="tipo-recepcionista" onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
             <div><div style="font-weight:600">Recepcionista</div><div style="font-size:.7rem;color:var(--t2)">Modelo pronto</div></div>
           </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--ac);border-radius:var(--rs);flex:1;background:#EDE9FF;transition:all .15s" id="tipo-custom-lbl">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;padding:8px 14px;border:1.5px solid var(--ac);border-radius:var(--rs);flex:1;background:rgba(201,169,110,.18);color:var(--tx);transition:all .15s" id="tipo-custom-lbl">
             <input type="radio" name="nu-tipo" value="custom" id="tipo-custom" checked onchange="toggleTipoAcesso()" style="accent-color:var(--ac)"/>
             <div><div style="font-weight:600">Personalizado</div><div style="font-size:.7rem;color:var(--t2)">Você escolhe</div></div>
           </label>
@@ -7635,7 +7713,7 @@ function dispensarBannerPWA() {
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
             <input type="checkbox" value="dashboard" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📊 Dashboard
           </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--ac);border-radius:var(--rs);cursor:pointer;font-size:.82rem;background:#EDE9FF;transition:border-color .15s">
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--ac);border-radius:var(--rs);cursor:pointer;font-size:.82rem;background:rgba(201,169,110,.18);color:var(--tx);transition:border-color .15s">
             <input type="checkbox" value="agenda" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📅 Agenda
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
