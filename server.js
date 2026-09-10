@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.28.0-vitrine-agendamento' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.29.0-credito-cliente' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1478,6 +1478,47 @@ app.get('/api/clientes/:id/pacotes', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── CRÉDITO DO CLIENTE ────────────────────────────────
+// Diferente de "fiado" (cliente deve pro salão), isso é o contrário: o
+// cliente tem um saldo A FAVOR (ex.: pagou um valor adiantado, ou sobrou
+// troco combinado como crédito). Fica guardado no próprio cliente, e
+// qualquer lançamento (positivo pra adicionar, negativo pra usar/corrigir)
+// fica registrado numa tabela separada — dá pra ver depois de onde veio
+// cada centavo daquele saldo.
+app.get('/api/clientes/:id/credito', auth, async (req, res) => {
+  try {
+    const { data: cliente } = await supabase.from('clientes')
+      .select('saldo_credito').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+    const { data: historico } = await supabase.from('movimentacoes_credito_cliente')
+      .select('valor, tipo, motivo, created_at')
+      .eq('cliente_id', req.params.id).eq('salao_id', req.salao_id)
+      .order('created_at', { ascending: false }).limit(30);
+
+    res.json({ saldo: Number(cliente.saldo_credito || 0), historico: historico || [] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/clientes/:id/credito', auth, async (req, res) => {
+  const { valor, motivo } = req.body;
+  if (!valor || Number(valor) <= 0) return res.status(422).json({ error: 'Informe um valor maior que zero' });
+  try {
+    const { data: cliente } = await supabase.from('clientes')
+      .select('saldo_credito').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+    const novoSaldo = Number(cliente.saldo_credito || 0) + Number(valor);
+    await supabase.from('clientes').update({ saldo_credito: novoSaldo }).eq('id', req.params.id);
+    await supabase.from('movimentacoes_credito_cliente').insert({
+      salao_id: req.salao_id, cliente_id: req.params.id, valor: Number(valor),
+      tipo: 'adicionado', motivo: motivo || null, criado_por: req.user.id
+    });
+
+    res.status(201).json({ saldo: novoSaldo });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════
 // CLIENTES
 // ═══════════════════════════════════════════════════
@@ -2273,6 +2314,33 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
           error: 'A soma das formas de pagamento (' + somaFormas.toFixed(2) + ') não bate com o valor total (' + Number(data.valor_total || 0).toFixed(2) + ')'
         });
       }
+    }
+
+    // Cliente pagando (total ou parte) com o saldo de crédito que já tinha
+    // guardado — desconta do saldo dele na hora, só depois de confirmar
+    // que dá pra cobrir o valor usado.
+    let valorCreditoUsado = 0;
+    if (marcarComoPago) {
+      if (ehPagamentoDividido) {
+        const linhaCredito = formas_pagamento.find(fp => fp.forma === 'Credito_Cliente');
+        if (linhaCredito) valorCreditoUsado = Number(linhaCredito.valor || 0);
+      } else if (forma_pgto === 'Credito_Cliente') {
+        valorCreditoUsado = Number(data.valor_total || 0);
+      }
+    }
+    if (valorCreditoUsado > 0) {
+      const { data: cliente } = await supabase.from('clientes')
+        .select('saldo_credito').eq('id', data.cliente_id).eq('salao_id', req.salao_id).single();
+      const saldoAtual = Number(cliente?.saldo_credito || 0);
+      if (saldoAtual < valorCreditoUsado - 0.01) {
+        return res.status(422).json({ error: 'Cliente só tem R$ ' + saldoAtual.toFixed(2).replace('.', ',') + ' de crédito — não dá pra usar R$ ' + valorCreditoUsado.toFixed(2).replace('.', ',') });
+      }
+      const novoSaldo = Number((saldoAtual - valorCreditoUsado).toFixed(2));
+      await supabase.from('clientes').update({ saldo_credito: novoSaldo }).eq('id', data.cliente_id);
+      await supabase.from('movimentacoes_credito_cliente').insert({
+        salao_id: req.salao_id, cliente_id: data.cliente_id, valor: -valorCreditoUsado,
+        tipo: 'usado', motivo: 'Usado no atendimento de ' + new Date().toLocaleDateString('pt-BR'), criado_por: req.user.id
+      });
     }
 
     // Atualiza lancamento — já reflete o valor com desconto (se algum foi aplicado)
