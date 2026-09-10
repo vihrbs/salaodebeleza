@@ -5,6 +5,8 @@ const jwt      = require('jsonwebtoken');
 const crypto   = require('crypto');
 const fs       = require('fs');
 const path     = require('path');
+const { OAuth2Client } = require('google-auth-library'); // verificar login com Google
+const jwksClient = require('jwks-rsa'); // verificar login com Apple (busca a chave pública deles)
 
 // ── LOGS EM TEMPO REAL (buffer em memória, só pra super admin ver) ──
 // Guarda os últimos erros do sistema pra ficar visível no painel de admin
@@ -365,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.23.1-performance' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.28.0-vitrine-agendamento' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -550,6 +552,143 @@ Acesse o Railway para ver os dados completos.`;
     } catch(e) { console.error('Erro ao enviar Telegram:', e.message); }
   }
 }
+
+// ── LOGIN SOCIAL (Google / Apple) ────────────────────
+// Cria salão + usuário do zero na hora, igual o /register normal, só que
+// sem senha (login sempre por Google/Apple depois) e com e-mail já
+// verificado de cara (a própria Google/Apple já confirmaram o e-mail —
+// não faz sentido pedir código de verificação de novo).
+async function criarSalaoESocialUsuario({ nome_salao, nome, email, googleId, appleId }) {
+  let slug = slugify(nome_salao);
+  const { count } = await supabase.from('saloes').select('id', { count: 'exact' }).like('slug', slug + '%');
+  if (count > 0) slug = slug + '-' + (count + 1);
+
+  const trial_ate = new Date();
+  trial_ate.setDate(trial_ate.getDate() + 14);
+
+  const { data: plano } = await supabase.from('planos').select('id').eq('nome', 'Starter').single();
+  const { data: salao, error: salaoErr } = await supabase.from('saloes')
+    .insert({ nome: nome_salao, slug, plano_id: plano?.id, trial_ate }).select().single();
+  if (salaoErr) throw salaoErr;
+
+  // Senha aleatória, nunca usada de verdade — a conta só loga via
+  // Google/Apple. Existe só porque a coluna não aceita nulo.
+  const senha_hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
+  const { data: usuario, error: userErr } = await supabase.from('usuarios')
+    .insert({
+      salao_id: salao.id, nome, email, senha_hash, perfil: 'admin', email_verificado: true,
+      google_id: googleId || null, apple_id: appleId || null
+    })
+    .select('id, nome, email, perfil, salao_id, email_verificado').single();
+  if (userErr) throw userErr;
+
+  notificarNovoCadastro(salao.nome, nome, email, null).catch(() => {});
+  return { salao, usuario };
+}
+
+app.post('/api/auth/google', async (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID) {
+    return res.status(500).json({ error: 'Login com Google ainda não foi configurado no servidor' });
+  }
+  const { credential, nome_salao } = req.body;
+  if (!credential) return res.status(422).json({ error: 'Token do Google ausente' });
+
+  try {
+    const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload();
+    if (!payload.email_verified) return res.status(403).json({ error: 'Seu e-mail do Google não está verificado' });
+
+    const googleId = payload.sub;
+    const email = payload.email;
+    const nome = payload.name || email.split('@')[0];
+
+    // Já existe conta com esse Google ou esse e-mail (ex.: criou por senha antes)?
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('id, nome, email, perfil, salao_id, profissional_id, email_verificado, super_admin, google_id, saloes(id, nome, slug, trial_ate)')
+      .or('google_id.eq.' + googleId + ',email.eq.' + email).limit(1).maybeSingle();
+
+    if (usuario) {
+      if (!usuario.google_id) await supabase.from('usuarios').update({ google_id: googleId }).eq('id', usuario.id);
+      await supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id);
+      const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ token, usuario, novo_cadastro: false });
+    }
+
+    // Conta nova — se ainda não veio o nome do salão, devolve os dados do
+    // Google pro frontend pedir só isso antes de finalizar
+    if (!nome_salao) {
+      return res.json({ precisa_completar_cadastro: true, email, nome });
+    }
+
+    const criado = await criarSalaoESocialUsuario({ nome_salao, nome, email, googleId });
+    const token = jwt.sign({ sub: criado.usuario.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token, usuario: { ...criado.usuario, saloes: criado.salao }, salao: criado.salao, novo_cadastro: true });
+  } catch(e) {
+    console.error('Erro no login com Google:', e.message);
+    res.status(401).json({ error: 'Não foi possível verificar sua conta Google. Tente de novo.' });
+  }
+});
+
+// Busca a chave pública da Apple pra validar a assinatura do token (a
+// Apple roda um servidor de chaves — jwks-rsa cuida do cache/rotação disso)
+const appleJwksClient = jwksClient({ jwksUri: 'https://appleid.apple.com/auth/keys' });
+function getAppleSigningKey(kid) {
+  return new Promise((resolve, reject) => {
+    appleJwksClient.getSigningKey(kid, (err, key) => {
+      if (err) return reject(err);
+      resolve(key.getPublicKey());
+    });
+  });
+}
+
+app.post('/api/auth/apple', async (req, res) => {
+  if (!process.env.APPLE_CLIENT_ID) {
+    return res.status(500).json({ error: 'Login com Apple ainda não foi configurado no servidor' });
+  }
+  const { id_token, nome_salao, nome: nomeInformado, email: emailInformado } = req.body;
+  if (!id_token) return res.status(422).json({ error: 'Token da Apple ausente' });
+
+  try {
+    const decoded = jwt.decode(id_token, { complete: true });
+    if (!decoded) throw new Error('Token da Apple inválido');
+    const publicKey = await getAppleSigningKey(decoded.header.kid);
+    const payload = jwt.verify(id_token, publicKey, {
+      algorithms: ['RS256'], audience: process.env.APPLE_CLIENT_ID, issuer: 'https://appleid.apple.com'
+    });
+
+    const appleId = payload.sub;
+    // A Apple só manda o e-mail (e o nome, separado, fora do token) na
+    // PRIMEIRA vez que a pessoa autoriza — depois disso o app precisa ter
+    // guardado isso já. Por isso aceita vir do corpo da requisição também
+    // (o frontend manda no primeiro login), com o token como prioridade.
+    const email = payload.email || emailInformado;
+    if (!email) return res.status(422).json({ error: 'Não recebemos seu e-mail da Apple — tenta entrar de novo' });
+    const nome = nomeInformado || email.split('@')[0];
+
+    const { data: usuario } = await supabase.from('usuarios')
+      .select('id, nome, email, perfil, salao_id, profissional_id, email_verificado, super_admin, apple_id, saloes(id, nome, slug, trial_ate)')
+      .or('apple_id.eq.' + appleId + ',email.eq.' + email).limit(1).maybeSingle();
+
+    if (usuario) {
+      if (!usuario.apple_id) await supabase.from('usuarios').update({ apple_id: appleId }).eq('id', usuario.id);
+      await supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id);
+      const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ token, usuario, novo_cadastro: false });
+    }
+
+    if (!nome_salao) {
+      return res.json({ precisa_completar_cadastro: true, email, nome });
+    }
+
+    const criado = await criarSalaoESocialUsuario({ nome_salao, nome, email, appleId });
+    const token = jwt.sign({ sub: criado.usuario.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token, usuario: { ...criado.usuario, saloes: criado.salao }, salao: criado.salao, novo_cadastro: true });
+  } catch(e) {
+    console.error('Erro no login com Apple:', e.message);
+    res.status(401).json({ error: 'Não foi possível verificar sua conta Apple. Tente de novo.' });
+  }
+});
 
 // LOGIN
 app.post('/api/auth/login', async (req, res) => {
@@ -3448,8 +3587,8 @@ app.get('/api/saloes/meu', auth, async (req, res) => {
 });
 
 app.put('/api/saloes/meu', auth, async (req, res) => {
-  const { nome, telefone, whatsapp, email, endereco, cidade, estado, configuracoes } = req.body;
-  const updates = { nome, telefone, whatsapp, email, endereco, cidade, estado };
+  const { nome, telefone, whatsapp, email, endereco, cidade, estado, configuracoes, sobre } = req.body;
+  const updates = { nome, telefone, whatsapp, email, endereco, cidade, estado, sobre };
   if (configuracoes) {
     // Faz merge com as configurações existentes em vez de substituir tudo —
     // evita que salvar o horário de funcionamento apague a taxa da maquininha
@@ -3578,6 +3717,65 @@ app.delete('/api/profissionais/:id/foto', auth, requirePermissao('profissionais'
       try { await supabase.storage.from('fotos-salao').remove([prof.foto_caminho]); } catch(e) {}
     }
     await supabase.from('profissionais').update({ foto_url: null, foto_caminho: null }).eq('id', req.params.id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Autoatendimento — troca SÓ a própria foto, sem precisar da permissão de
+// "Profissionais" (que dá acesso a editar todo mundo, inclusive comissão
+// de outra pessoa). Usa o profissional_id vinculado à PRÓPRIA conta
+// logada, nunca um id vindo da URL — assim, mesmo tentando adulterar a
+// requisição, não tem como trocar a foto de outra pessoa por essa rota.
+app.post('/api/meu-perfil/foto', auth, async (req, res) => {
+  if (!req.user.profissional_id) {
+    return res.status(422).json({ error: 'Sua conta não está vinculada a um profissional' });
+  }
+  const { imagem_base64 } = req.body;
+  if (!imagem_base64) return res.status(422).json({ error: 'Envie a imagem em base64' });
+  try {
+    const { data: prof } = await supabase.from('profissionais')
+      .select('id, foto_caminho').eq('id', req.user.profissional_id).eq('salao_id', req.salao_id).single();
+    if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
+
+    const match = imagem_base64.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (!match) return res.status(422).json({ error: 'Formato de imagem inválido' });
+    const tipoMime = match[1];
+    const extensao = tipoMime.split('/')[1] || 'jpg';
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length > 8 * 1024 * 1024) {
+      return res.status(422).json({ error: 'Imagem muito grande (máximo 8MB). Tente comprimir antes de enviar.' });
+    }
+
+    if (prof.foto_caminho) {
+      try { await supabase.storage.from('fotos-salao').remove([prof.foto_caminho]); } catch(e) {}
+    }
+
+    const caminho = 'profissionais/' + prof.id + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + extensao;
+    const { error: erroUpload } = await supabase.storage
+      .from('fotos-salao').upload(caminho, buffer, { contentType: tipoMime, upsert: false });
+    if (erroUpload) throw erroUpload;
+
+    const { data: urlPublica } = supabase.storage.from('fotos-salao').getPublicUrl(caminho);
+    await supabase.from('profissionais')
+      .update({ foto_url: urlPublica.publicUrl, foto_caminho: caminho }).eq('id', prof.id);
+
+    res.status(201).json({ foto_url: urlPublica.publicUrl });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/meu-perfil/foto', auth, async (req, res) => {
+  if (!req.user.profissional_id) {
+    return res.status(422).json({ error: 'Sua conta não está vinculada a um profissional' });
+  }
+  try {
+    const { data: prof } = await supabase.from('profissionais')
+      .select('foto_caminho').eq('id', req.user.profissional_id).eq('salao_id', req.salao_id).single();
+    if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
+
+    if (prof.foto_caminho) {
+      try { await supabase.storage.from('fotos-salao').remove([prof.foto_caminho]); } catch(e) {}
+    }
+    await supabase.from('profissionais').update({ foto_url: null, foto_caminho: null }).eq('id', req.user.profissional_id);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -3876,12 +4074,70 @@ app.get('/api/publico/salao/:slug', async (req, res) => {
     // um UUID; senão, busca só pelo slug.
     const pareceUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parametro);
     const query = supabase.from('saloes')
-      .select('id, nome, slug, telefone, endereco, cidade, fotos, configuracoes');
+      .select('id, nome, slug, telefone, endereco, cidade, fotos, configuracoes, sobre');
     const { data, error } = pareceUuid
       ? await query.or(`id.eq.${parametro},slug.eq.${parametro}`).single()
       : await query.eq('slug', parametro).single();
     if (error || !data) return res.status(404).json({ error: 'Salão não encontrado' });
-    res.json(data);
+
+    // Monta o horário dos 7 dias da semana pro cliente ver de cara — usa o
+    // horário específico do dia se tiver configurado, senão cai pro
+    // horário único + dias fechados (jeito antigo, continua funcionando
+    // pra quem nunca configurou dia por dia).
+    const cfg = data.configuracoes || {};
+    const horariosPorDia = cfg.horarios_por_dia || {};
+    const diasFechadoAntigos = cfg.dias_fechado || [];
+    const nomesDias = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+    const semana = nomesDias.map(function(nome, i) {
+      const configDia = horariosPorDia[i];
+      if (configDia) {
+        return { dia: nome, fechado: !!configDia.fechado, abre: configDia.abre || null, fecha: configDia.fecha || null };
+      }
+      const fechado = diasFechadoAntigos.includes(i);
+      return { dia: nome, fechado, abre: fechado ? null : (cfg.horario_abre || '08:00'), fecha: fechado ? null : (cfg.horario_fecha || '19:00') };
+    });
+
+    // Calcula "aberto agora" no fuso de Brasília, comparando com o horário de hoje
+    const agora = new Date(Date.now() - 3 * 60 * 60 * 1000); // UTC-3
+    const diaHoje = semana[agora.getUTCDay()];
+    let abertoAgora = false;
+    if (diaHoje && !diaHoje.fechado && diaHoje.abre && diaHoje.fecha) {
+      const minutosAgora = agora.getUTCHours() * 60 + agora.getUTCMinutes();
+      const [ha, ma] = diaHoje.abre.split(':').map(Number);
+      const [hf, mf] = diaHoje.fecha.split(':').map(Number);
+      abertoAgora = minutosAgora >= (ha * 60 + ma) && minutosAgora < (hf * 60 + mf);
+    }
+
+    res.json({ ...data, horarios_semana: semana, aberto_agora: abertoAgora });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Avaliações públicas do salão — mostra pros clientes ANTES de agendar,
+// tipo prova social (as pessoas que já avaliaram bem). Só mostra quem deu
+// nota 4 ou 5 — nota baixa fica só entre o salão e o cliente, não é
+// exibida publicamente (mesma regra do resto do sistema).
+app.get('/api/publico/avaliacoes/:salaoId', async (req, res) => {
+  try {
+    const { data: avaliacoes } = await supabase.from('avaliacoes')
+      .select('nota, comentario, created_at, clientes(nome)')
+      .eq('salao_id', req.params.salaoId).gte('nota', 4)
+      .order('created_at', { ascending: false }).limit(20);
+
+    const { data: todasNotas } = await supabase.from('avaliacoes')
+      .select('nota').eq('salao_id', req.params.salaoId);
+    const total = (todasNotas || []).length;
+    const media = total > 0 ? (todasNotas.reduce((s, a) => s + Number(a.nota || 0), 0) / total) : 0;
+
+    // Só mostra primeiro nome + inicial do sobrenome — prova social sem
+    // expor o nome completo de ninguém publicamente
+    const lista = (avaliacoes || []).map(a => {
+      const nomeCompleto = a.clientes?.nome || 'Cliente';
+      const partes = nomeCompleto.trim().split(' ');
+      const nomeExibido = partes.length > 1 ? partes[0] + ' ' + partes[partes.length - 1][0] + '.' : partes[0];
+      return { nome: nomeExibido, nota: a.nota, comentario: a.comentario, data: a.created_at };
+    });
+
+    res.json({ media, total, avaliacoes: lista });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -3973,17 +4229,26 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
     // Busca horário de funcionamento configurado (padrão 08:00-19:00 se não definido)
     const { data: salao } = await supabase.from('saloes')
       .select('configuracoes').eq('id', req.params.salaoId).single();
-    const horaAbreCfg  = salao?.configuracoes?.horario_abre  || '08:00';
-    const horaFechaCfg = salao?.configuracoes?.horario_fecha || '19:00';
+    const cfg = salao?.configuracoes || {};
+    const diaSemana = new Date(data + 'T12:00:00').getDay();
+
+    // Horário específico desse dia da semana, se configurado — senão cai
+    // pro horário único + lista de dias fechados (jeito antigo)
+    const configDia = (cfg.horarios_por_dia || {})[diaSemana];
+    let horaAbreCfg, horaFechaCfg, fechado;
+    if (configDia) {
+      fechado = !!configDia.fechado;
+      horaAbreCfg = configDia.abre || '08:00';
+      horaFechaCfg = configDia.fecha || '19:00';
+    } else {
+      fechado = (cfg.dias_fechado || []).includes(diaSemana);
+      horaAbreCfg = cfg.horario_abre || '08:00';
+      horaFechaCfg = cfg.horario_fecha || '19:00';
+    }
+    if (fechado) return res.json({ horarios: [], fechado: true });
+
     const [horaAbre]  = horaAbreCfg.split(':').map(Number);
     const [horaFecha] = horaFechaCfg.split(':').map(Number);
-
-    // Verifica se o salão funciona nesse dia da semana (padrão: todos os dias)
-    const diasFechado = salao?.configuracoes?.dias_fechado || []; // ex: [0] = domingo fechado
-    const diaSemana = new Date(data + 'T12:00:00').getDay();
-    if (diasFechado.includes(diaSemana)) {
-      return res.json({ horarios: [], fechado: true });
-    }
 
     // Busca agendamentos já marcados nesse dia para esse profissional
     // Janela ampliada em UTC para cobrir o dia completo no fuso do Brasil (UTC-3)
