@@ -57,6 +57,72 @@ header{
 .salon-meta span{display:inline-flex; align-items:center; gap:4px}
 @keyframes riseIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)}}
 
+/* VITRINE — cabeçalho completo do salão (nome, status, avaliação, CTA) */
+.vitrine-avatar{
+  width:64px; height:64px; border-radius:50%; object-fit:cover;
+  margin:0 auto 12px; display:block; box-shadow:var(--shadow-lift);
+  opacity:0; animation:riseIn .6s ease-out 0s forwards;
+}
+.vitrine-status{
+  display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:700;
+  padding:4px 11px; border-radius:50px; margin-top:2px;
+}
+.vitrine-status.aberto{background:rgba(76,175,109,.12); color:#3E8A5C}
+.vitrine-status.fechado{background:rgba(200,80,70,.1); color:#B8483A}
+.vitrine-status-dot{width:6px; height:6px; border-radius:50%; background:currentColor}
+.vitrine-rating{
+  display:inline-flex; align-items:center; gap:4px; font-size:.78rem; font-weight:700; color:var(--ink);
+}
+.vitrine-cta-row{display:flex; gap:10px; margin:16px 0 6px; opacity:0; animation:riseIn .6s ease-out .4s forwards}
+.vitrine-cta-row .btn{flex:1}
+.vitrine-call{
+  width:44px; height:44px; border-radius:50%; border:1.5px solid var(--line);
+  display:flex; align-items:center; justify-content:center; font-size:1.1rem;
+  background:var(--card); flex-shrink:0; text-decoration:none;
+}
+.vitrine-call:hover{border-color:var(--accent); background:var(--accent-soft)}
+
+/* SOBRE */
+.vitrine-sobre{
+  font-size:.85rem; line-height:1.6; color:var(--ink); opacity:.85;
+  padding:16px 0; border-top:1px solid var(--line); margin-top:8px;
+}
+
+/* SERVIÇOS (preview, na vitrine) */
+.svc-preview-scroll{display:flex; gap:10px; overflow-x:auto; padding:4px 2px 12px; scrollbar-width:none}
+.svc-preview-scroll::-webkit-scrollbar{display:none}
+.svc-preview-card{
+  flex:0 0 auto; background:var(--card); border:1px solid var(--line); border-radius:var(--rs);
+  padding:12px 16px; min-width:140px;
+}
+.svc-preview-nome{font-size:.8rem; font-weight:600; margin-bottom:3px}
+.svc-preview-preco{font-size:.78rem; color:var(--accent); font-weight:700}
+
+/* HORÁRIOS (tabela da semana completa) */
+.horarios-tabela{border-top:1px solid var(--line); padding-top:14px}
+.horario-linha{
+  display:flex; justify-content:space-between; padding:7px 0; font-size:.8rem;
+}
+.horario-linha.hoje{font-weight:700; color:var(--accent)}
+.horario-linha .hl-status-fechado{color:var(--muted)}
+
+/* AVALIAÇÕES (lista pública) */
+.avaliacao-card{
+  background:var(--card); border:1px solid var(--line); border-radius:var(--rs);
+  padding:14px 16px; margin-bottom:10px;
+}
+.avaliacao-topo{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px}
+.avaliacao-nome{font-size:.82rem; font-weight:700}
+.avaliacao-data{font-size:.68rem; color:var(--muted)}
+.avaliacao-estrelas{color:#E8A94A; font-size:.78rem; margin-bottom:4px}
+.avaliacao-comentario{font-size:.8rem; color:var(--ink); opacity:.85; line-height:1.5}
+
+/* Seção genérica com título + ícone, reutilizada por Sobre/Serviços/Horários/Avaliações */
+.vitrine-secao-titulo{
+  display:flex; align-items:center; gap:8px; font-family:'Fraunces',serif; font-weight:700;
+  font-size:1.05rem; margin-bottom:10px;
+}
+
 /* GALERIA DE FOTOS DO SALÃO */
 .galeria-wrap{opacity:0; animation:riseIn .6s ease-out .45s forwards; margin-bottom:24px}
 .galeria-hero{
@@ -374,10 +440,12 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
 
 <div class="wrap">
   <header>
+    <img class="vitrine-avatar" id="vitrine-avatar" style="display:none" src="" alt=""/>
     <div class="salon-name" id="salon-name">Carregando...</div>
     <div class="salon-underline"></div>
     <div class="salon-sub" id="salon-sub">&nbsp;</div>
     <div class="salon-meta" id="salon-meta"></div>
+    <div id="vitrine-status-wrap"></div>
   </header>
 
   <div class="galeria-wrap" id="galeria-wrap" style="display:none">
@@ -397,6 +465,16 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     <div class="lightbox-contador" id="lightbox-contador"></div>
   </div>
 
+  <div class="vitrine-cta-row">
+    <button class="btn btn-primary" onclick="document.getElementById('steps-ind').scrollIntoView({behavior:'smooth',block:'start'})">Agendar um horário →</button>
+    <a class="vitrine-call" id="vitrine-call" style="display:none" href="#">📞</a>
+  </div>
+
+  <div id="vitrine-sobre-wrap"></div>
+  <div id="vitrine-servicos-wrap"></div>
+  <div id="vitrine-horarios-wrap"></div>
+  <div id="vitrine-avaliacoes-wrap"></div>
+
   <div class="steps-ind" id="steps-ind">
     <div class="step-dot on" data-s="1"></div>
     <div class="step-dot" data-s="2"></div>
@@ -414,7 +492,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     </div>
   </div>
 
-  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.8.0-agendar</div></footer>
+  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.9.0-agendar</div></footer>
 </div>
 
 <a id="wa-fab" class="wa-fab" style="display:none" target="_blank" title="Falar no WhatsApp">
@@ -603,8 +681,7 @@ function init() {
       document.getElementById('salon-name').textContent = salao.nome;
       document.getElementById('salon-sub').textContent = 'Agende seu horário em poucos cliques';
 
-      // Endereço/cidade, com link pro Google Maps — e horário de funcionamento,
-      // se o salão tiver preenchido cada um desses (ambos opcionais)
+      // Endereço/cidade, com link pro Google Maps
       var metaEl = document.getElementById('salon-meta');
       var partesMeta = [];
       if (salao.endereco || salao.cidade) {
@@ -612,21 +689,35 @@ function init() {
         var linkMaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(local);
         partesMeta.push('<a href="' + linkMaps + '" target="_blank">📍 ' + local + '</a>');
       }
-      var horarioAbre = salao.configuracoes && salao.configuracoes.horario_abre;
-      var horarioFecha = salao.configuracoes && salao.configuracoes.horario_fecha;
-      if (horarioAbre && horarioFecha) {
-        partesMeta.push('<span>🕒 ' + horarioAbre + ' às ' + horarioFecha + '</span>');
-      }
       metaEl.innerHTML = partesMeta.join('');
+
+      // "Aberto agora" / "Fechado agora" — calculado no servidor com base
+      // no horário de hoje, pra não depender do relógio (nem do fuso) de
+      // quem está com o celular configurado errado
+      document.getElementById('vitrine-status-wrap').innerHTML =
+        '<span class="vitrine-status ' + (salao.aberto_agora ? 'aberto' : 'fechado') + '">' +
+          '<span class="vitrine-status-dot"></span> ' + (salao.aberto_agora ? 'Aberto agora' : 'Fechado agora') +
+        '</span>';
+
+      // Avatar — usa a primeira foto da galeria como identidade visual
+      // (o sistema ainda não tem upload de logo separado)
+      if (salao.fotos && salao.fotos.length) {
+        var av = document.getElementById('vitrine-avatar');
+        av.src = salao.fotos[0].url; av.style.display = 'block';
+      }
 
       // Galeria de fotos do salão — só aparece se tiver alguma cadastrada
       if (salao.fotos && salao.fotos.length) {
         renderGaleria(salao.fotos, salao.nome || '');
       }
 
-      // Botão flutuante de WhatsApp, só aparece se o salão tiver telefone cadastrado
+      // Botão de ligar + botão flutuante de WhatsApp — os dois usam o
+      // mesmo telefone, só que um chama e o outro abre o WhatsApp
       if (salao.telefone) {
         var numeroLimpo = String(salao.telefone).replace(/\D/g,'');
+        var callBtn = document.getElementById('vitrine-call');
+        callBtn.href = 'tel:' + numeroLimpo;
+        callBtn.style.display = 'flex';
         if (numeroLimpo.length >= 10) {
           if (!numeroLimpo.startsWith('55')) numeroLimpo = '55' + numeroLimpo;
           var fab = document.getElementById('wa-fab');
@@ -635,9 +726,65 @@ function init() {
         }
       }
 
+      // "Sobre" — texto livre que o salão escreveu em Config
+      if (salao.sobre) {
+        document.getElementById('vitrine-sobre-wrap').innerHTML =
+          '<div class="vitrine-sobre"><div class="vitrine-secao-titulo">ℹ️ Sobre</div>' + esc(salao.sobre) + '</div>';
+      }
+
+      // Horários da semana completa — destaca o dia de hoje
+      if (salao.horarios_semana) {
+        var diaHojeIndex = new Date().getDay();
+        var linhasHorario = salao.horarios_semana.map(function(d, i){
+          var texto = d.fechado ? '<span class="hl-status-fechado">Fechado</span>' : (d.abre + ' – ' + d.fecha);
+          return '<div class="horario-linha' + (i === diaHojeIndex ? ' hoje' : '') + '"><span>' + d.dia + '</span><span>' + texto + '</span></div>';
+        }).join('');
+        document.getElementById('vitrine-horarios-wrap').innerHTML =
+          '<div class="horarios-tabela"><div class="vitrine-secao-titulo">🕒 Horários</div>' + linhasHorario + '</div>';
+      }
+
+      // Avaliações públicas — busca à parte, não trava o carregamento do resto
+      fetch(API + '/api/publico/avaliacoes/' + SALAO_ID)
+        .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+        .then(function(dados){ renderAvaliacoesPublicas(dados); })
+        .catch(function(){});
+
       loadServicos();
     })
     .catch(function(){ showError('Não foi possível carregar este salão.'); });
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+function renderServicosPreview(list) {
+  var wrap = document.getElementById('vitrine-servicos-wrap');
+  if (!list || !list.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '<div class="vitrine-secao-titulo">✂️ Serviços</div>' +
+    '<div class="svc-preview-scroll">' +
+    list.map(function(s){
+      return '<div class="svc-preview-card"><div class="svc-preview-nome">' + esc(s.nome) + '</div><div class="svc-preview-preco">R$ ' + Number(s.preco).toFixed(2).replace('.',',') + '</div></div>';
+    }).join('') +
+    '</div>';
+}
+
+function renderAvaliacoesPublicas(dados) {
+  var wrap = document.getElementById('vitrine-avaliacoes-wrap');
+  if (!dados || !dados.total) { wrap.innerHTML = ''; return; }
+
+  var estrelasMedia = '★★★★★'.slice(0, Math.round(dados.media)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(dados.media));
+  var html = '<div class="vitrine-secao-titulo">⭐ Avaliações — ' + dados.media.toFixed(1) + ' <span style="color:#E8A94A;font-size:.85rem">' + estrelasMedia + '</span></div>';
+
+  html += (dados.avaliacoes || []).slice(0, 6).map(function(a){
+    var estrelas = '★★★★★'.slice(0, a.nota) + '☆☆☆☆☆'.slice(0, 5 - a.nota);
+    var dataFormatada = a.data ? new Date(a.data).toLocaleDateString('pt-BR') : '';
+    return '<div class="avaliacao-card">' +
+      '<div class="avaliacao-topo"><span class="avaliacao-nome">' + esc(a.nome) + '</span><span class="avaliacao-data">' + dataFormatada + '</span></div>' +
+      '<div class="avaliacao-estrelas">' + estrelas + '</div>' +
+      (a.comentario ? '<div class="avaliacao-comentario">' + esc(a.comentario) + '</div>' : '') +
+    '</div>';
+  }).join('');
+
+  wrap.innerHTML = html;
 }
 
 function showError(msg) {
@@ -653,6 +800,7 @@ function loadServicos() {
     .then(function(list){
       STATE.servicos = list;
       renderServicos(list);
+      renderServicosPreview(list);
     })
     .catch(function(){ showError('Erro ao carregar serviços.'); });
 }
@@ -666,7 +814,7 @@ function renderServicos(list) {
       html += '<div class="svc-item" onclick="selectServico(\'' + s.id + '\')">' +
         '<div class="svc-icon">' + iconeServico(s.categoria) + '</div>' +
         '<div class="svc-info"><div class="svc-name">' + s.nome + '</div>' +
-        '<div class="svc-meta">' + (s.categoria||'') + ' · ' + s.duracao_min + ' min</div></div>' +
+        '<div class="svc-meta">' + (s.categoria||'') + (s.duracao_min ? ' · ' + s.duracao_min + ' min' : '') + '</div></div>' +
         '<div class="svc-price">R$ ' + Number(s.preco).toFixed(2).replace('.',',') + '</div></div>';
     });
   }
