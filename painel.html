@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.29.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.30.0-frontend</div>
       </div>
     </div>
 
@@ -2144,6 +2144,9 @@ function abrirModalConcluir(id) {
   document.getElementById('concluir-id').value = id;
   document.getElementById('fpg-btn-saldo-cliente').style.display = 'none';
   document.getElementById('fpg-btn-saldo-cliente').textContent = '🎁 Usar saldo do cliente';
+  document.getElementById('concluir-sessoes-pacote-wrap').style.display = 'none';
+  SESSOES_PACOTE_CONCLUIR_UTILIZADAS = {};
+  CONCLUIR_AG_SERVICOS_ATUAL = [];
   // Busca dados do agendamento para mostrar no modal
   apiFetch('/api/agendamentos?id=' + id).then(function(r){
     var ag = r && r[0];
@@ -2155,9 +2158,13 @@ function abrirModalConcluir(id) {
              '<div style="margin-top:4px;font-size:.78rem;font-weight:700;color:var(--gold)">Total: ' + brl(ag.valor_total) + '</div>';
       document.getElementById('concluir-valor-original').value = ag.valor_total || 0;
 
-      // Se o cliente tem saldo em crédito, mostra a opção de usar — some
-      // se não tiver nada, pra não poluir a tela com uma opção que não serve
       if (ag.cliente_id) {
+        // Sessões de pacote — só mostra se algum dos serviços DESSE
+        // atendimento tiver sessão disponível num pacote ativo do cliente
+        apiFetch('/api/clientes/' + ag.cliente_id + '/pacotes').then(function(pacotesCliente){
+          renderSessoesPacoteConcluir(ag, pacotesCliente || []);
+        }).catch(function(){});
+
         apiFetch('/api/clientes/' + ag.cliente_id + '/credito').then(function(cred){
           if (cred && cred.saldo > 0) {
             var btnCredito = document.getElementById('fpg-btn-saldo-cliente');
@@ -2327,24 +2334,96 @@ function selecionarFpg(btn) {
   }
 }
 
+// Sessões de pacote disponíveis pro atendimento que está sendo concluído
+// — só entram aqui os serviços QUE JÁ ESTÃO nesse atendimento (não faz
+// sentido oferecer sessão de um serviço que nem foi feito hoje)
+var SESSOES_PACOTE_CONCLUIR_UTILIZADAS = {}; // { agendamento_servico_id: pacote_cliente_id }
+var CONCLUIR_AG_SERVICOS_ATUAL = []; // guarda os serviços do atendimento em aberto, pra calcular o valor pago via pacote na hora de confirmar
+
+function renderSessoesPacoteConcluir(ag, pacotesCliente) {
+  CONCLUIR_AG_SERVICOS_ATUAL = ag.agendamento_servicos || [];
+  var hoje = today();
+  var servicosDoAtendimento = ag.agendamento_servicos || [];
+  var disponiveis = [];
+
+  pacotesCliente.forEach(function(pc){
+    if (pc.status !== 'ativo') return;
+    if (pc.validade && pc.validade < hoje) return;
+    (pc.sessoes || []).forEach(function(s){
+      var restantes = (s.qtd_total || 0) - (s.qtd_usada || 0);
+      if (restantes <= 0) return;
+      // Só oferece se esse serviço realmente está nesse atendimento
+      var linhaCorrespondente = servicosDoAtendimento.find(function(as){ return as.servico_id === s.servico_id && !as.pago_via_pacote; });
+      if (!linhaCorrespondente) return;
+      disponiveis.push({
+        pacote_cliente_id: pc.id, pacote_nome: pc.nome_snapshot || 'Pacote',
+        agendamento_servico_id: linhaCorrespondente.id,
+        servico_nome: (linhaCorrespondente.servicos && linhaCorrespondente.servicos.nome) || 'Serviço',
+        restantes: restantes
+      });
+    });
+  });
+
+  var wrap = document.getElementById('concluir-sessoes-pacote-wrap');
+  if (!disponiveis.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = '<label class="fl">🎁 Sessões de pacote disponíveis</label>' +
+    disponiveis.map(function(s){
+      var jaUsando = SESSOES_PACOTE_CONCLUIR_UTILIZADAS[s.agendamento_servico_id] === s.pacote_cliente_id;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg3);border-radius:var(--rs);margin-bottom:6px;font-size:.78rem">' +
+        '<div><strong>' + esc(s.servico_nome) + '</strong><div style="font-size:.68rem;color:var(--t3)">' + esc(s.pacote_nome) + ' · ' + s.restantes + ' restante(s)</div></div>' +
+        (jaUsando
+          ? '<span style="color:var(--ok);font-weight:700;font-size:.74rem">✅ Usando</span>'
+          : '<button type="button" class="btn btnp btnsm" onclick="usarSessaoPacoteConcluir(\'' + s.agendamento_servico_id + '\',\'' + s.pacote_cliente_id + '\',' + '\'' + ag.id + '\'' + ')">Usar sessão</button>') +
+      '</div>';
+    }).join('');
+}
+
+function usarSessaoPacoteConcluir(agendamentoServicoId, pacoteClienteId, agendamentoId) {
+  SESSOES_PACOTE_CONCLUIR_UTILIZADAS[agendamentoServicoId] = pacoteClienteId;
+  toast('Sessão de pacote marcada — o valor desse serviço já sai do total ao confirmar ✅', 'ok');
+  apiFetch('/api/agendamentos?id=' + agendamentoId).then(function(r){
+    var ag = r && r[0];
+    if (!ag) return;
+    apiFetch('/api/clientes/' + ag.cliente_id + '/pacotes').then(function(pacotesCliente){
+      renderSessoesPacoteConcluir(ag, pacotesCliente || []);
+    });
+  });
+}
+
+// Soma quanto do total já vai ficar de fora por conta das sessões de
+// pacote marcadas — usado pra bater a validação do que falta pagar
+function valorTotalPagoViaPacoteConcluir() {
+  return Object.keys(SESSOES_PACOTE_CONCLUIR_UTILIZADAS).reduce(function(soma, agSvcId){
+    var linha = CONCLUIR_AG_SERVICOS_ATUAL.find(function(s){ return s.id === agSvcId; });
+    return soma + (linha ? Number(linha.preco || 0) : 0);
+  }, 0);
+}
+
 function confirmarConclusao() {
   var id = document.getElementById('concluir-id').value;
   var desconto = calcularDescontoEmReais();
   var caixinha = parseFloat(document.getElementById('caixinha-input').value) || 0;
   var btn = document.getElementById('btn-concluir-ok');
+  var pacotesUtilizadosPayload = Object.keys(SESSOES_PACOTE_CONCLUIR_UTILIZADAS).map(function(agSvcId){
+    return { agendamento_servico_id: agSvcId, pacote_cliente_id: SESSOES_PACOTE_CONCLUIR_UTILIZADAS[agSvcId] };
+  });
+  var valorPacoteAbatido = valorTotalPagoViaPacoteConcluir();
 
   if (PGTO_DIVIDIDO_ATIVO) {
     var linhasValidas = PGTO_DIVIDIDO_LINHAS.filter(function(l){ return l.valor && l.valor > 0; });
     if (linhasValidas.length < 2) { toast('Adicione pelo menos 2 formas de pagamento com valor, ou volte pra uma forma só','er'); return; }
     var valorOriginal = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
-    var totalAConcluir = Math.max(0, valorOriginal - desconto);
+    var totalAConcluir = Math.max(0, valorOriginal - valorPacoteAbatido - desconto);
     var somaLinhas = linhasValidas.reduce(function(s, l){ return s + l.valor; }, 0);
     if (Math.abs(totalAConcluir - somaLinhas) > 0.01) { toast('A soma das formas de pagamento precisa bater com o total ('+brl(totalAConcluir)+')','er'); return; }
 
     btn.disabled = true; btn.textContent = 'Salvando...';
     apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{
       status:'concluido', formas_pagamento: linhasValidas.map(function(l){ return { forma: l.forma, valor: l.valor }; }),
-      pago: true, desconto: desconto > 0 ? desconto : undefined, caixinha: caixinha > 0 ? caixinha : undefined
+      pago: true, desconto: desconto > 0 ? desconto : undefined, caixinha: caixinha > 0 ? caixinha : undefined,
+      pacotes_utilizados: pacotesUtilizadosPayload.length ? pacotesUtilizadosPayload : undefined
     }})
       .then(function(r){ tratarSucessoConclusao(r, false); })
       .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -2358,11 +2437,12 @@ function confirmarConclusao() {
   var ehFiado = fpg === 'fiado';
 
   // Se escolheu pagar tudo com o saldo do cliente, mas o saldo disponível
-  // não cobre o total (com desconto já considerado), avisa e pede pra
-  // usar "dividir pagamento" em vez de deixar faltar sem ninguém notar
+  // não cobre o total (com desconto e sessão de pacote já considerados),
+  // avisa e pede pra usar "dividir pagamento" em vez de deixar faltar
+  // sem ninguém notar
   if (fpg === 'Credito_Cliente') {
     var valorOriginalCred = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
-    var totalComDesconto = Math.max(0, valorOriginalCred - desconto);
+    var totalComDesconto = Math.max(0, valorOriginalCred - valorPacoteAbatido - desconto);
     var saldoDisponivel = parseFloat(fpgBtn.dataset.saldoDisponivel) || 0;
     if (saldoDisponivel < totalComDesconto - 0.01) {
       toast('O cliente só tem ' + brl(saldoDisponivel) + ' de saldo — o total é ' + brl(totalComDesconto) + '. Usa "Dividir pagamento" pra completar com outra forma.', 'er');
@@ -2375,7 +2455,8 @@ function confirmarConclusao() {
   apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{
     status:'concluido', forma_pgto: ehFiado ? undefined : fpg, pago: !ehFiado,
     desconto: desconto > 0 ? desconto : undefined,
-    caixinha: (!ehFiado && caixinha > 0) ? caixinha : undefined
+    caixinha: (!ehFiado && caixinha > 0) ? caixinha : undefined,
+    pacotes_utilizados: pacotesUtilizadosPayload.length ? pacotesUtilizadosPayload : undefined
   }})
     .then(function(r){ tratarSucessoConclusao(r, ehFiado); })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -7408,6 +7489,7 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">✅ Concluir Atendimento</span><button class="mx" onclick="closeM('m-concluir')">✕</button></div>
     <div class="mb">
       <div style="background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs);padding:14px;margin-bottom:16px;font-size:.82rem;color:var(--ink2)" id="concluir-info">—</div>
+      <div class="fg" id="concluir-sessoes-pacote-wrap" style="display:none"></div>
       <input type="hidden" id="concluir-id"/>
       <input type="hidden" id="concluir-valor-original" value="0"/>
 
