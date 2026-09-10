@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.28.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.29.0-frontend</div>
       </div>
     </div>
 
@@ -2142,6 +2142,8 @@ function confirmarReabrirComanda() {
 
 function abrirModalConcluir(id) {
   document.getElementById('concluir-id').value = id;
+  document.getElementById('fpg-btn-saldo-cliente').style.display = 'none';
+  document.getElementById('fpg-btn-saldo-cliente').textContent = '🎁 Usar saldo do cliente';
   // Busca dados do agendamento para mostrar no modal
   apiFetch('/api/agendamentos?id=' + id).then(function(r){
     var ag = r && r[0];
@@ -2152,6 +2154,19 @@ function abrirModalConcluir(id) {
              (svc ? ' — ' + svc : '') +
              '<div style="margin-top:4px;font-size:.78rem;font-weight:700;color:var(--gold)">Total: ' + brl(ag.valor_total) + '</div>';
       document.getElementById('concluir-valor-original').value = ag.valor_total || 0;
+
+      // Se o cliente tem saldo em crédito, mostra a opção de usar — some
+      // se não tiver nada, pra não poluir a tela com uma opção que não serve
+      if (ag.cliente_id) {
+        apiFetch('/api/clientes/' + ag.cliente_id + '/credito').then(function(cred){
+          if (cred && cred.saldo > 0) {
+            var btnCredito = document.getElementById('fpg-btn-saldo-cliente');
+            btnCredito.style.display = 'block';
+            btnCredito.dataset.saldoDisponivel = cred.saldo;
+            btnCredito.textContent = '🎁 Usar saldo do cliente (' + brl(cred.saldo) + ' disponível)';
+          }
+        }).catch(function(){});
+      }
     } else {
       document.getElementById('concluir-valor-original').value = 0;
     }
@@ -2255,17 +2270,24 @@ function atualizarLinhaPagamentoDividido(idx, campo, valor) {
   recalcularResumoPagamentoDividido();
 }
 
-var OPCOES_FORMA_PAGAMENTO = [
+var OPCOES_FORMA_PAGAMENTO_BASE = [
   { val: 'PIX', label: '💠 PIX' }, { val: 'Dinheiro', label: '💵 Dinheiro' },
   { val: 'Cartão Débito', label: '💳 Débito' }, { val: 'Cartão Crédito', label: '💳 Crédito' }
 ];
+// Monta a lista na hora — só inclui "saldo do cliente" se ele realmente
+// tiver algum saldo disponível (senão é uma opção que nunca serve pra nada)
+function opcoesFormaPagamento() {
+  var temSaldo = document.getElementById('fpg-btn-saldo-cliente').style.display !== 'none';
+  if (!temSaldo) return OPCOES_FORMA_PAGAMENTO_BASE;
+  return OPCOES_FORMA_PAGAMENTO_BASE.concat([{ val: 'Credito_Cliente', label: '🎁 Saldo do cliente' }]);
+}
 
 function renderLinhasPagamentoDividido() {
   var wrap = document.getElementById('pgto-dividido-linhas');
   wrap.innerHTML = PGTO_DIVIDIDO_LINHAS.map(function(linha, idx){
     return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
       '<select class="fc" style="flex:1.3" onchange="atualizarLinhaPagamentoDividido(' + idx + ',\'forma\',this.value)">' +
-        OPCOES_FORMA_PAGAMENTO.map(function(o){ return '<option value="' + o.val + '"' + (o.val === linha.forma ? ' selected' : '') + '>' + o.label + '</option>'; }).join('') +
+        opcoesFormaPagamento().map(function(o){ return '<option value="' + o.val + '"' + (o.val === linha.forma ? ' selected' : '') + '>' + o.label + '</option>'; }).join('') +
       '</select>' +
       '<input type="text" inputmode="decimal" class="fc" style="flex:1" placeholder="Valor R$" value="' + (linha.valor !== null ? brlSemSimbolo(linha.valor) : '') + '" onchange="atualizarLinhaPagamentoDividido(' + idx + ',\'valor\',this.value)"/>' +
       '<button type="button" class="btnic btn btnsm" style="color:var(--er)" onclick="removerLinhaPagamentoDividido(' + idx + ')">✕</button>' +
@@ -2334,6 +2356,19 @@ function confirmarConclusao() {
   if (!fpgBtn) { toast('Selecione a forma de pagamento (ou fiado)','er'); return; }
   var fpg = fpgBtn.dataset.val;
   var ehFiado = fpg === 'fiado';
+
+  // Se escolheu pagar tudo com o saldo do cliente, mas o saldo disponível
+  // não cobre o total (com desconto já considerado), avisa e pede pra
+  // usar "dividir pagamento" em vez de deixar faltar sem ninguém notar
+  if (fpg === 'Credito_Cliente') {
+    var valorOriginalCred = parseFloat(document.getElementById('concluir-valor-original').value) || 0;
+    var totalComDesconto = Math.max(0, valorOriginalCred - desconto);
+    var saldoDisponivel = parseFloat(fpgBtn.dataset.saldoDisponivel) || 0;
+    if (saldoDisponivel < totalComDesconto - 0.01) {
+      toast('O cliente só tem ' + brl(saldoDisponivel) + ' de saldo — o total é ' + brl(totalComDesconto) + '. Usa "Dividir pagamento" pra completar com outra forma.', 'er');
+      return;
+    }
+  }
 
   btn.disabled = true; btn.textContent = 'Salvando...';
 
@@ -5383,7 +5418,13 @@ function openClientModal(tr) {
   document.getElementById('cp-obs').textContent    = c.observacoes    || '—';
   document.getElementById('cp-visitas').textContent = c.historico_count || 0;
   document.getElementById('cp-gasto').textContent   = brl(c.total_gasto || 0);
+  document.getElementById('ac-cliente-id').value = c.id;
+  document.getElementById('ac-cliente-nome').textContent = c.nome || '—';
+  document.getElementById('cp-saldo-credito').textContent = 'Carregando...';
   openM('m-cli-perfil');
+  apiFetch('/api/clientes/' + c.id + '/credito')
+    .then(function(r){ document.getElementById('cp-saldo-credito').textContent = brl(r.saldo || 0); })
+    .catch(function(){ document.getElementById('cp-saldo-credito').textContent = brl(0); });
   // Carrega histórico de agendamentos do cliente
   var hist = document.getElementById('cp-historico');
   hist.innerHTML = '<div class="lc"><div class="spin"></div></div>';
@@ -5403,6 +5444,31 @@ function openClientModal(tr) {
       }).join('') + '</div>';
   })
   .catch(function(){ hist.innerHTML = '<div class="empty">Erro ao carregar histórico</div>'; });
+}
+
+// ── CRÉDITO DO CLIENTE ────────────────────────────────
+function abrirAdicionarCredito() {
+  document.getElementById('ac-valor').value = '';
+  document.getElementById('ac-motivo').value = '';
+  openM('m-add-credito');
+}
+
+function confirmarAdicionarCredito() {
+  var clienteId = document.getElementById('ac-cliente-id').value;
+  var valor = parseFloat(document.getElementById('ac-valor').value);
+  var motivo = document.getElementById('ac-motivo').value.trim();
+  if (!valor || valor <= 0) { toast('Informe um valor maior que zero','er'); return; }
+
+  var btn = document.querySelector('#m-add-credito .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/clientes/' + clienteId + '/credito', { method: 'POST', body: { valor: valor, motivo: motivo || undefined } })
+    .then(function(r){
+      toast('Crédito adicionado! Novo saldo: ' + brl(r.saldo), 'ok');
+      document.getElementById('cp-saldo-credito').textContent = brl(r.saldo);
+      closeM('m-add-credito');
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Adicionar'; });
 }
 
 // ── MOVIMENTAR ESTOQUE ───────────────────────────────────
@@ -7370,6 +7436,7 @@ function dispensarBannerPWA() {
           <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpg(this)">💵 Dinheiro</button>
           <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpg(this)">💳 Débito</button>
           <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpg(this)">💳 Crédito</button>
+          <button type="button" class="fpg-btn" data-val="Credito_Cliente" id="fpg-btn-saldo-cliente" style="display:none;grid-column:1/-1" onclick="selecionarFpg(this)">🎁 Usar saldo do cliente</button>
           <button type="button" class="fpg-btn" data-val="fiado" style="grid-column:1/-1" onclick="selecionarFpg(this)">🧾 Fiado (vai pagar depois)</button>
         </div>
         <div style="font-size:.68rem;color:var(--t3);margin-top:6px" id="fiado-aviso"></div>
@@ -8113,10 +8180,34 @@ function dispensarBannerPWA() {
         <div class="kc c1"><div class="ki c1">📅</div><div><div class="kv" id="cp-visitas">0</div><div class="kl">Visitas</div></div></div>
         <div class="kc c2"><div class="ki c2">💰</div><div><div class="kv" id="cp-gasto">R$ 0,00</div><div class="kl">Total gasto</div></div></div>
       </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px">
+        <div>
+          <div style="font-size:.68rem;color:var(--t3);text-transform:uppercase">🎁 Saldo em crédito</div>
+          <div style="font-size:1.1rem;font-weight:800;color:var(--ok)" id="cp-saldo-credito">R$ 0,00</div>
+        </div>
+        <button class="btn btns btnsm" id="cp-btn-add-credito" onclick="abrirAdicionarCredito()">+ Adicionar</button>
+      </div>
+
       <div class="ct">Histórico de agendamentos</div>
       <div id="cp-historico"><div class="lc"><div class="spin"></div></div></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-cli-perfil')">Fechar</button></div>
+  </div>
+</div>
+
+<!-- Modal Adicionar Crédito -->
+<div class="mov" id="m-add-credito">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">🎁 Adicionar Crédito</span><button class="mx" onclick="closeM('m-add-credito')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ac-cliente-id"/>
+      <div style="font-size:.82rem;color:var(--t2);margin-bottom:14px">Cliente: <strong id="ac-cliente-nome">—</strong></div>
+      <div class="fg"><label class="fl">Valor (R$)*</label><input type="number" class="fc" id="ac-valor" step="0.01" placeholder="Ex.: 80,00"/></div>
+      <div class="fg"><label class="fl">Motivo (opcional)</label><input class="fc" id="ac-motivo" placeholder="Ex.: Pagou adiantado e não usou tudo"/></div>
+      <div style="font-size:.68rem;color:var(--t3);background:var(--bg3);padding:8px 10px;border-radius:var(--rs)">⚠️ Isso só guarda o saldo pra usar depois — não lança como recebimento no Financeiro. Se esse dinheiro ainda não estiver registrado lá, lança separado.</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-add-credito')">Cancelar</button><button class="btn btnp" onclick="confirmarAdicionarCredito()">Adicionar</button></div>
   </div>
 </div>
 
