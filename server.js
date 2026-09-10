@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.29.0-credito-cliente' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.30.0-pacote-concluir-atendimento' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2266,6 +2266,49 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
   let infoAvaliacao = { link: null };
 
   if (status === 'concluido') {
+    // Cliente usando uma sessão de pacote que já tinha comprado antes,
+    // pra pagar um dos serviços desse atendimento — zera o preço (e a
+    // comissão) daquele serviço específico, porque ele já foi pago
+    // quando o pacote foi comprado. Roda ANTES do desconto (abaixo), pra
+    // o desconto (se tiver) incidir só sobre o que ainda sobrou a pagar.
+    const pacotesUtilizadosConcluir = Array.isArray(req.body.pacotes_utilizados)
+      ? req.body.pacotes_utilizados.filter(p => p && p.pacote_cliente_id && p.agendamento_servico_id) : [];
+    if (pacotesUtilizadosConcluir.length) {
+      for (const uso of pacotesUtilizadosConcluir) {
+        const { data: linhaServico } = await supabase.from('agendamento_servicos')
+          .select('id, preco, comissao_valor, servico_id').eq('id', uso.agendamento_servico_id)
+          .eq('agendamento_id', req.params.id).single();
+        if (!linhaServico) continue;
+
+        const { data: pc } = await supabase.from('pacotes_clientes')
+          .select('*').eq('id', uso.pacote_cliente_id).eq('salao_id', req.salao_id).eq('cliente_id', data.cliente_id).single();
+        if (!pc || pc.status !== 'ativo') {
+          return res.status(422).json({ error: 'Esse pacote não está mais disponível pra uso' });
+        }
+        const sessoesPacote = pc.sessoes || [];
+        const linhaSessao = sessoesPacote.find(s => s.servico_id === linhaServico.servico_id);
+        if (!linhaSessao || linhaSessao.qtd_usada >= linhaSessao.qtd_total) {
+          return res.status(422).json({ error: 'Esse pacote não tem mais sessões disponíveis pra esse serviço' });
+        }
+
+        // Desconta o valor desse serviço do total, e zera ele + a comissão
+        data.valor_total = Number((Number(data.valor_total || 0) - Number(linhaServico.preco || 0)).toFixed(2));
+        await supabase.from('agendamento_servicos')
+          .update({ preco: 0, comissao_valor: 0, pago_via_pacote: true, pacote_cliente_id: pc.id })
+          .eq('id', linhaServico.id);
+
+        // Debita a sessão do pacote — só depois de confirmar que deu tudo certo acima
+        const sessoesAtualizadas = sessoesPacote.map(s =>
+          s.servico_id === linhaServico.servico_id ? { ...s, qtd_usada: s.qtd_usada + 1 } : s
+        );
+        const todasEsgotadas = sessoesAtualizadas.every(s => s.qtd_usada >= s.qtd_total);
+        await supabase.from('pacotes_clientes').update({
+          sessoes: sessoesAtualizadas, status: todasEsgotadas ? 'finalizado' : 'ativo'
+        }).eq('id', pc.id);
+      }
+      await supabase.from('agendamentos').update({ valor_total: data.valor_total }).eq('id', req.params.id);
+    }
+
     // Desconto opcional aplicado na hora de concluir — desconta tanto do
     // valor cobrado quanto proporcionalmente da comissão do profissional
     // (decisão de negócio: o profissional também sente o desconto, não só
@@ -2290,6 +2333,9 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
       const { data: servicosDoAgendamento } = await supabase
         .from('agendamento_servicos').select('*').eq('agendamento_id', req.params.id);
       for (const linha of (servicosDoAgendamento || [])) {
+        // Serviço já pago via pacote fica de fora do rateio do desconto —
+        // ele já está zerado, não tem preço nenhum pra descontar em cima
+        if (linha.pago_via_pacote) continue;
         await supabase.from('agendamento_servicos').update({
           preco: Number((Number(linha.preco) * fatorDesconto).toFixed(2)),
           comissao_valor: Number((Number(linha.comissao_valor) * fatorDesconto).toFixed(2))
