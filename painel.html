@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.27.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.28.0-frontend</div>
       </div>
     </div>
 
@@ -842,6 +842,8 @@ select.fc option{background:var(--bg2)}
           <label class="fl">Link de avaliação do Google</label>
           <input class="fc fg" id="cfg-google-review" placeholder="https://g.page/r/.../review"/>
           <div style="font-size:.68rem;color:var(--t3);margin-top:-8px;margin-bottom:12px">Depois que o cliente avalia bem dentro do app, a gente já convida ele a repetir a nota no Google. <a href="https://support.google.com/business/answer/7035772" target="_blank" style="color:var(--ac)">Como pegar esse link</a></div>
+          <label class="fl">Sobre o salão</label>
+          <textarea class="fc fg" id="cfg-sobre" rows="3" placeholder="Um texto curto que aparece na página de agendamento — conte o clima do seu salão, especialidades, o que te diferencia." style="resize:vertical"></textarea>
           <button class="btn btnp" onclick="saveConfig()">Salvar Alterações</button>
         </div>
         <div class="card">
@@ -892,21 +894,30 @@ select.fc option{background:var(--bg2)}
         <div class="card">
           <div class="ct">Horário de Funcionamento</div>
           <div style="font-size:.75rem;color:var(--t3);margin-bottom:12px">Define os horários disponíveis no link de agendamento online.</div>
-          <div class="fr fg">
-            <div><label class="fl">Abre às</label><input type="time" class="fc" id="cfg-h-abre" value="08:00"/></div>
-            <div><label class="fl">Fecha às</label><input type="time" class="fc" id="cfg-h-fecha" value="19:00"/></div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.8rem;margin-bottom:12px">
+            <input type="checkbox" id="cfg-horario-por-dia-toggle" style="accent-color:var(--ac)" onchange="alternarModoHorarioPorDia()"/> Usar um horário diferente em cada dia da semana
+          </label>
+
+          <div id="cfg-horario-simples">
+            <div class="fr fg">
+              <div><label class="fl">Abre às</label><input type="time" class="fc" id="cfg-h-abre" value="08:00"/></div>
+              <div><label class="fl">Fecha às</label><input type="time" class="fc" id="cfg-h-fecha" value="19:00"/></div>
+            </div>
+            <label class="fl">Dias da semana — clique para marcar como <strong>fechado</strong></label>
+            <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap" id="cfg-dias-fechado">
+              <button type="button" class="dia-toggle" data-dia="0" data-fechado="false" onclick="toggleDiaFechado(this)">Dom</button>
+              <button type="button" class="dia-toggle" data-dia="1" data-fechado="false" onclick="toggleDiaFechado(this)">Seg</button>
+              <button type="button" class="dia-toggle" data-dia="2" data-fechado="false" onclick="toggleDiaFechado(this)">Ter</button>
+              <button type="button" class="dia-toggle" data-dia="3" data-fechado="false" onclick="toggleDiaFechado(this)">Qua</button>
+              <button type="button" class="dia-toggle" data-dia="4" data-fechado="false" onclick="toggleDiaFechado(this)">Qui</button>
+              <button type="button" class="dia-toggle" data-dia="5" data-fechado="false" onclick="toggleDiaFechado(this)">Sex</button>
+              <button type="button" class="dia-toggle" data-dia="6" data-fechado="false" onclick="toggleDiaFechado(this)">Sáb</button>
+            </div>
+            <div style="font-size:.68rem;color:var(--t3);margin-bottom:14px">🟢 verde = aberto neste dia · 🔴 vermelho = fechado neste dia</div>
           </div>
-          <label class="fl">Dias da semana — clique para marcar como <strong>fechado</strong></label>
-          <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap" id="cfg-dias-fechado">
-            <button type="button" class="dia-toggle" data-dia="0" data-fechado="false" onclick="toggleDiaFechado(this)">Dom</button>
-            <button type="button" class="dia-toggle" data-dia="1" data-fechado="false" onclick="toggleDiaFechado(this)">Seg</button>
-            <button type="button" class="dia-toggle" data-dia="2" data-fechado="false" onclick="toggleDiaFechado(this)">Ter</button>
-            <button type="button" class="dia-toggle" data-dia="3" data-fechado="false" onclick="toggleDiaFechado(this)">Qua</button>
-            <button type="button" class="dia-toggle" data-dia="4" data-fechado="false" onclick="toggleDiaFechado(this)">Qui</button>
-            <button type="button" class="dia-toggle" data-dia="5" data-fechado="false" onclick="toggleDiaFechado(this)">Sex</button>
-            <button type="button" class="dia-toggle" data-dia="6" data-fechado="false" onclick="toggleDiaFechado(this)">Sáb</button>
-          </div>
-          <div style="font-size:.68rem;color:var(--t3);margin-bottom:14px">🟢 verde = aberto neste dia · 🔴 vermelho = fechado neste dia</div>
+
+          <div id="cfg-horario-por-dia" style="display:none;margin-bottom:12px"></div>
+
           <button class="btn btnp" onclick="saveHorarioFuncionamento()">Salvar Horário</button>
         </div>
 
@@ -5121,6 +5132,7 @@ function saveConfig() {
     whatsapp: document.getElementById('cfg-wpp').value,
     email:    document.getElementById('cfg-email').value,
     endereco: document.getElementById('cfg-end').value,
+    sobre:    document.getElementById('cfg-sobre').value.trim() || null,
     configuracoes: { google_review_link: document.getElementById('cfg-google-review').value.trim() || null }
   };
   apiFetch('/api/saloes/meu',{method:'PUT',body:body})
@@ -5137,20 +5149,72 @@ function toggleDiaFechado(btn) {
   btn.dataset.fechado = (!fechado).toString();
 }
 
+// ── Horário diferente por dia da semana (opcional) ────
+var HORARIOS_POR_DIA_ATUAL = {}; // { 0: {abre, fecha, fechado}, ... } — 0=domingo
+var NOMES_DIAS_SEMANA = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+
+function alternarModoHorarioPorDia() {
+  var ativo = document.getElementById('cfg-horario-por-dia-toggle').checked;
+  document.getElementById('cfg-horario-simples').style.display = ativo ? 'none' : 'block';
+  var wrap = document.getElementById('cfg-horario-por-dia');
+  wrap.style.display = ativo ? 'block' : 'none';
+  if (ativo) renderHorarioPorDia();
+}
+
+function renderHorarioPorDia() {
+  var wrap = document.getElementById('cfg-horario-por-dia');
+  var horaAbrePadrao = document.getElementById('cfg-h-abre').value || '08:00';
+  var horaFechaPadrao = document.getElementById('cfg-h-fecha').value || '19:00';
+  wrap.innerHTML = NOMES_DIAS_SEMANA.map(function(nome, i){
+    var d = HORARIOS_POR_DIA_ATUAL[i] || { abre: horaAbrePadrao, fecha: horaFechaPadrao, fechado: (i === 0) };
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd2);flex-wrap:wrap">' +
+      '<span style="width:110px;font-size:.78rem;font-weight:600">' + nome + '</span>' +
+      '<label style="display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--t3);cursor:pointer">' +
+        '<input type="checkbox" data-dia="' + i + '" class="hpd-fechado" ' + (d.fechado ? 'checked' : '') + ' onchange="onMudaHorarioPorDia(' + i + ')" style="accent-color:var(--ac)"/> Fechado' +
+      '</label>' +
+      '<input type="time" class="fc hpd-abre" data-dia="' + i + '" value="' + (d.abre || horaAbrePadrao) + '" ' + (d.fechado ? 'disabled' : '') + ' style="width:110px;padding:6px 8px" onchange="onMudaHorarioPorDia(' + i + ')"/>' +
+      '<span style="font-size:.72rem;color:var(--t3)">às</span>' +
+      '<input type="time" class="fc hpd-fecha" data-dia="' + i + '" value="' + (d.fecha || horaFechaPadrao) + '" ' + (d.fechado ? 'disabled' : '') + ' style="width:110px;padding:6px 8px" onchange="onMudaHorarioPorDia(' + i + ')"/>' +
+    '</div>';
+  }).join('');
+}
+
+function onMudaHorarioPorDia(dia) {
+  var fechadoEl = document.querySelector('.hpd-fechado[data-dia="' + dia + '"]');
+  var abreEl = document.querySelector('.hpd-abre[data-dia="' + dia + '"]');
+  var fechaEl = document.querySelector('.hpd-fecha[data-dia="' + dia + '"]');
+  var fechado = fechadoEl.checked;
+  abreEl.disabled = fechado;
+  fechaEl.disabled = fechado;
+  HORARIOS_POR_DIA_ATUAL[dia] = { fechado: fechado, abre: abreEl.value, fecha: fechaEl.value };
+}
+
 function saveHorarioFuncionamento() {
   var btn = document.querySelector('[onclick="saveHorarioFuncionamento()"]');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  var diasFechado = Array.from(document.querySelectorAll('#cfg-dias-fechado .dia-toggle'))
-    .filter(function(b){ return b.dataset.fechado === 'true'; })
-    .map(function(b){ return parseInt(b.dataset.dia); });
-  var body = {
-    configuracoes: {
-      horario_abre: document.getElementById('cfg-h-abre').value || '08:00',
-      horario_fecha: document.getElementById('cfg-h-fecha').value || '19:00',
-      dias_fechado: diasFechado
-    }
+  var usaPorDia = document.getElementById('cfg-horario-por-dia-toggle').checked;
+
+  var cfg = {
+    horario_abre: document.getElementById('cfg-h-abre').value || '08:00',
+    horario_fecha: document.getElementById('cfg-h-fecha').value || '19:00'
   };
-  apiFetch('/api/saloes/meu', {method:'PUT', body:body})
+
+  if (usaPorDia) {
+    // Garante que cada uma das 7 linhas foi lida pro estado antes de
+    // salvar — sem isso, um dia que a pessoa nunca tocou (só olhou) ficaria
+    // faltando no objeto final
+    for (var i = 0; i < 7; i++) onMudaHorarioPorDia(i);
+    cfg.horarios_por_dia = HORARIOS_POR_DIA_ATUAL;
+    cfg.dias_fechado = []; // o modo por dia manda sozinho quem tá fechado — não precisa duplicar na lista antiga
+  } else {
+    var diasFechado = Array.from(document.querySelectorAll('#cfg-dias-fechado .dia-toggle'))
+      .filter(function(b){ return b.dataset.fechado === 'true'; })
+      .map(function(b){ return parseInt(b.dataset.dia); });
+    cfg.dias_fechado = diasFechado;
+    cfg.horarios_por_dia = {}; // sai do modo por dia — volta a valer o horário único
+  }
+
+  apiFetch('/api/saloes/meu', {method:'PUT', body:{ configuracoes: cfg }})
   .then(function(){ toast('Horário de funcionamento salvo! ✅','ok'); })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar Horário'; });
@@ -5210,6 +5274,7 @@ function carregarHorarioFuncionamento() {
     if (document.getElementById('cfg-wpp') && !document.getElementById('cfg-wpp').value) document.getElementById('cfg-wpp').value = r.whatsapp || '';
     if (document.getElementById('cfg-email') && !document.getElementById('cfg-email').value) document.getElementById('cfg-email').value = r.email || '';
     if (document.getElementById('cfg-end') && !document.getElementById('cfg-end').value) document.getElementById('cfg-end').value = r.endereco || '';
+    if (document.getElementById('cfg-sobre') && !document.getElementById('cfg-sobre').value) document.getElementById('cfg-sobre').value = r.sobre || '';
     renderFotosGrid(r.fotos || []);
 
     if (!r.configuracoes) return;
@@ -5221,6 +5286,13 @@ function carregarHorarioFuncionamento() {
       var dia = parseInt(btn.dataset.dia);
       btn.dataset.fechado = diasFechado.includes(dia) ? 'true' : 'false';
     });
+    // Horário diferente por dia — se tiver configurado, liga o modo
+    // avançado e já preenche as 7 linhas com o que já está salvo
+    if (cfg.horarios_por_dia && Object.keys(cfg.horarios_por_dia).length) {
+      document.getElementById('cfg-horario-por-dia-toggle').checked = true;
+      HORARIOS_POR_DIA_ATUAL = cfg.horarios_por_dia;
+      alternarModoHorarioPorDia();
+    }
     // Débito/crédito com fallback pro campo antigo único (quem configurou antes da separação)
     var debito  = cfg.taxa_maquininha_debito_pct  !== undefined && cfg.taxa_maquininha_debito_pct  !== null ? cfg.taxa_maquininha_debito_pct  : cfg.taxa_maquininha_pct;
     var credito = cfg.taxa_maquininha_credito_pct !== undefined && cfg.taxa_maquininha_credito_pct !== null ? cfg.taxa_maquininha_credito_pct : cfg.taxa_maquininha_pct;
