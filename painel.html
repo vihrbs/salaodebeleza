@@ -524,7 +524,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.26.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.26.1-frontend</div>
       </div>
     </div>
 
@@ -2051,7 +2051,7 @@ function confirmarReabrirComanda() {
     .then(function(){
       toast('Comanda reaberta! 🔓', 'ok');
       closeM('m-reabrir-comanda');
-      loadAgenda(); loadComandas(); loadResumoDiaComandas(); loadDashTl(); loadKPIs();
+      loadAgenda(); loadComandas(); loadResumoDiaComandas(); loadDashTl(); loadKPIs(); loadFechamentoCaixa();
     })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Reabrir'; });
@@ -2279,7 +2279,7 @@ function tratarSucessoConclusao(r, ehFiado) {
       : 'Caixinha de ' + brl(r.caixinha.liquida) + ' — 100% pro profissional 🎁';
     toast(msgCaixinha, 'inf');
   }
-  loadDashTl(); loadAgenda(); loadKPIs(); loadCom(); loadFiado();
+  loadDashTl(); loadAgenda(); loadKPIs(); loadCom(); loadFiado(); loadFechamentoCaixa();
   if (r && r.whatsapp_link) mostrarToastWhatsapp(r.whatsapp_link);
 }
 
@@ -4678,7 +4678,7 @@ function confirmarVendaAvulsa() {
       var msg = deixarAberto ? 'Comanda criada e deixada em aberto ⏳' : 'Comanda criada! ✅ Total: ' + brl(r.valor_total);
       toast(msg, 'ok');
       closeM('m-nova-comanda');
-      loadComandas(); loadResumoDiaComandas(); loadDashTl(); loadKPIs(); loadEst(); loadFin();
+      loadComandas(); loadResumoDiaComandas(); loadDashTl(); loadKPIs(); loadEst(); loadFin(); loadFechamentoCaixa();
     })
     .catch(function(e){ toast('Erro: ' + (e.message || 'tente novamente'), 'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Venda ✅'; });
