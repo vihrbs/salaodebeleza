@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.30.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.31.0-frontend</div>
       </div>
     </div>
 
@@ -3215,12 +3215,36 @@ function renderLan(list) {
     var statusBadge = l.pago
       ? '<span class="badge bs" style="font-size:.62rem">Pago</span>'
       : '<span class="badge bw" style="font-size:.62rem;cursor:pointer" onclick="event.stopPropagation();marcarPago(\'' + l.id + '\',true)" title="Clique para marcar como pago">Pendente</span>';
+    var formaTexto = l.forma_pgto
+      ? esc(l.forma_pgto)
+      : '<span style="color:var(--er);text-decoration:underline">Não informado — clique pra corrigir</span>';
     return '<div style="display:flex;align-items:center;gap:11px;padding:8px 9px;border-radius:var(--rs);transition:background .1s;cursor:pointer" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
       '<div style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.85rem;background:' + (l.tipo==='entrada'?'#D6FAF0':'#FEE2E2') + ';flex-shrink:0">' + (l.tipo==='entrada'?'💰':'📤') + '</div>' +
-      '<div style="flex:1"><div style="font-size:.78rem;font-weight:600">' + esc(l.descricao) + '</div><div style="font-size:.68rem;color:var(--t3)">' + fdt(l.data+'T12:00') + ' · ' + esc(l.forma_pgto||'') + '</div></div>' +
+      '<div style="flex:1"><div style="font-size:.78rem;font-weight:600">' + esc(l.descricao) + '</div><div style="font-size:.68rem;color:var(--t3)">' + fdt(l.data+'T12:00') + ' · <span onclick="event.stopPropagation();abrirEditarFormaPgto(\'' + l.id + '\',\'' + escAttr(l.forma_pgto||'') + '\')">' + formaTexto + '</span></div></div>' +
       statusBadge +
       '<div style="font-size:.82rem;font-weight:700;color:' + (l.tipo==='entrada'?'var(--ok)':'var(--er)') + '">' + (l.tipo==='entrada'?'+':'-') + brl(l.valor) + '</div></div>';
   }).join('');
+}
+
+function abrirEditarFormaPgto(lancamentoId, formaAtual) {
+  document.getElementById('efp-lancamento-id').value = lancamentoId;
+  document.querySelectorAll('#efp-opcoes .fpg-btn').forEach(function(b){
+    b.classList.toggle('on', b.dataset.val === formaAtual);
+  });
+  openM('m-editar-forma-pgto');
+}
+
+function confirmarEditarFormaPgto() {
+  var id = document.getElementById('efp-lancamento-id').value;
+  var btnSelecionado = document.querySelector('#efp-opcoes .fpg-btn.on');
+  if (!btnSelecionado) { toast('Selecione uma forma de pagamento','er'); return; }
+  apiFetch('/api/financeiro/lancamentos/' + id, { method: 'PATCH', body: { forma_pgto: btnSelecionado.dataset.val } })
+    .then(function(){
+      toast('Forma de pagamento corrigida! ✅', 'ok');
+      closeM('m-editar-forma-pgto');
+      loadLan(); loadFechamentoCaixa();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 function marcarPago(id, pago) {
@@ -8275,6 +8299,24 @@ function dispensarBannerPWA() {
       <div id="cp-historico"><div class="lc"><div class="spin"></div></div></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-cli-perfil')">Fechar</button></div>
+  </div>
+</div>
+
+<!-- Modal Editar Forma de Pagamento -->
+<div class="mov" id="m-editar-forma-pgto">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">✏️ Corrigir Forma de Pagamento</span><button class="mx" onclick="closeM('m-editar-forma-pgto')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="efp-lancamento-id"/>
+      <div style="font-size:.78rem;color:var(--t3);margin-bottom:14px">Escolhe como esse pagamento realmente entrou:</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="efp-opcoes">
+        <button type="button" class="fpg-btn" data-val="PIX" onclick="this.parentElement.querySelectorAll('.fpg-btn').forEach(function(b){b.classList.remove('on')});this.classList.add('on')">💠 PIX</button>
+        <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="this.parentElement.querySelectorAll('.fpg-btn').forEach(function(b){b.classList.remove('on')});this.classList.add('on')">💵 Dinheiro</button>
+        <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="this.parentElement.querySelectorAll('.fpg-btn').forEach(function(b){b.classList.remove('on')});this.classList.add('on')">💳 Débito</button>
+        <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="this.parentElement.querySelectorAll('.fpg-btn').forEach(function(b){b.classList.remove('on')});this.classList.add('on')">💳 Crédito</button>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-editar-forma-pgto')">Cancelar</button><button class="btn btnp" onclick="confirmarEditarFormaPgto()">Salvar</button></div>
   </div>
 </div>
 
