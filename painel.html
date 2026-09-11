@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.33.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.34.0-frontend</div>
       </div>
     </div>
 
@@ -3610,9 +3610,14 @@ function abrirDetalhamentoAtendimentos() {
   var fimAtual = document.getElementById('com-data-fim').value || today();
   document.getElementById('dat-data-ini').value = iniAtual;
   document.getElementById('dat-data-fim').value = fimAtual;
+  document.getElementById('dat-filtro-forma').value = '';
+  document.getElementById('dat-filtro-caixinha').checked = false;
+  document.getElementById('dat-filtro-pacote').checked = false;
   openM('m-detalhe-atendimentos');
   loadDetalhamentoAtendimentos();
 }
+
+var DETALHAMENTO_ATENDIMENTOS_TODOS = []; // guarda a lista completa vinda do servidor, sem filtro nenhum
 
 function loadDetalhamentoAtendimentos() {
   var prof = document.getElementById('dat-filtro-prof').value;
@@ -3623,26 +3628,57 @@ function loadDetalhamentoAtendimentos() {
 
   var qs = 'data_inicio=' + ini + '&data_fim=' + fim + (prof ? '&profissional_id=' + prof : '');
   apiFetch('/api/relatorios/atendimentos?' + qs)
-    .then(function(r){ renderDetalhamentoAtendimentos(r); })
+    .then(function(r){
+      DETALHAMENTO_ATENDIMENTOS_TODOS = (r && r.atendimentos) || [];
+      aplicarFiltrosDetalhamentoAtendimentos();
+    })
     .catch(function(e){ lista.innerHTML = '<div class="empty">Erro: ' + esc(e.message||'') + '</div>'; });
 }
 
-function renderDetalhamentoAtendimentos(r) {
+// Filtro de "só com caixinha" / "só pago via pacote" / forma de pagamento
+// específica — roda em cima do que já foi buscado, sem precisar ir no
+// servidor de novo (a lista de um período normalmente é pequena o
+// suficiente pra filtrar direto aqui, na hora).
+function aplicarFiltrosDetalhamentoAtendimentos() {
+  var soComCaixinha = document.getElementById('dat-filtro-caixinha').checked;
+  var soComPacote = document.getElementById('dat-filtro-pacote').checked;
+  var formaEscolhida = document.getElementById('dat-filtro-forma').value;
+
+  var filtrados = DETALHAMENTO_ATENDIMENTOS_TODOS.filter(function(a){
+    if (soComCaixinha && !(a.caixinha > 0)) return false;
+    if (soComPacote && !a.pago_via_pacote) return false;
+    if (formaEscolhida && a.forma_pgto !== formaEscolhida) return false;
+    return true;
+  });
+
+  renderDetalhamentoAtendimentos(filtrados);
+}
+
+function renderDetalhamentoAtendimentos(atendimentos) {
   var resumo = document.getElementById('dat-resumo');
   var lista = document.getElementById('dat-lista');
-  if (!r || !r.totais) { resumo.innerHTML = ''; lista.innerHTML = '<div class="empty">Sem dados.</div>'; return; }
+
+  // Recalcula os totais de acordo com o que sobrou depois do filtro — não
+  // faz sentido mostrar o total do período inteiro se a pessoa só quer
+  // ver "os que tiveram caixinha", por exemplo.
+  var totais = {
+    total_atendimentos: atendimentos.length,
+    total_faturado: atendimentos.reduce(function(s,a){ return s + a.valor_total; }, 0),
+    total_comissao: atendimentos.reduce(function(s,a){ return s + a.comissao; }, 0),
+    total_caixinhas: atendimentos.reduce(function(s,a){ return s + a.caixinha; }, 0)
+  };
 
   resumo.innerHTML =
     '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">' +
-      '<span>🧾 <strong>' + r.totais.total_atendimentos + '</strong> atendimento(s)</span>' +
-      '<span>💰 Faturado: <strong style="color:var(--ac)">' + brl(r.totais.total_faturado) + '</strong></span>' +
-      '<span>🤝 Comissão: <strong style="color:var(--warn)">' + brl(r.totais.total_comissao) + '</strong></span>' +
-      (r.totais.total_caixinhas > 0 ? '<span>🎁 Caixinha: <strong>' + brl(r.totais.total_caixinhas) + '</strong></span>' : '') +
+      '<span>🧾 <strong>' + totais.total_atendimentos + '</strong> atendimento(s)</span>' +
+      '<span>💰 Faturado: <strong style="color:var(--ac)">' + brl(totais.total_faturado) + '</strong></span>' +
+      '<span>🤝 Comissão: <strong style="color:var(--warn)">' + brl(totais.total_comissao) + '</strong></span>' +
+      (totais.total_caixinhas > 0 ? '<span>🎁 Caixinha: <strong>' + brl(totais.total_caixinhas) + '</strong></span>' : '') +
     '</div>';
 
-  if (!r.atendimentos.length) { lista.innerHTML = '<div class="empty">Nenhum atendimento concluído nesse período.</div>'; return; }
+  if (!atendimentos.length) { lista.innerHTML = '<div class="empty">Nenhum atendimento encontrado com esse filtro.</div>'; return; }
 
-  lista.innerHTML = r.atendimentos.map(function(a){
+  lista.innerHTML = atendimentos.map(function(a){
     var dataFormatada = new Date(a.data_hora).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
     return '<div style="padding:9px 4px;border-bottom:1px solid var(--bd2);font-size:.78rem">' +
       '<div style="display:flex;justify-content:space-between;margin-bottom:2px">' +
@@ -3651,6 +3687,8 @@ function renderDetalhamentoAtendimentos(r) {
       '</div>' +
       '<div style="color:var(--t3);font-size:.7rem">' + dataFormatada + ' · ' + esc(a.profissional_nome) + ' · ' + esc(a.servicos) + ' · ' + esc(a.forma_pgto) +
         (a.comissao > 0 ? ' · comissão: ' + brl(a.comissao) : '') +
+        (a.caixinha > 0 ? ' · <span style="color:var(--ok)">🎁 caixinha: ' + brl(a.caixinha) + '</span>' : '') +
+        (a.pago_via_pacote ? ' · <span style="color:var(--ac2)">🎫 via pacote</span>' : '') +
       '</div>' +
     '</div>';
   }).join('');
@@ -7848,6 +7886,21 @@ function dispensarBannerPWA() {
         </select>
         <input type="date" class="fc" id="dat-data-ini" onchange="loadDetalhamentoAtendimentos()" style="width:auto"/>
         <input type="date" class="fc" id="dat-data-fim" onchange="loadDetalhamentoAtendimentos()" style="width:auto"/>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+        <select class="fc" id="dat-filtro-forma" onchange="aplicarFiltrosDetalhamentoAtendimentos()" style="width:auto">
+          <option value="">Todas as formas de pagamento</option>
+          <option value="PIX">💠 PIX</option>
+          <option value="Dinheiro">💵 Dinheiro</option>
+          <option value="Cartão Débito">💳 Débito</option>
+          <option value="Cartão Crédito">💳 Crédito</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.78rem;padding:8px 12px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs)">
+          <input type="checkbox" id="dat-filtro-caixinha" onchange="aplicarFiltrosDetalhamentoAtendimentos()" style="accent-color:var(--ac)"/> 🎁 Só com caixinha
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.78rem;padding:8px 12px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--rs)">
+          <input type="checkbox" id="dat-filtro-pacote" onchange="aplicarFiltrosDetalhamentoAtendimentos()" style="accent-color:var(--ac)"/> 🎫 Só pago via pacote
+        </label>
       </div>
       <div id="dat-resumo" style="background:var(--bg3);border-radius:var(--rs);padding:10px 12px;margin-bottom:12px;font-size:.82rem"></div>
       <div id="dat-lista" style="max-height:420px;overflow-y:auto"><div class="lc"><div class="spin"></div></div></div>
