@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.31.0-forma-pgto-pacote' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.32.0-forma-pgto-agendamento-futuro' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2092,7 +2092,8 @@ app.post('/api/agendamentos', auth, async (req, res) => {
       if (vender_pacote && vender_pacote.pacote_id) {
         await venderPacoteParaCliente({
           salaoId: req.salao_id, clienteId: cliente_id, pacoteId: vender_pacote.pacote_id,
-          valorPago: vender_pacote.valor_pago, dataCompra: dataBaseISO, pagoAgora: vender_pacote.pago
+          valorPago: vender_pacote.valor_pago, dataCompra: dataBaseISO, pagoAgora: vender_pacote.pago,
+          formaPgto: vender_pacote.forma_pgto
         });
       }
 
