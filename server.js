@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.32.1-total-a-receber' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.33.0-detalhamento-atendimentos' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -3205,6 +3205,49 @@ app.get('/api/estoque/movimentacoes', auth, requirePermissao('estoque'), async (
 // Histórico de comissões já pagas — diferente da rota abaixo (que só olha
 // UM período por vez), aqui lista TODOS os pagamentos já feitos, mais
 // recente primeiro. Aceita filtro opcional por profissional.
+// Lista detalhada de cada atendimento concluído num período — cliente,
+// serviço, valor, forma de pagamento, comissão. Diferente do "Histórico
+// de Pagamentos" (que só mostra o TOTAL já fechado por período), aqui é
+// item por item, pra conferir/auditar exatamente o que cada profissional
+// fez, não só o resultado somado.
+app.get('/api/relatorios/atendimentos', auth, requirePermissao('comissoes'), async (req, res) => {
+  const { profissional_id, data_inicio, data_fim } = req.query;
+  if (!data_inicio || !data_fim) return res.status(422).json({ error: 'Informe data_inicio e data_fim' });
+
+  try {
+    let query = supabase.from('agendamentos')
+      .select('id, data_hora, valor_total, forma_pgto, caixinha_liquida, clientes(nome), profissionais(nome), agendamento_servicos(preco, comissao_valor, pago_via_pacote, servicos(nome))')
+      .eq('salao_id', req.salao_id).eq('status', 'concluido')
+      .gte('data_hora', data_inicio + 'T03:00:00+00:00').lte('data_hora', adicionarDia(data_fim) + 'T02:59:59+00:00')
+      .order('data_hora', { ascending: false });
+    if (profissional_id) query = query.eq('profissional_id', profissional_id);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const lista = (data || []).map(ag => {
+      const servicosNomes = (ag.agendamento_servicos || []).map(s => s.servicos?.nome).filter(Boolean).join(', ');
+      const comissaoServicos = (ag.agendamento_servicos || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+      return {
+        id: ag.id, data_hora: ag.data_hora,
+        cliente_nome: ag.clientes?.nome || 'Cliente', profissional_nome: ag.profissionais?.nome || '—',
+        servicos: servicosNomes || '—', valor_total: Number(ag.valor_total || 0),
+        forma_pgto: ag.forma_pgto || '—', comissao: comissaoServicos,
+        caixinha: Number(ag.caixinha_liquida || 0)
+      };
+    });
+
+    const totais = {
+      total_atendimentos: lista.length,
+      total_faturado: lista.reduce((s, a) => s + a.valor_total, 0),
+      total_comissao: lista.reduce((s, a) => s + a.comissao, 0),
+      total_caixinhas: lista.reduce((s, a) => s + a.caixinha, 0)
+    };
+
+    res.json({ atendimentos: lista, totais });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/comissoes/historico', auth, requirePermissao('comissoes'), async (req, res) => {
   try {
     let query = supabase.from('fechamentos_comissao')
