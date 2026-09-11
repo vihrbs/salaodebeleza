@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.31.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.32.0-frontend</div>
       </div>
     </div>
 
@@ -5126,7 +5126,9 @@ function saveAg() {
     if (!pacoteId) { toast('Selecione qual pacote deseja vender','er'); return; }
     var valorPacote = document.getElementById('ag-vender-pacote-valor').value;
     var pagarDepois = document.getElementById('ag-vender-pacote-pagar-depois').checked;
-    body.vender_pacote = { pacote_id: pacoteId, valor_pago: valorPacote ? parseFloat(valorPacote) : undefined, pago: !pagarDepois };
+    var formaPacote = document.getElementById('ag-vender-pacote-forma').value;
+    if (!pagarDepois && !formaPacote) { toast('Selecione a forma de pagamento do pacote (ou marca "pagar depois")','er'); return; }
+    body.vender_pacote = { pacote_id: pacoteId, valor_pago: valorPacote ? parseFloat(valorPacote) : undefined, pago: !pagarDepois, forma_pgto: pagarDepois ? undefined : formaPacote };
   }
 
   var pacotesUtilizados = Array.from(document.querySelectorAll('.ag-pacote-uso:checked')).map(function(el){
@@ -5155,6 +5157,8 @@ function saveAg() {
     document.getElementById('ag-vender-pacote-toggle').checked = false;
     document.getElementById('ag-vender-pacote-opcoes').style.display = 'none';
     document.getElementById('ag-vender-pacote-valor').value = '';
+    document.getElementById('ag-vender-pacote-forma').value = '';
+    document.getElementById('ag-vender-pacote-forma').disabled = false;
     document.getElementById('ag-vender-pacote-pagar-depois').checked = false;
     document.getElementById('ag-pacotes-disponiveis').style.display = 'none';
     document.getElementById('ag-pacotes-disponiveis').innerHTML = '';
@@ -7395,8 +7399,17 @@ function dispensarBannerPWA() {
             </div>
             <div class="fg"><label class="fl">Valor cobrado (R$)</label><input type="number" class="fc" id="ag-vender-pacote-valor" step="0.01"/></div>
           </div>
+          <div class="fg"><label class="fl">Forma de pagamento</label>
+            <select class="fc" id="ag-vender-pacote-forma">
+              <option value="">Selecionar...</option>
+              <option value="PIX">💠 PIX</option>
+              <option value="Dinheiro">💵 Dinheiro</option>
+              <option value="Cartão Débito">💳 Débito</option>
+              <option value="Cartão Crédito">💳 Crédito</option>
+            </select>
+          </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.78rem;padding:8px 10px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:8px">
-            <input type="checkbox" id="ag-vender-pacote-pagar-depois" style="accent-color:var(--warn)"/> ⏳ Cliente vai pagar depois
+            <input type="checkbox" id="ag-vender-pacote-pagar-depois" onchange="document.getElementById('ag-vender-pacote-forma').disabled=this.checked" style="accent-color:var(--warn)"/> ⏳ Cliente vai pagar depois
           </label>
           <div style="font-size:.68rem;color:var(--t3)">O pacote é vendido pro cliente selecionado acima, independente do serviço deste agendamento.</div>
         </div>
