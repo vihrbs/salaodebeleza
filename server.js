@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.32.0-forma-pgto-agendamento-futuro' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.32.1-total-a-receber' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2733,7 +2733,17 @@ app.get('/api/financeiro/resumo', auth, requirePermissao('financeiro'), async (r
     .eq('salao_id', req.salao_id).gte('data', inicio).lte('data', fim);
   const receita = (data || []).filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0);
   const despesa = (data || []).filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0);
-  const apagar  = (data || []).filter(l => l.tipo === 'entrada' && !l.pago).reduce((s, l) => s + Number(l.valor), 0);
+
+  // "A receber" é dívida em aberto de VERDADE — não faz sentido limitar
+  // ao mês atual, porque quem ficou devendo em agosto continua devendo em
+  // setembro. Antes esse número só batia por coincidência, quando não
+  // tinha nenhuma pendência de mês anterior — daí a impressão de estar
+  // "errado" quando aparecia um valor menor que o total real. Busca à
+  // parte, sem filtro de data, igual a tela de Fiado já faz.
+  const { data: pendentesTodos } = await supabase.from('lancamentos')
+    .select('valor').eq('salao_id', req.salao_id).eq('tipo', 'entrada').eq('pago', false);
+  const apagar = (pendentesTodos || []).reduce((s, l) => s + Number(l.valor), 0);
+
   res.json({ receita, despesa, lucro: receita - despesa, apagar });
 });
 
