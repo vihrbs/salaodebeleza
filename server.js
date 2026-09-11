@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.33.0-detalhamento-atendimentos' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.34.0-filtros-atendimentos' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -3228,12 +3228,13 @@ app.get('/api/relatorios/atendimentos', auth, requirePermissao('comissoes'), asy
     const lista = (data || []).map(ag => {
       const servicosNomes = (ag.agendamento_servicos || []).map(s => s.servicos?.nome).filter(Boolean).join(', ');
       const comissaoServicos = (ag.agendamento_servicos || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+      const teveServicoViaPacote = (ag.agendamento_servicos || []).some(s => s.pago_via_pacote);
       return {
         id: ag.id, data_hora: ag.data_hora,
         cliente_nome: ag.clientes?.nome || 'Cliente', profissional_nome: ag.profissionais?.nome || '—',
         servicos: servicosNomes || '—', valor_total: Number(ag.valor_total || 0),
         forma_pgto: ag.forma_pgto || '—', comissao: comissaoServicos,
-        caixinha: Number(ag.caixinha_liquida || 0)
+        caixinha: Number(ag.caixinha_liquida || 0), pago_via_pacote: teveServicoViaPacote
       };
     });
 
