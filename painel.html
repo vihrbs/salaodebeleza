@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.32.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.33.0-frontend</div>
       </div>
     </div>
 
@@ -777,6 +777,7 @@ select.fc option{background:var(--bg2)}
         <div><label class="fl" style="margin-bottom:2px">Até</label><input type="date" class="fc" id="com-data-fim" onchange="loadComPeriodoCustom()" style="width:auto"/></div>
         <button class="btn btnp" style="margin-left:auto" onclick="abrirFecharComissoesPeriodo()">💸 Fechar Comissões</button>
         <button class="btn btns" onclick="abrirHistoricoComissoes()">📜 Histórico de Pagamentos</button>
+        <button class="btn btns" onclick="abrirDetalhamentoAtendimentos()">📋 Ver Atendimentos Detalhados</button>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
         <button class="btn btns btnsm" onclick="aplicarPeriodoComRapido('semana')">Semana atual</button>
@@ -3596,6 +3597,63 @@ function abrirHistoricoComissoes() {
     (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
   openM('m-historico-com');
   loadHistoricoComissoes();
+}
+
+// ── Atendimentos detalhados — lista item por item (não só o total
+// fechado), com filtro de profissional e período livre.
+function abrirDetalhamentoAtendimentos() {
+  var sel = document.getElementById('dat-filtro-prof');
+  sel.innerHTML = '<option value="">Todos os profissionais</option>' +
+    (PROS || []).map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
+  // Por padrão, mostra o mesmo período que já estava selecionado na tela de Comissões
+  var iniAtual = document.getElementById('com-data-ini').value || today();
+  var fimAtual = document.getElementById('com-data-fim').value || today();
+  document.getElementById('dat-data-ini').value = iniAtual;
+  document.getElementById('dat-data-fim').value = fimAtual;
+  openM('m-detalhe-atendimentos');
+  loadDetalhamentoAtendimentos();
+}
+
+function loadDetalhamentoAtendimentos() {
+  var prof = document.getElementById('dat-filtro-prof').value;
+  var ini = document.getElementById('dat-data-ini').value;
+  var fim = document.getElementById('dat-data-fim').value;
+  var lista = document.getElementById('dat-lista');
+  lista.innerHTML = '<div class="lc"><div class="spin"></div></div>';
+
+  var qs = 'data_inicio=' + ini + '&data_fim=' + fim + (prof ? '&profissional_id=' + prof : '');
+  apiFetch('/api/relatorios/atendimentos?' + qs)
+    .then(function(r){ renderDetalhamentoAtendimentos(r); })
+    .catch(function(e){ lista.innerHTML = '<div class="empty">Erro: ' + esc(e.message||'') + '</div>'; });
+}
+
+function renderDetalhamentoAtendimentos(r) {
+  var resumo = document.getElementById('dat-resumo');
+  var lista = document.getElementById('dat-lista');
+  if (!r || !r.totais) { resumo.innerHTML = ''; lista.innerHTML = '<div class="empty">Sem dados.</div>'; return; }
+
+  resumo.innerHTML =
+    '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">' +
+      '<span>🧾 <strong>' + r.totais.total_atendimentos + '</strong> atendimento(s)</span>' +
+      '<span>💰 Faturado: <strong style="color:var(--ac)">' + brl(r.totais.total_faturado) + '</strong></span>' +
+      '<span>🤝 Comissão: <strong style="color:var(--warn)">' + brl(r.totais.total_comissao) + '</strong></span>' +
+      (r.totais.total_caixinhas > 0 ? '<span>🎁 Caixinha: <strong>' + brl(r.totais.total_caixinhas) + '</strong></span>' : '') +
+    '</div>';
+
+  if (!r.atendimentos.length) { lista.innerHTML = '<div class="empty">Nenhum atendimento concluído nesse período.</div>'; return; }
+
+  lista.innerHTML = r.atendimentos.map(function(a){
+    var dataFormatada = new Date(a.data_hora).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    return '<div style="padding:9px 4px;border-bottom:1px solid var(--bd2);font-size:.78rem">' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:2px">' +
+        '<strong>' + esc(a.cliente_nome) + '</strong>' +
+        '<strong style="color:var(--ac)">' + brl(a.valor_total) + '</strong>' +
+      '</div>' +
+      '<div style="color:var(--t3);font-size:.7rem">' + dataFormatada + ' · ' + esc(a.profissional_nome) + ' · ' + esc(a.servicos) + ' · ' + esc(a.forma_pgto) +
+        (a.comissao > 0 ? ' · comissão: ' + brl(a.comissao) : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 // ── SUPER ADMIN — gerenciar todos os salões (clientes) ──
@@ -7777,6 +7835,24 @@ function dispensarBannerPWA() {
       <div id="hcom-lista"><div class="lc"><div class="spin"></div></div></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-historico-com')">Fechar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-detalhe-atendimentos">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">📋 Atendimentos Detalhados</span><button class="mx" onclick="closeM('m-detalhe-atendimentos')">✕</button></div>
+    <div class="mb">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <select class="fc" id="dat-filtro-prof" onchange="loadDetalhamentoAtendimentos()" style="flex:1;min-width:160px">
+          <option value="">Todos os profissionais</option>
+        </select>
+        <input type="date" class="fc" id="dat-data-ini" onchange="loadDetalhamentoAtendimentos()" style="width:auto"/>
+        <input type="date" class="fc" id="dat-data-fim" onchange="loadDetalhamentoAtendimentos()" style="width:auto"/>
+      </div>
+      <div id="dat-resumo" style="background:var(--bg3);border-radius:var(--rs);padding:10px 12px;margin-bottom:12px;font-size:.82rem"></div>
+      <div id="dat-lista" style="max-height:420px;overflow-y:auto"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-detalhe-atendimentos')">Fechar</button></div>
   </div>
 </div>
 
