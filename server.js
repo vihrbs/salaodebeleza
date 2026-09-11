@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.30.0-pacote-concluir-atendimento' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.31.0-forma-pgto-pacote' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1338,7 +1338,7 @@ app.delete('/api/pacotes/:id', auth, requirePermissao('pacotes'), async (req, re
 
 // Vende uma instância de um pacote pra um cliente — cria o saldo de sessões
 // disponível e lança a entrada financeira do valor pago pelo pacote.
-async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago, dataCompra, pagoAgora }) {
+async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago, dataCompra, pagoAgora, formaPgto }) {
   const { data: pacote } = await supabase.from('pacotes')
     .select('*').eq('id', pacoteId).eq('salao_id', salaoId).eq('ativo', true).single();
   if (!pacote) { const e = new Error('Pacote não encontrado'); e.status = 404; throw e; }
@@ -1358,7 +1358,8 @@ async function venderPacoteParaCliente({ salaoId, clienteId, pacoteId, valorPago
 
   const { data: lancamento } = await supabase.from('lancamentos').insert({
     salao_id: salaoId, cliente_id: clienteId, tipo: 'entrada', categoria: 'Pacote',
-    descricao: 'Pacote: ' + pacote.nome, valor: valorFinal, data: dataCompraFinal, pago
+    descricao: 'Pacote: ' + pacote.nome, valor: valorFinal, data: dataCompraFinal, pago,
+    forma_pgto: formaPgto || null
   }).select().single();
 
   const { data: pacoteCliente, error } = await supabase.from('pacotes_clientes')
@@ -1382,7 +1383,9 @@ app.patch('/api/pacotes-clientes/:id/pagar', auth, requirePermissao('pacotes'), 
 
     await supabase.from('pacotes_clientes').update({ pago: true }).eq('id', req.params.id);
     if (pc.lancamento_id) {
-      await supabase.from('lancamentos').update({ pago: true }).eq('id', pc.lancamento_id);
+      const updatesLancamento = { pago: true };
+      if (req.body.forma_pgto) updatesLancamento.forma_pgto = req.body.forma_pgto;
+      await supabase.from('lancamentos').update(updatesLancamento).eq('id', pc.lancamento_id);
     }
     res.json({ message: 'Pacote marcado como pago!' });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -1452,7 +1455,7 @@ app.post('/api/pacotes-clientes/lote', auth, async (req, res) => {
 });
 
 app.post('/api/clientes/:id/pacotes', auth, requirePermissao('pacotes'), async (req, res) => {
-  const { pacote_id, valor_pago, data_compra, pago } = req.body;
+  const { pacote_id, valor_pago, data_compra, pago, forma_pgto } = req.body;
   if (!pacote_id) return res.status(422).json({ error: 'pacote_id é obrigatório' });
   try {
     const { data: cliente } = await supabase.from('clientes')
@@ -1461,7 +1464,7 @@ app.post('/api/clientes/:id/pacotes', auth, requirePermissao('pacotes'), async (
 
     const pc = await venderPacoteParaCliente({
       salaoId: req.salao_id, clienteId: req.params.id, pacoteId: pacote_id,
-      valorPago: valor_pago, dataCompra: data_compra, pagoAgora: pago
+      valorPago: valor_pago, dataCompra: data_compra, pagoAgora: pago, formaPgto: forma_pgto
     });
     res.status(201).json(pc);
   } catch(e) { res.status(e.status || 500).json({ error: e.message }); }
@@ -1990,7 +1993,8 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
         const dataCompraPacote = item.data_compra || agora.split('T')[0];
         const vendido = await venderPacoteParaCliente({
           salaoId: req.salao_id, clienteId: cliente_id, pacoteId: item.pacote_id,
-          valorPago: valorPacote, dataCompra: dataCompraPacote, pagoAgora: deixar_aberto ? false : (pago !== false)
+          valorPago: valorPacote, dataCompra: dataCompraPacote, pagoAgora: deixar_aberto ? false : (pago !== false),
+          formaPgto: deixar_aberto ? null : forma_pgto
         });
         valorTotalAtual += Number(vendido.valor_pago || 0);
         pacotesVendidos.push({ pacote_id: item.pacote_id, nome: vendido.nome_snapshot, valor: Number(vendido.valor_pago || 0) });
