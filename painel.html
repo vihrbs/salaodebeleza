@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.36.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.38.0-frontend</div>
       </div>
     </div>
 
@@ -778,6 +778,7 @@ select.fc option{background:var(--bg2)}
         <button class="btn btnp" style="margin-left:auto" onclick="abrirFecharComissoesPeriodo()">💸 Fechar Comissões</button>
         <button class="btn btns" onclick="abrirHistoricoComissoes()">📜 Histórico de Pagamentos</button>
         <button class="btn btns" onclick="abrirDetalhamentoAtendimentos()">📋 Ver Atendimentos Detalhados</button>
+        <button class="btn btns" onclick="abrirComissoesRepresadas()">🔒 Comissões Represadas</button>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
         <button class="btn btns btnsm" onclick="aplicarPeriodoComRapido('semana')">Semana atual</button>
@@ -3505,15 +3506,19 @@ function renderCom(list) {
     var v = valoresExibir(p);
     var totalAPagar = v.comissao + v.caixinhas;
     var comprasPendentes = p.compras_pendentes_total || 0;
+    var fiadoPendente = v.foiPago ? 0 : (p.total_comissao_fiado_pendente || 0);
     var acaoBtn = v.foiPago
       ? '<button class="btnic btn btnsm" style="color:var(--t3)" data-fid="'+p.fechamento.id+'" data-nome="'+escAttr(p.nome)+'" onclick="reabrirFechamento(this.dataset.fid,this.dataset.nome)" title="Reabrir caso tenha pago por engano">↩️</button>'
-      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + escAttr(p.nome) + '\',' + totalAPagar + ',' + comprasPendentes + ')">Pagar ' + brl(totalAPagar) + '</button>';
+      : '<button class="btn btnp btnsm" onclick="pagarCom(\'' + (p.id||'') + '\',\'' + escAttr(p.nome) + '\',' + totalAPagar + ',' + comprasPendentes + ',' + fiadoPendente + ')">Pagar ' + brl(totalAPagar) + '</button>';
     var avisoCompras = comprasPendentes > 0
       ? '<div style="font-size:.68rem;color:var(--warn);margin-top:2px;cursor:pointer" onclick="abrirParcelasProfissional(\'' + p.id + '\',\'' + escAttr(p.nome) + '\')" title="Ver e quitar parcelas">🛒 ' + brl(comprasPendentes) + ' em compras pendentes — clique pra descontar</div>'
       : '';
+    var avisoFiado = fiadoPendente > 0
+      ? '<div style="font-size:.68rem;color:var(--er);margin-top:2px">⚠️ ' + brl(fiadoPendente) + ' dessa comissão é de atendimento que o cliente ainda não pagou (fiado)</div>'
+      : '';
     return '<div style="display:flex;align-items:center;gap:13px;padding:13px;background:var(--wh);border-radius:var(--r);border:1.5px solid var(--bd);margin-bottom:7px;flex-wrap:wrap">' +
       '<div class="pro-av" style="background:' + (p.cor||COLS[0]) + '">' + esc(p.nome[0]) + '</div>' +
-      '<div><div style="font-weight:700;font-size:.85rem">' + esc(p.nome) + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div>' + avisoCompras + '</div>' +
+      '<div><div style="font-weight:700;font-size:.85rem">' + esc(p.nome) + '</div><div style="font-size:.7rem;color:var(--t3)">' + p.comissao_pct + '% comissão</div>' + avisoCompras + avisoFiado + '</div>' +
       '<div style="display:flex;gap:18px;margin-left:auto;text-align:center">' +
       '<div><div style="font-size:.88rem;font-weight:800">' + v.servicos + '</div><div style="font-size:.62rem;color:var(--t3)">Serviços</div></div>' +
       '<div><div style="font-size:.88rem;font-weight:800">' + brl(v.bruto) + '</div><div style="font-size:.62rem;color:var(--t3)">Faturado</div></div>' +
@@ -3536,14 +3541,27 @@ function renderCom(list) {
 
 var PAGAR_COM_ESTADO = null; // guarda os dados do pagamento em andamento nesse modal
 
-function pagarCom(id, nome, val, comprasPendentes) {
-  PAGAR_COM_ESTADO = { id: id, nome: nome, valorBruto: val, comprasPendentes: comprasPendentes || 0 };
+function pagarCom(id, nome, val, comprasPendentes, fiadoPendente) {
+  PAGAR_COM_ESTADO = { id: id, nome: nome, valorBruto: val, comprasPendentes: comprasPendentes || 0, fiadoPendente: fiadoPendente || 0 };
   var periodoTexto = fmtDataCurta(COM_PERIODO_ATUAL.inicio) + ' a ' + fmtDataCurta(COM_PERIODO_ATUAL.fim);
 
   document.getElementById('pagar-com-info').innerHTML =
     '<div style="font-size:.85rem"><strong>' + esc(nome) + '</strong></div>' +
     '<div style="font-size:.76rem;color:var(--t3);margin-bottom:10px">Período: ' + periodoTexto + '</div>' +
     '<div style="display:flex;justify-content:space-between;font-size:.84rem"><span>Comissão do período</span><strong>' + brl(val) + '</strong></div>';
+
+  var wrapFiado = document.getElementById('pagar-com-fiado-wrap');
+  var chkFiado = document.getElementById('pagar-com-excluir-fiado');
+  if (fiadoPendente > 0) {
+    wrapFiado.style.display = 'block';
+    document.getElementById('pagar-com-fiado-texto').innerHTML =
+      '⚠️ ' + brl(fiadoPendente) + ' dessa comissão vem de atendimento(s) que o cliente ainda não pagou (fiado). ' +
+      '<strong>Deixar essa parte de fora agora</strong> — fica guardada em "🔒 Comissões Represadas" pra você pagar quando o cliente pagar.';
+    chkFiado.checked = true; // por padrão, protege — não paga em cima de dinheiro que ainda não entrou
+    chkFiado.onchange = atualizarValorFinalPagarCom;
+  } else {
+    wrapFiado.style.display = 'none';
+  }
 
   var wrapParcela = document.getElementById('pagar-com-parcela-wrap');
   var chk = document.getElementById('pagar-com-descontar');
@@ -3563,36 +3581,86 @@ function pagarCom(id, nome, val, comprasPendentes) {
 function atualizarValorFinalPagarCom() {
   if (!PAGAR_COM_ESTADO) return;
   var descontar = document.getElementById('pagar-com-descontar').checked;
-  var valorFinal = descontar
-    ? Math.max(0, PAGAR_COM_ESTADO.valorBruto - PAGAR_COM_ESTADO.comprasPendentes)
+  var excluirFiado = document.getElementById('pagar-com-excluir-fiado').checked && PAGAR_COM_ESTADO.fiadoPendente > 0;
+
+  var valorAposFiado = excluirFiado
+    ? Math.max(0, PAGAR_COM_ESTADO.valorBruto - PAGAR_COM_ESTADO.fiadoPendente)
     : PAGAR_COM_ESTADO.valorBruto;
+  var valorFinal = descontar
+    ? Math.max(0, valorAposFiado - PAGAR_COM_ESTADO.comprasPendentes)
+    : valorAposFiado;
+
+  var linhaFiado = excluirFiado
+    ? '<div style="display:flex;justify-content:space-between;font-size:.84rem;color:var(--er)"><span>Deixado de fora (fiado)</span><strong>- ' + brl(Math.min(PAGAR_COM_ESTADO.fiadoPendente, PAGAR_COM_ESTADO.valorBruto)) + '</strong></div>'
+    : '';
   var linhaDesconto = descontar
-    ? '<div style="display:flex;justify-content:space-between;font-size:.84rem;color:var(--er)"><span>Desconto de compras</span><strong>- ' + brl(Math.min(PAGAR_COM_ESTADO.comprasPendentes, PAGAR_COM_ESTADO.valorBruto)) + '</strong></div>'
+    ? '<div style="display:flex;justify-content:space-between;font-size:.84rem;color:var(--er)"><span>Desconto de compras</span><strong>- ' + brl(Math.min(PAGAR_COM_ESTADO.comprasPendentes, valorAposFiado)) + '</strong></div>'
     : '';
   document.getElementById('pagar-com-valor-final').innerHTML =
-    linhaDesconto +
-    '<div style="display:flex;justify-content:space-between;font-size:1.05rem;font-weight:800;margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd)"><span>Total a pagar</span><span>' + brl(valorFinal) + '</span></div>';
+    linhaFiado + linhaDesconto +
+    '<div style="display:flex;justify-content:space-between;font-size:1.05rem;font-weight:800;margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd)"><span>Total a pagar agora</span><span>' + brl(valorFinal) + '</span></div>';
 }
 
 function confirmarPagamentoCom() {
   if (!PAGAR_COM_ESTADO) return;
   var descontar = document.getElementById('pagar-com-descontar').checked;
+  var excluirFiado = document.getElementById('pagar-com-excluir-fiado').checked && PAGAR_COM_ESTADO.fiadoPendente > 0;
   var btn = document.getElementById('pagar-com-btn');
   btn.disabled = true; btn.textContent = 'Salvando...';
   apiFetch('/api/comissoes/fechar',{method:'POST',body:{
     profissional_id: PAGAR_COM_ESTADO.id,
     periodo_inicio: COM_PERIODO_ATUAL.inicio, periodo_fim: COM_PERIODO_ATUAL.fim,
-    descontar_parcelas: descontar
+    descontar_parcelas: descontar, excluir_fiado_pendente: excluirFiado
   }})
   .then(function(r){
     closeM('m-pagar-com');
     var msg = 'Comissão de ' + PAGAR_COM_ESTADO.nome + ' paga! ✅';
     if (r && r.valor_parcelas_descontado > 0) msg += ' (' + brl(r.valor_parcelas_descontado) + ' de compra descontado)';
+    if (excluirFiado && PAGAR_COM_ESTADO.fiadoPendente > 0) msg += ' — ' + brl(PAGAR_COM_ESTADO.fiadoPendente) + ' represado até o cliente pagar';
     toast(msg, 'ok');
     loadCom();
   })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
   .finally(function(){ btn.disabled = false; btn.textContent = 'Confirmar Pagamento'; });
+}
+
+// ── Comissões represadas (fiado) ──────────────────────
+function abrirComissoesRepresadas() {
+  openM('m-comissoes-represadas');
+  document.getElementById('represadas-lista').innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  apiFetch('/api/comissoes/represadas')
+    .then(function(r){ renderComissoesRepresadas(r || []); })
+    .catch(function(e){ document.getElementById('represadas-lista').innerHTML = '<div class="empty">Erro: '+esc(e.message||'')+'</div>'; });
+}
+
+function renderComissoesRepresadas(lista) {
+  var el = document.getElementById('represadas-lista');
+  if (!lista.length) { el.innerHTML = '<div class="empty">✅ Nenhuma comissão represada no momento.</div>'; return; }
+
+  el.innerHTML = lista.map(function(r){
+    var dataFormatada = new Date(r.data_hora).toLocaleDateString('pt-BR');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--bd2)">' +
+      '<div>' +
+        '<div style="font-size:.82rem;font-weight:700">' + esc(r.profissional_nome) + '</div>' +
+        '<div style="font-size:.7rem;color:var(--t3)">' + esc(r.cliente_nome) + ' · ' + dataFormatada + '</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        '<strong style="color:var(--ac)">' + brl(r.comissao) + '</strong>' +
+        (r.ja_pode_liberar
+          ? '<button class="btn btnp btnsm" onclick="liberarComissaoRepresada(\'' + r.agendamento_id + '\')">✅ Liberar</button>'
+          : '<span class="badge bw" style="font-size:.62rem">⏳ Fiado ainda pendente</span>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function liberarComissaoRepresada(agendamentoId) {
+  apiFetch('/api/comissoes/represadas/' + agendamentoId + '/liberar', { method: 'POST' })
+    .then(function(r){
+      toast('Comissão de ' + brl(r.valor) + ' liberada! ✅ Já entra no próximo fechamento desse profissional.', 'ok');
+      abrirComissoesRepresadas(); // recarrega a lista
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
 // Abre o modal de fechar comissões — a tabela (fcom-t) já vem preenchida
@@ -7856,6 +7924,12 @@ function dispensarBannerPWA() {
     <div class="mh"><span class="mt">Confirmar Pagamento</span><button class="mx" onclick="closeM('m-pagar-com')">✕</button></div>
     <div class="mb">
       <div id="pagar-com-info"></div>
+      <div class="fg" id="pagar-com-fiado-wrap" style="display:none;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:var(--rs);padding:10px;margin-top:8px">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:.8rem">
+          <input type="checkbox" id="pagar-com-excluir-fiado" checked style="margin-top:2px" onchange="atualizarValorFinalPagarCom()"/>
+          <span id="pagar-com-fiado-texto"></span>
+        </label>
+      </div>
       <div class="fg" id="pagar-com-parcela-wrap" style="display:none;background:var(--bg3);border-radius:var(--rs);padding:10px;margin-top:8px">
         <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:.8rem">
           <input type="checkbox" id="pagar-com-descontar" style="margin-top:2px"/>
@@ -7865,6 +7939,17 @@ function dispensarBannerPWA() {
       <div id="pagar-com-valor-final" style="margin-top:12px"></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-pagar-com')">Cancelar</button><button class="btn btnp" id="pagar-com-btn" onclick="confirmarPagamentoCom()">Confirmar Pagamento</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-comissoes-represadas">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">🔒 Comissões Represadas (fiado)</span><button class="mx" onclick="closeM('m-comissoes-represadas')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.78rem;color:var(--t3);margin-bottom:12px">Comissão que ficou de fora de um fechamento porque o cliente ainda não tinha pago. Assim que o fiado for pago, aparece liberado pra pagar ao profissional.</div>
+      <div id="represadas-lista"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-comissoes-represadas')">Fechar</button></div>
   </div>
 </div>
 
