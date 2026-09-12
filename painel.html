@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.34.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.35.0-frontend</div>
       </div>
     </div>
 
@@ -2008,6 +2008,10 @@ function renderDetalhesAgendamento(ag) {
       '</div>' +
       (ag.forma_pgto ? '<div style="font-size:.7rem;color:var(--t3);margin-top:2px">Pago via ' + esc(ag.forma_pgto) + '</div>' : '') +
       (ag.desconto_aplicado > 0 ? '<div style="font-size:.7rem;color:var(--ac)">Desconto aplicado: ' + brl(ag.desconto_aplicado) + '</div>' : '') +
+      (ag.status === 'concluido' ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--bd2);font-size:.78rem">' +
+        '<span>🎁 Caixinha: <strong>' + brl(ag.caixinha_valor || 0) + '</strong></span>' +
+        (USER_PERFIL === 'admin' ? '<button class="btnic btn btnsm" onclick="abrirEditarCaixinha(\'' + ag.id + '\',' + (ag.caixinha_valor || 0) + ')" title="Corrigir valor da caixinha">✏️</button>' : '') +
+      '</div>' : '') +
     '</div>' +
     '<div style="display:flex;flex-direction:column;gap:8px">' +
       (podeConcluir ? '<button class="btn btnp btnsm" onclick="closeM(\'m-detalhes-ag\');abrirModalConcluir(\'' + ag.id + '\')">✅ Concluir Atendimento</button>' : '') +
@@ -2139,6 +2143,32 @@ function confirmarReabrirComanda() {
     })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
     .finally(function(){ btn.disabled = false; btn.textContent = 'Reabrir'; });
+}
+
+// ── Corrigir valor de caixinha de um atendimento já concluído ────
+function abrirEditarCaixinha(agendamentoId, valorAtual) {
+  closeM('m-detalhes-ag');
+  document.getElementById('ecx-ag-id').value = agendamentoId;
+  document.getElementById('ecx-valor').value = valorAtual || '';
+  openM('m-editar-caixinha');
+}
+
+function confirmarEditarCaixinha() {
+  var id = document.getElementById('ecx-ag-id').value;
+  var novoValor = parseFloat(document.getElementById('ecx-valor').value);
+  if (isNaN(novoValor) || novoValor < 0) { toast('Informe um valor válido','er'); return; }
+
+  var btn = document.querySelector('#m-editar-caixinha .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/agendamentos/' + id + '/caixinha', { method: 'PATCH', body: { valor: novoValor } })
+    .then(function(r){
+      toast('Caixinha corrigida! Valor líquido pro profissional: ' + brl(r.caixinha.liquida), 'ok');
+      closeM('m-editar-caixinha');
+      abrirDetalhesAgendamento(id); // recarrega o modal de detalhes com o valor atualizado
+      loadFechamentoCaixa(); loadCom();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Salvar'; });
 }
 
 function abrirModalConcluir(id) {
@@ -3680,7 +3710,7 @@ function renderDetalhamentoAtendimentos(atendimentos) {
 
   lista.innerHTML = atendimentos.map(function(a){
     var dataFormatada = new Date(a.data_hora).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    return '<div style="padding:9px 4px;border-bottom:1px solid var(--bd2);font-size:.78rem">' +
+    return '<div style="padding:9px 4px;border-bottom:1px solid var(--bd2);font-size:.78rem;cursor:pointer" onclick="closeM(\'m-detalhe-atendimentos\');abrirDetalhesAgendamento(\'' + a.id + '\')" onmouseover="this.style.background=\'var(--bg3)\'" onmouseout="this.style.background=\'\'">' +
       '<div style="display:flex;justify-content:space-between;margin-bottom:2px">' +
         '<strong>' + esc(a.cliente_nome) + '</strong>' +
         '<strong style="color:var(--ac)">' + brl(a.valor_total) + '</strong>' +
@@ -7603,6 +7633,18 @@ function dispensarBannerPWA() {
       <div style="font-size:.68rem;color:var(--warn);background:rgba(251,191,36,.1);padding:8px 10px;border-radius:var(--rs)">⚠️ Só administradores podem reabrir e alterar a data de uma comanda já concluída — isso é registrado no log do sistema.</div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-reabrir-comanda')">Cancelar</button><button class="btn btnp" onclick="confirmarReabrirComanda()">Reabrir</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-editar-caixinha">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">🎁 Corrigir Caixinha</span><button class="mx" onclick="closeM('m-editar-caixinha')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ecx-ag-id"/>
+      <div class="fg"><label class="fl">Valor da caixinha (R$)</label><input type="number" class="fc" id="ecx-valor" step="0.01"/></div>
+      <div style="font-size:.68rem;color:var(--warn);background:rgba(251,191,36,.1);padding:8px 10px;border-radius:var(--rs)">⚠️ Isso recalcula o valor líquido pro profissional automaticamente (já descontando a taxa da maquininha, se foi pago no cartão).</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-editar-caixinha')">Cancelar</button><button class="btn btnp" onclick="confirmarEditarCaixinha()">Salvar</button></div>
   </div>
 </div>
 
