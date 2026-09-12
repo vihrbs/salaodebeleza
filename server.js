@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.35.0-caixinha-editar-e-anti-duplicacao' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.38.0-comissao-fiado-represada' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -3296,6 +3296,73 @@ app.get('/api/relatorios/atendimentos', auth, requirePermissao('comissoes'), asy
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Comissões que ficaram de fora de um fechamento por causa de fiado ainda
+// pendente na hora — mostra aqui pra NUNCA ficarem esquecidas. Assim que o
+// cliente pagar o fiado, aparece marcado como "já pode liberar".
+app.get('/api/comissoes/represadas', auth, requirePermissao('comissoes'), async (req, res) => {
+  try {
+    const { data: fechamentosComExclusao } = await supabase.from('fechamentos_comissao')
+      .select('id, profissional_id, periodo_inicio, periodo_fim, atendimentos_fiado_excluidos, profissionais(nome)')
+      .eq('salao_id', req.salao_id).eq('status', 'pago')
+      .not('atendimentos_fiado_excluidos', 'eq', '[]');
+
+    const linhas = [];
+    for (const f of (fechamentosComExclusao || [])) {
+      const idsExcluidos = f.atendimentos_fiado_excluidos || [];
+      if (!idsExcluidos.length) continue;
+
+      const { data: agendamentos } = await supabase.from('agendamentos')
+        .select('id, data_hora, clientes(nome), agendamento_servicos(comissao_valor), lancamentos(pago)')
+        .in('id', idsExcluidos);
+
+      for (const ag of (agendamentos || [])) {
+        const comissao = (ag.agendamento_servicos || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+        const aindaPendente = (ag.lancamentos || []).some(l => l.pago === false);
+        linhas.push({
+          agendamento_id: ag.id, fechamento_id: f.id,
+          profissional_id: f.profissional_id, profissional_nome: f.profissionais?.nome || '—',
+          cliente_nome: ag.clientes?.nome || 'Cliente', data_hora: ag.data_hora,
+          comissao, ja_pode_liberar: !aindaPendente
+        });
+      }
+    }
+
+    res.json(linhas);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Libera uma comissão represada — só funciona se o fiado daquele
+// atendimento específico já tiver sido pago pelo cliente. Cria um
+// pagamento avulso (não um fechamento novo, pra não reabrir todo aquele
+// período antigo) e tira esse atendimento da lista de exclusão.
+app.post('/api/comissoes/represadas/:agendamentoId/liberar', auth, async (req, res) => {
+  if (!(await podeFecharComissao(req.user))) {
+    return res.status(403).json({ error: 'Você não tem permissão para liberar comissões' });
+  }
+  try {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select('id, agendamento_servicos(comissao_valor), lancamentos(pago)')
+      .eq('id', req.params.agendamentoId).eq('salao_id', req.salao_id).single();
+    if (!ag) return res.status(404).json({ error: 'Atendimento não encontrado' });
+
+    const aindaPendente = (ag.lancamentos || []).some(l => l.pago === false);
+    if (aindaPendente) return res.status(422).json({ error: 'O cliente ainda não pagou esse fiado — não dá pra liberar essa comissão ainda' });
+
+    const { data: fechamento } = await supabase.from('fechamentos_comissao')
+      .select('id, atendimentos_fiado_excluidos')
+      .eq('salao_id', req.salao_id).contains('atendimentos_fiado_excluidos', [req.params.agendamentoId]).single();
+    if (!fechamento) return res.status(404).json({ error: 'Não achei o fechamento original desse atendimento' });
+
+    const novaLista = (fechamento.atendimentos_fiado_excluidos || []).filter(id => id !== req.params.agendamentoId);
+    await supabase.from('fechamentos_comissao').update({ atendimentos_fiado_excluidos: novaLista }).eq('id', fechamento.id);
+
+    const comissao = (ag.agendamento_servicos || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+    console.error('[AUDITORIA] Comissão represada liberada — atendimento ' + req.params.agendamentoId + ', valor ' + comissao.toFixed(2) + ', por ' + (req.user.nome || req.user.id));
+
+    res.json({ liberado: true, valor: comissao });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/comissoes/historico', auth, requirePermissao('comissoes'), async (req, res) => {
   try {
     let query = supabase.from('fechamentos_comissao')
@@ -3383,7 +3450,7 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
     // Se já está pago, mostra zerado (já foi quitado, não soma de novo) —
     // e nem precisa rodar as outras 4 consultas abaixo nesse caso
     if (fechamento && fechamento.status === 'pago') {
-      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, total_comissao_produtos: 0, total_caixinhas: 0, fechamento, compras_pendentes_total };
+      return { ...p, total_servicos: 0, total_bruto: 0, total_comissao: 0, total_comissao_produtos: 0, total_caixinhas: 0, total_comissao_fiado_pendente: 0, fechamento, compras_pendentes_total };
     }
 
     // As 4 consultas daqui pra baixo também não dependem uma da outra —
@@ -3391,9 +3458,11 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
     const [
       { data: svcsBrutos }, periodosPagos, { data: agsComCaixinhaBrutos }, { data: vendasProdutoBrutas }
     ] = await Promise.all([
-      // Calcula normalmente a partir dos agendamentos concluídos
+      // Calcula normalmente a partir dos agendamentos concluídos — já traz
+      // os lançamentos ligados a cada um, pra saber quais ainda estão como
+      // fiado pendente (usado no aviso de "fechar comissão com fiado em aberto")
       supabase.from('agendamento_servicos')
-        .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
+        .select('preco, comissao_valor, agendamentos!inner(id, data_hora, status, profissional_id, lancamentos(pago))')
         .eq('agendamentos.profissional_id', p.id)
         .eq('agendamentos.status', 'concluido')
         .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
@@ -3407,7 +3476,7 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
       // (que é uma % do serviço). Fica separado no fechamento de propósito,
       // pra ficar claro pro dono e pro profissional quanto foi cada coisa.
       supabase.from('agendamentos')
-        .select('data_hora, caixinha_liquida')
+        .select('id, data_hora, caixinha_liquida')
         .eq('profissional_id', p.id).eq('status', 'concluido').eq('salao_id', req.salao_id)
         .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00'),
       // Comissão de venda de produto — soma à parte pra mostrar transparente
@@ -3419,17 +3488,28 @@ app.get('/api/comissoes', auth, requirePermissao('comissoes'), async (req, res) 
         .gte('created_at', ini + 'T03:00:00+00:00').lte('created_at', adicionarDia(fim) + 'T02:59:59+00:00')
     ]);
 
-    const svcs = (svcsBrutos || []).filter(sv => !servicoJaPago(sv.agendamentos.data_hora, periodosPagos));
+    const svcs = (svcsBrutos || []).filter(sv => !servicoJaPago(sv.agendamentos.data_hora, sv.agendamentos.id, periodosPagos));
     const total_bruto    = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
     const total_comissao = (svcs || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
 
-    const agsComCaixinha = (agsComCaixinhaBrutos || []).filter(a => !servicoJaPago(a.data_hora, periodosPagos));
+    // Quanto dessa comissão vem de atendimento que o CLIENTE ainda não
+    // pagou (fiado em aberto) — a comissão já conta a partir da conclusão
+    // do atendimento, não de quando o cliente efetivamente paga, então é
+    // importante deixar visível antes de fechar/pagar comissão em cima de
+    // dinheiro que ainda não entrou no caixa do salão.
+    const total_comissao_fiado_pendente = svcs.reduce((s, sv) => {
+      const lancamentosDesseAg = sv.agendamentos.lancamentos || [];
+      const temFiadoPendente = lancamentosDesseAg.length > 0 && lancamentosDesseAg.some(l => l.pago === false);
+      return temFiadoPendente ? s + Number(sv.comissao_valor || 0) : s;
+    }, 0);
+
+    const agsComCaixinha = (agsComCaixinhaBrutos || []).filter(a => !servicoJaPago(a.data_hora, a.id, periodosPagos));
     const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
 
-    const vendasProduto = (vendasProdutoBrutas || []).filter(v => !servicoJaPago(v.created_at, periodosPagos));
+    const vendasProduto = (vendasProdutoBrutas || []).filter(v => !servicoJaPago(v.created_at, null, periodosPagos));
     const total_comissao_produtos = vendasProduto.reduce((s, v) => s + Number(v.comissao_valor || 0), 0);
 
-    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao: total_comissao + total_comissao_produtos, total_comissao_produtos, total_caixinhas, fechamento, compras_pendentes_total };
+    return { ...p, total_servicos: svcs?.length || 0, total_bruto, total_comissao: total_comissao + total_comissao_produtos, total_comissao_produtos, total_caixinhas, total_comissao_fiado_pendente, fechamento, compras_pendentes_total };
   }));
   res.json(resultado);
 });
@@ -3452,18 +3532,29 @@ async function podeFecharComissao(user) {
 // novo no cálculo do mês, duplicando o valor pago ao profissional.
 async function periodosJaPagos(salaoId, profissionalId) {
   const { data } = await supabase.from('fechamentos_comissao')
-    .select('periodo_inicio, periodo_fim')
+    .select('periodo_inicio, periodo_fim, atendimentos_fiado_excluidos')
     .eq('salao_id', salaoId).eq('profissional_id', profissionalId).eq('status', 'pago');
   return data || [];
 }
 
-function servicoJaPago(dataHoraISO, periodosPagos) {
+// Um atendimento é considerado "já contado" se a data dele cai dentro de
+// um período já fechado — EXCETO se esse atendimento especificamente foi
+// deixado de fora daquele fechamento por conta de fiado ainda pendente
+// (marcado em atendimentos_fiado_excluidos). Isso é o que permite: fechar
+// a comissão do período SEM incluir o fiado, e mais tarde, quando o
+// cliente pagar, ainda conseguir achar e pagar exatamente essa parte —
+// sem nunca contar a mesma comissão duas vezes nem perder ela de vista.
+function servicoJaPago(dataHoraISO, agendamentoId, periodosPagos) {
   const dataSimples = dataHoraISO.split('T')[0];
-  return periodosPagos.some(p => dataSimples >= p.periodo_inicio && dataSimples <= p.periodo_fim);
+  return periodosPagos.some(p => {
+    if (dataSimples < p.periodo_inicio || dataSimples > p.periodo_fim) return false;
+    const excluidos = p.atendimentos_fiado_excluidos || [];
+    return !excluidos.includes(agendamentoId);
+  });
 }
 
 app.post('/api/comissoes/fechar', auth, async (req, res) => {
-  const { profissional_id, periodo_inicio, periodo_fim, descontar_parcelas } = req.body;
+  const { profissional_id, periodo_inicio, periodo_fim, descontar_parcelas, excluir_fiado_pendente } = req.body;
 
   if (!(await podeFecharComissao(req.user))) {
     return res.status(403).json({ error: 'Você não tem permissão para fechar comissões' });
@@ -3477,7 +3568,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
     // Calcula os totais reais a partir dos agendamentos concluídos do período
     // (não confia em valor mandado pelo frontend — sempre recalcula no servidor)
     const { data: svcsBrutos } = await supabase.from('agendamento_servicos')
-      .select('preco, comissao_valor, agendamentos!inner(data_hora, status, profissional_id)')
+      .select('preco, comissao_valor, agendamentos!inner(id, data_hora, status, profissional_id, lancamentos(pago))')
       .eq('agendamentos.profissional_id', profissional_id)
       .eq('agendamentos.status', 'concluido')
       .gte('agendamentos.data_hora', ini + 'T03:00:00+00:00')
@@ -3488,7 +3579,22 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
     // quando alguém fecha períodos que se sobrepõem (ex.: fechou a semana,
     // depois fecha o mês inteiro por cima)
     const periodosPagos = await periodosJaPagos(req.salao_id, profissional_id);
-    const svcs = (svcsBrutos || []).filter(sv => !servicoJaPago(sv.agendamentos.data_hora, periodosPagos));
+    let svcs = (svcsBrutos || []).filter(sv => !servicoJaPago(sv.agendamentos.data_hora, sv.agendamentos.id, periodosPagos));
+
+    // Se pediu pra excluir a comissão de fiado ainda pendente desse
+    // fechamento, separa esses atendimentos ANTES de somar — eles ficam
+    // de fora do valor pago agora, mas marcados no fechamento (veja
+    // abaixo) pra continuar aparecendo como "a pagar" depois, quando o
+    // cliente finalmente pagar. Nunca somem, nunca são pagos duas vezes.
+    let atendimentosFiadoExcluidos = [];
+    if (excluir_fiado_pendente) {
+      const comFiadoPendente = svcs.filter(sv => {
+        const lancamentosDesseAg = sv.agendamentos.lancamentos || [];
+        return lancamentosDesseAg.length > 0 && lancamentosDesseAg.some(l => l.pago === false);
+      });
+      atendimentosFiadoExcluidos = [...new Set(comFiadoPendente.map(sv => sv.agendamentos.id))];
+      svcs = svcs.filter(sv => !atendimentosFiadoExcluidos.includes(sv.agendamentos.id));
+    }
 
     const total_servicos = svcs?.length || 0;
     const total_bruto     = (svcs || []).reduce((s, sv) => s + Number(sv.preco || 0), 0);
@@ -3499,10 +3605,10 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
     // junto com a comissão normal dos serviços. Mesma proteção contra
     // sobreposição de período aplicada aqui também.
     const { data: agsComCaixintaBrutos } = await supabase.from('agendamentos')
-      .select('data_hora, caixinha_liquida')
+      .select('id, data_hora, caixinha_liquida')
       .eq('profissional_id', profissional_id).eq('status', 'concluido').eq('salao_id', req.salao_id)
       .gte('data_hora', ini + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fim) + 'T02:59:59+00:00');
-    const agsComCaixinha = (agsComCaixintaBrutos || []).filter(a => !servicoJaPago(a.data_hora, periodosPagos));
+    const agsComCaixinha = (agsComCaixintaBrutos || []).filter(a => !servicoJaPago(a.data_hora, a.id, periodosPagos));
     const total_caixinhas = (agsComCaixinha || []).reduce((s, a) => s + Number(a.caixinha_liquida || 0), 0);
 
     // Comissão de venda de produto do período — mesma proteção contra
@@ -3511,7 +3617,7 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       .select('created_at, comissao_valor')
       .eq('profissional_id', profissional_id).eq('tipo', 'venda').eq('salao_id', req.salao_id)
       .gte('created_at', ini + 'T03:00:00+00:00').lte('created_at', adicionarDia(fim) + 'T02:59:59+00:00');
-    const vendasProduto = (vendasProdutoBrutas || []).filter(v => !servicoJaPago(v.created_at, periodosPagos));
+    const vendasProduto = (vendasProdutoBrutas || []).filter(v => !servicoJaPago(v.created_at, null, periodosPagos));
     const total_comissao_produtos = vendasProduto.reduce((s, v) => s + Number(v.comissao_valor || 0), 0);
 
     const total_comissao = total_comissao_servicos + total_caixinhas + total_comissao_produtos;
@@ -3569,7 +3675,8 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
       ({ data, error } = await supabase.from('fechamentos_comissao')
         .update({
           total_comissao: total_comissao_final, total_bruto, total_servicos, total_caixinhas,
-          total_comissao_produtos, valor_parcelas_descontado, status: 'pago', pago_em: new Date(), periodo_fim: fim
+          total_comissao_produtos, valor_parcelas_descontado, status: 'pago', pago_em: new Date(), periodo_fim: fim,
+          atendimentos_fiado_excluidos: atendimentosFiadoExcluidos
         })
         .eq('id', existing.id).select().single());
     } else {
@@ -3578,7 +3685,8 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
         .insert({
           salao_id: req.salao_id, profissional_id, periodo_inicio: ini, periodo_fim: fim,
           total_comissao: total_comissao_final, total_bruto, total_servicos, total_caixinhas,
-          total_comissao_produtos, valor_parcelas_descontado, status: 'pago', pago_em: new Date()
+          total_comissao_produtos, valor_parcelas_descontado, status: 'pago', pago_em: new Date(),
+          atendimentos_fiado_excluidos: atendimentosFiadoExcluidos
         })
         .select().single());
     }
