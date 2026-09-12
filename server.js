@@ -367,7 +367,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.34.0-filtros-atendimentos' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.35.0-caixinha-editar-e-anti-duplicacao' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2239,8 +2239,55 @@ app.patch('/api/agendamentos/:id/reabrir', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Corrige o valor da caixinha de um atendimento já concluído — sem
+// precisar reabrir a comanda inteira só pra ajustar um valor de gorjeta
+// digitado errado. Só admin, porque é ajuste financeiro direto (mesma
+// régua da reabertura de comanda).
+app.patch('/api/agendamentos/:id/caixinha', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') {
+    return res.status(403).json({ error: 'Só o administrador pode corrigir o valor da caixinha' });
+  }
+  const novoValor = Number(req.body.valor);
+  if (novoValor === undefined || novoValor === null || isNaN(novoValor) || novoValor < 0) {
+    return res.status(422).json({ error: 'Informe um valor de caixinha válido (0 ou maior)' });
+  }
+  try {
+    const { data: ag } = await supabase.from('agendamentos')
+      .select('id, status, forma_pgto, caixinha_valor').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!ag) return res.status(404).json({ error: 'Comanda não encontrada' });
+    if (ag.status !== 'concluido') return res.status(422).json({ error: 'Só dá pra corrigir a caixinha de um atendimento já concluído' });
+
+    const infoCaixinha = await calcularCaixinhaLiquida(req.salao_id, novoValor, ag.forma_pgto);
+    await supabase.from('agendamentos').update({
+      caixinha_valor: infoCaixinha.bruta, caixinha_liquida: infoCaixinha.liquida
+    }).eq('id', req.params.id);
+
+    console.error('[AUDITORIA] Caixinha da comanda ' + req.params.id + ' corrigida por ' + (req.user.nome || req.user.id) +
+      ' — de ' + Number(ag.caixinha_valor || 0).toFixed(2) + ' para ' + novoValor.toFixed(2));
+
+    res.json({ caixinha: infoCaixinha });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
 app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
   const { status, forma_pgto, pago, formas_pagamento } = req.body;
+
+  // Trava contra concluir a mesma comanda duas vezes — sem isso, um duplo
+  // clique ou uma tentativa de novo por internet ruim reaplicaria tudo de
+  // novo (comissão, taxa de maquininha, sessão de pacote debitada de
+  // novo...) e duplicaria dinheiro que não existe. Se alguém precisar
+  // mesmo corrigir algo depois de já ter concluído, o caminho certo é
+  // "Reabrir Comanda" (admin only) — não mandar "concluido" de novo por
+  // cima do que já foi processado.
+  if (status === 'concluido') {
+    const { data: agendamentoAtual } = await supabase.from('agendamentos')
+      .select('status').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (agendamentoAtual && agendamentoAtual.status === 'concluido') {
+      return res.status(409).json({ error: 'Essa comanda já está concluída. Use "Reabrir Comanda" antes de tentar concluir de novo.' });
+    }
+  }
+
   const ehPagamentoDividido = Array.isArray(formas_pagamento) && formas_pagamento.length > 1;
 
   // Se veio pagamento dividido, o "forma_pgto" que se guarda no registro
