@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.35.1-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.36.0-frontend</div>
       </div>
     </div>
 
@@ -3161,10 +3161,18 @@ function abrirPagarFiado(cliente) {
         '<div><div style="font-size:.78rem;font-weight:600">' + esc(item.descricao||item.categoria||'Cobrança') + '</div><div style="font-size:.66rem;color:var(--t3)">' + fdt(item.data) + '</div></div>' +
         '<div style="font-weight:700">' + brl(item.valor) + '</div>' +
       '</div>' +
-      '<div style="display:flex;gap:6px">' +
-        '<input type="number" class="fc" style="font-size:.78rem" id="' + itemId + '-valor" value="' + item.valor + '" step="0.01" min="0.01" max="' + item.valor + '"/>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+        '<input type="number" class="fc" style="font-size:.78rem;flex:1;min-width:90px" id="' + itemId + '-valor" value="' + item.valor + '" step="0.01" min="0.01" max="' + item.valor + '" title="Pode pagar menos que o total — o restante continua como fiado"/>' +
+        '<select class="fc" style="font-size:.78rem;flex:1;min-width:110px" id="' + itemId + '-forma">' +
+          '<option value="">Forma de pagamento...</option>' +
+          '<option value="PIX">💠 PIX</option>' +
+          '<option value="Dinheiro">💵 Dinheiro</option>' +
+          '<option value="Cartão Débito">💳 Débito</option>' +
+          '<option value="Cartão Crédito">💳 Crédito</option>' +
+        '</select>' +
         '<button class="btn btnp btnsm" onclick="pagarItemFiado(\'' + item.id + '\')">Pagar</button>' +
       '</div>' +
+      '<div style="font-size:.66rem;color:var(--t3);margin-top:4px">💡 Pode pagar só uma parte agora — o restante continua aqui como fiado, pra pagar depois.</div>' +
     '</div>';
   }).join('');
   openM('m-pagar-fiado');
@@ -3172,11 +3180,13 @@ function abrirPagarFiado(cliente) {
 
 function pagarItemFiado(lancamentoId) {
   var inputValor = document.getElementById('pgf-' + lancamentoId + '-valor');
+  var selectForma = document.getElementById('pgf-' + lancamentoId + '-forma');
   var valor = parseFloat(inputValor.value);
   if (!valor || valor <= 0) { toast('Informe um valor válido','er'); return; }
-  apiFetch('/api/financeiro/lancamentos/' + lancamentoId + '/pagar', { method: 'POST', body: { valor: valor } })
+  if (!selectForma.value) { toast('Selecione a forma de pagamento','er'); return; }
+  apiFetch('/api/financeiro/lancamentos/' + lancamentoId + '/pagar', { method: 'POST', body: { valor: valor, forma_pgto: selectForma.value } })
     .then(function(r){
-      toast(r && r.pago_total ? 'Pago totalmente! ✅' : 'Pagamento parcial registrado! Restante: ' + brl(r.restante), 'ok');
+      toast(r && r.pago_total ? 'Pago totalmente! ✅' : 'Pagamento parcial registrado! Restante continua como fiado: ' + brl(r.restante), 'ok');
       closeM('m-pagar-fiado');
       loadFiado(); loadFin();
     })
