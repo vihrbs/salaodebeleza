@@ -379,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.39.0-ultimo-acesso-e-permissoes' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.40.0-fiado-permissao-separada' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2811,7 +2811,7 @@ app.get('/api/financeiro/resumo', auth, requirePermissao('financeiro'), async (r
 // "quem me deve e quanto". Só considera lançamentos com cliente_id (os
 // vindos de agendamento/pacote têm; um "+Lançamento" manual sem cliente
 // selecionado não entra aqui, porque não tem como saber de quem é).
-app.get('/api/financeiro/fiado', auth, requirePermissao('financeiro'), async (req, res) => {
+app.get('/api/financeiro/fiado', auth, requirePermissao('fiado'), async (req, res) => {
   try {
     const { data: pendentes, error } = await supabase.from('lancamentos')
       .select('id, cliente_id, valor, data, descricao, categoria')
@@ -2853,7 +2853,7 @@ app.get('/api/financeiro/fiado', auth, requirePermissao('financeiro'), async (re
 // pagar menos que o valor total, "quebra" o lançamento em dois: um já pago
 // (o valor que entrou agora) e outro que continua pendente com o restante.
 // Assim o relatório de Fiado sempre reflete o saldo real que ainda falta.
-app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('financeiro'), async (req, res) => {
+app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('fiado'), async (req, res) => {
   const { valor, forma_pgto } = req.body;
   try {
     const { data: lanc } = await supabase.from('lancamentos')
