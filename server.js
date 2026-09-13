@@ -111,11 +111,23 @@ async function auth(req, res, next) {
   try {
     const payload = jwt.verify(header.split(' ')[1], JWT_SECRET);
     const { data: usuario } = await supabase
-      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id, super_admin')
+      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id, super_admin, ultimo_login')
       .eq('id', payload.sub).single();
     if (!usuario || !usuario.ativo) return res.status(401).json({ error: 'Usuário inválido' });
     req.user     = usuario;
     req.salao_id = usuario.salao_id;
+
+    // Mantém "último acesso" refletindo uso de verdade, não só o momento
+    // em que a pessoa digitou a senha — sem isso, alguém que loga uma vez
+    // e fica com a sessão aberta usando todo dia aparecia como "sumido"
+    // há dias pro super admin. Só escreve se fizer mais de 1h desde a
+    // última marcação, pra não gravar no banco em toda chamada de API.
+    const umaHoraAtras = Date.now() - 60 * 60 * 1000;
+    if (!usuario.ultimo_login || new Date(usuario.ultimo_login).getTime() < umaHoraAtras) {
+      supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id)
+        .then(() => {}).catch(() => {}); // dispara e esquece — não atrasa a resposta da API por causa disso
+    }
+
     next();
   } catch(e) {
     return res.status(401).json({ error: 'Token inválido ou expirado' });
@@ -367,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.38.0-comissao-fiado-represada' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.39.0-ultimo-acesso-e-permissoes' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
