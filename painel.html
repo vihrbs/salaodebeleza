@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.38.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.39.0-frontend</div>
       </div>
     </div>
 
@@ -8238,13 +8238,13 @@ function dispensarBannerPWA() {
             <input type="checkbox" value="dashboard" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📊 Dashboard
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--ac);border-radius:var(--rs);cursor:pointer;font-size:.82rem;background:rgba(201,169,110,.18);color:var(--tx);transition:border-color .15s">
-            <input type="checkbox" value="agenda" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📅 Agenda
+            <input type="checkbox" value="agenda" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📅 Agenda <span style="color:var(--t3);font-weight:400">(+ Comandas)</span>
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
             <input type="checkbox" value="clientes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👥 Clientes
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="financeiro" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💰 Financeiro
+            <input type="checkbox" value="financeiro" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💰 Financeiro <span style="color:var(--t3);font-weight:400">(+ Fiado)</span>
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
             <input type="checkbox" value="estoque" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📦 Estoque
@@ -8302,13 +8302,13 @@ function dispensarBannerPWA() {
           <input type="checkbox" value="dashboard" style="accent-color:var(--ac)"/> 📊 Dashboard
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="agenda" style="accent-color:var(--ac)"/> 📅 Agenda
+          <input type="checkbox" value="agenda" style="accent-color:var(--ac)"/> 📅 Agenda <span style="color:var(--t3);font-weight:400">(+ Comandas)</span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
           <input type="checkbox" value="clientes" style="accent-color:var(--ac)"/> 👥 Clientes
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="financeiro" style="accent-color:var(--ac)"/> 💰 Financeiro
+          <input type="checkbox" value="financeiro" style="accent-color:var(--ac)"/> 💰 Financeiro <span style="color:var(--t3);font-weight:400">(+ Fiado)</span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
           <input type="checkbox" value="estoque" style="accent-color:var(--ac)"/> 📦 Estoque
