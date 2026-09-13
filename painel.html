@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.39.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.40.0-frontend</div>
       </div>
     </div>
 
@@ -1528,7 +1528,7 @@ function doLogout() {
 }
 
 // ── NAV ─────────────────────────────────────────────────
-var MODULOS_COM_PERMISSAO = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
+var MODULOS_COM_PERMISSAO = ['dashboard','agenda','clientes','financeiro','fiado','estoque','comissoes','profissionais','servicos','pacotes','config'];
 
 function nav(page, el) {
   // Bloqueio específico do painel de Super Admin — não é uma permissão de
@@ -1543,10 +1543,9 @@ function nav(page, el) {
   // Bloqueio de verdade: mesmo que o botão de alguma forma fique visível ou
   // alguém chame nav() manualmente, a troca de página não acontece se o
   // usuário não tiver essa permissão (exceto admin, que sempre pode tudo).
-  // "Fiado" usa a MESMA permissão de "Financeiro" (não criei uma permissão
-  // separada só pra ela) — precisa mapear aqui pra bater com o que o
-  // backend já exige em /api/financeiro/fiado.
-  var moduloPermissaoNecessaria = (page === 'fiado') ? 'financeiro' : (page === 'comandas') ? 'agenda' : page;
+  // "Comandas" usa a MESMA permissão de "Agenda" (não criei uma permissão
+  // separada só pra ela) — precisa mapear aqui pra bater com o backend.
+  var moduloPermissaoNecessaria = (page === 'comandas') ? 'agenda' : page;
   if (USER_PERFIL !== 'admin' && MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) >= 0 && USER_PERMISSOES.indexOf(moduloPermissaoNecessaria) < 0) {
     toast('Você não tem permissão para acessar essa área. Fale com o administrador.', 'er');
     return;
@@ -6967,10 +6966,11 @@ function aplicarPermissoes() {
     // Esconde/mostra os itens do menu lateral com base nas permissões reais do usuário
     document.querySelectorAll('.sb-item[data-page]').forEach(function(btn) {
       var pagina = btn.getAttribute('data-page');
-      // "Fiado" usa a mesma permissão de "Financeiro" (não existe uma
+      // "Comandas" usa a mesma permissão de "Agenda" (não existe uma
       // permissão separada só pra ela) — sem esse mapeamento, o item nunca
-      // seria escondido de quem não tem acesso a financeiro.
-      var moduloPermissaoNecessaria = (pagina === 'fiado') ? 'financeiro' : (pagina === 'comandas') ? 'agenda' : pagina;
+      // seria escondido de quem não tem acesso a agenda. "Fiado" já é
+      // permissão própria, separada de "Financeiro".
+      var moduloPermissaoNecessaria = (pagina === 'comandas') ? 'agenda' : pagina;
       if (MODULOS_COM_PERMISSAO.indexOf(moduloPermissaoNecessaria) < 0) return;
       btn.style.display = permitidos.indexOf(moduloPermissaoNecessaria) >= 0 ? '' : 'none';
     });
@@ -8244,7 +8244,10 @@ function dispensarBannerPWA() {
             <input type="checkbox" value="clientes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 👥 Clientes
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="financeiro" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💰 Financeiro <span style="color:var(--t3);font-weight:400">(+ Fiado)</span>
+            <input type="checkbox" value="financeiro" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💰 Financeiro
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
+            <input type="checkbox" value="fiado" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💳 Fiado
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
             <input type="checkbox" value="estoque" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📦 Estoque
@@ -8308,7 +8311,10 @@ function dispensarBannerPWA() {
           <input type="checkbox" value="clientes" style="accent-color:var(--ac)"/> 👥 Clientes
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="financeiro" style="accent-color:var(--ac)"/> 💰 Financeiro <span style="color:var(--t3);font-weight:400">(+ Fiado)</span>
+          <input type="checkbox" value="financeiro" style="accent-color:var(--ac)"/> 💰 Financeiro
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
+          <input type="checkbox" value="fiado" style="accent-color:var(--ac)"/> 💳 Fiado
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
           <input type="checkbox" value="estoque" style="accent-color:var(--ac)"/> 📦 Estoque
