@@ -379,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.42.0-auditoria-seguranca' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.43.0-auditoria-performance-ux' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -3318,24 +3318,35 @@ app.get('/api/comissoes/represadas', auth, requirePermissao('comissoes'), async 
       .eq('salao_id', req.salao_id).eq('status', 'pago')
       .not('atendimentos_fiado_excluidos', 'eq', '[]');
 
-    const linhas = [];
-    for (const f of (fechamentosComExclusao || [])) {
-      const idsExcluidos = f.atendimentos_fiado_excluidos || [];
-      if (!idsExcluidos.length) continue;
+    // Junta os ids de TODOS os fechamentos numa lista só, pra buscar os
+    // agendamentos numa única consulta — antes fazia uma consulta POR
+    // fechamento, o que ficava lento com muitos fechamentos acumulados.
+    const todosOsIds = [];
+    (fechamentosComExclusao || []).forEach(f => {
+      (f.atendimentos_fiado_excluidos || []).forEach(id => todosOsIds.push(id));
+    });
 
+    const linhas = [];
+    if (todosOsIds.length) {
       const { data: agendamentos } = await supabase.from('agendamentos')
         .select('id, data_hora, clientes(nome), agendamento_servicos(comissao_valor), lancamentos(pago)')
-        .in('id', idsExcluidos);
+        .in('id', todosOsIds);
+      const agendamentoPorId = {};
+      (agendamentos || []).forEach(ag => { agendamentoPorId[ag.id] = ag; });
 
-      for (const ag of (agendamentos || [])) {
-        const comissao = (ag.agendamento_servicos || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
-        const aindaPendente = (ag.lancamentos || []).some(l => l.pago === false);
-        linhas.push({
-          agendamento_id: ag.id, fechamento_id: f.id,
-          profissional_id: f.profissional_id, profissional_nome: f.profissionais?.nome || '—',
-          cliente_nome: ag.clientes?.nome || 'Cliente', data_hora: ag.data_hora,
-          comissao, ja_pode_liberar: !aindaPendente
-        });
+      for (const f of (fechamentosComExclusao || [])) {
+        for (const idExcluido of (f.atendimentos_fiado_excluidos || [])) {
+          const ag = agendamentoPorId[idExcluido];
+          if (!ag) continue;
+          const comissao = (ag.agendamento_servicos || []).reduce((s, sv) => s + Number(sv.comissao_valor || 0), 0);
+          const aindaPendente = (ag.lancamentos || []).some(l => l.pago === false);
+          linhas.push({
+            agendamento_id: ag.id, fechamento_id: f.id,
+            profissional_id: f.profissional_id, profissional_nome: f.profissionais?.nome || '—',
+            cliente_nome: ag.clientes?.nome || 'Cliente', data_hora: ag.data_hora,
+            comissao, ja_pode_liberar: !aindaPendente
+          });
+        }
       }
     }
 
