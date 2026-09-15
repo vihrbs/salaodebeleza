@@ -176,7 +176,7 @@ input,select,textarea{font-family:inherit}
 #trial-banner{display:none;background:linear-gradient(90deg,rgba(201,169,110,.15),rgba(244,162,97,.15));border-bottom:1px solid rgba(201,169,110,.2);padding:10px 20px;align-items:center;justify-content:space-between;font-size:.8rem;gap:12px;flex-wrap:wrap;color:var(--ac)}
 
 /* ── CONTENT ─────────────────────────────── */
-#content{flex:1;overflow-y:auto;overflow-x:hidden;padding:22px 24px;scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;width:100%}
+#content{flex:1;overflow-y:auto;overflow-x:hidden;padding:22px 24px;padding-bottom:100px;scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;width:100%}
 .page{display:none}
 .page.on{display:block;animation:fi .2s ease}
 @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.42.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.44.0-frontend</div>
       </div>
     </div>
 
@@ -1195,6 +1195,16 @@ function apiFetch(path, opts) {
       });
     }
     return r.json();
+  }).catch(function(e){
+    // Se o próprio fetch falhou (sem internet, DNS, servidor fora do ar),
+    // o navegador lança um erro cru em inglês ("Failed to fetch") — troca
+    // por uma mensagem em português que a pessoa realmente entende. Erros
+    // que JÁ são nossos (lançados acima, com mensagem em português) passam
+    // direto sem trocar nada.
+    if (e instanceof TypeError) {
+      throw new Error('Sem conexão com o servidor. Verifica sua internet e tenta de novo.');
+    }
+    throw e;
   });
 }
 
@@ -3053,6 +3063,10 @@ function loadClientes(q) {
 function renderCli(list) {
   var stL = {vip:'VIP',ativo:'Ativo',novo:'Novo',inativo:'Inativo'};
   var stC = {vip:'bp',ativo:'bs',novo:'bi',inativo:'bg2'};
+  if (!list.length) {
+    document.getElementById('cli-tb').innerHTML = '<tr><td colspan="7" class="empty">Nenhum cliente encontrado. Clica em "+ Novo Cliente" pra cadastrar o primeiro.</td></tr>';
+    return;
+  }
   document.getElementById('cli-tb').innerHTML = list.map(function(c){
     return '<tr onclick="openClientModal(this)" data-cli="' + JSON.stringify(c).replace(/"/g,"&quot;") + '">' +
       '<td><div style="display:flex;align-items:center;gap:9px">' +
@@ -3258,7 +3272,9 @@ function loadLan(tipo) {
 }
 
 function renderLan(list) {
-  document.getElementById('lan-lst').innerHTML = list.map(function(l){
+  var el = document.getElementById('lan-lst');
+  if (!list.length) { el.innerHTML = '<div class="empty">Nenhum lançamento neste período.</div>'; return; }
+  el.innerHTML = list.map(function(l){
     var statusBadge = l.pago
       ? '<span class="badge bs" style="font-size:.62rem">Pago</span>'
       : '<span class="badge bw" style="font-size:.62rem;cursor:pointer" onclick="event.stopPropagation();marcarPago(\'' + l.id + '\',true)" title="Clique para marcar como pago">Pendente</span>';
@@ -3323,6 +3339,10 @@ function renderEst(list) {
   // cliente exigem a permissão "estoque_gerenciar" — sem ela, a pessoa só
   // vê os produtos e registra consumo (usado num atendimento).
   var podeGerenciar = USER_PERFIL === 'admin' || USER_PERMISSOES.indexOf('estoque_gerenciar') >= 0;
+  if (!list.length) {
+    document.getElementById('est-tb').innerHTML = '<tr><td colspan="7" class="empty">Nenhum produto cadastrado ainda.</td></tr>';
+    return;
+  }
   document.getElementById('est-tb').innerHTML = list.map(function(p){
     var pct = Math.min(Math.round((p.qtd_atual/Math.max(p.qtd_minima,1))*100), 100);
     var lvl = p.qtd_atual<=0 ? 'crit' : p.qtd_atual<p.qtd_minima ? 'low' : 'ok';
@@ -3507,7 +3527,12 @@ function renderCom(list) {
   document.getElementById('ct3').textContent = brl(totalPago);
   document.getElementById('ct4').textContent = brl(totalGeral - totalPago);
 
-  document.getElementById('com-lst').innerHTML = list.map(function(p){
+  var elLista = document.getElementById('com-lst');
+  if (!list.length) {
+    elLista.innerHTML = '<div class="empty">Nenhum profissional cadastrado ainda. Cadastre em "Profissionais" pra começar a acompanhar comissão.</div>';
+    return;
+  }
+  elLista.innerHTML = list.map(function(p){
     var v = valoresExibir(p);
     var totalAPagar = v.comissao + v.caixinhas;
     var comprasPendentes = p.compras_pendentes_total || 0;
@@ -4072,7 +4097,9 @@ function loadPros() {
 }
 
 function renderPros(list) {
-  document.getElementById('pro-grid').innerHTML = list.map(function(p){
+  var el = document.getElementById('pro-grid');
+  if (!list.length) { el.innerHTML = '<div class="empty">Nenhum profissional cadastrado ainda. Clica em "+ Novo Profissional" pra cadastrar o primeiro.</div>'; return; }
+  el.innerHTML = list.map(function(p){
     return '<div class="pro-card">' +
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">' +
       '<div class="pro-av" style="background:' + (p.cor_agenda||COLS[0]) + '">' + esc(p.nome[0]) + '</div>' +
@@ -4202,14 +4229,14 @@ function renderProdutosComandaProf() {
       '<span style="font-size:.7rem;color:var(--t3)">×</span>' +
       '<input type="text" inputmode="decimal" value="' + brlSemSimbolo(p.preco_unit) + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onfocus="this.select()" onchange="atualizarPrecoProdutoComandaProf(\'' + p.produto_id + '\',this.value)"/>' +
       '<strong style="min-width:64px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoComandaProf(\'' + p.produto_id + '\')">✕</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoComandaProf(\'' + p.produto_id + '\')" title="Remover">✕</button>' +
     '</div>';
   }).join('');
   var linhasOutros = COMANDA_PROF_OUTROS.map(function(o, idx){
     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd2);font-size:.8rem">' +
       '<span style="flex:1">' + esc(o.nome) + '</span>' +
       '<strong style="min-width:60px;text-align:right">' + brl(o.valor) + '</strong>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerOutroItemComandaProf(' + idx + ')">✕</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerOutroItemComandaProf(' + idx + ')" title="Remover">✕</button>' +
     '</div>';
   }).join('');
   wrap.innerHTML = linhasProdutos + linhasOutros;
@@ -4364,6 +4391,10 @@ function loadSvcs() {
 }
 
 function renderSvcs(list) {
+  if (!list.length) {
+    document.getElementById('svc-tb').innerHTML = '<tr><td colspan="7" class="empty">Nenhum serviço cadastrado ainda. Clica em "+ Novo Serviço" pra cadastrar o primeiro.</td></tr>';
+    return;
+  }
   document.getElementById('svc-tb').innerHTML = list.map(function(s){
     var temPrecoPorDia = s.precos_por_dia && Object.keys(s.precos_por_dia).length > 0;
     var tagPrecoDia = temPrecoPorDia ? ' <span class="badge bi" style="font-size:.6rem" title="Tem preço diferente em alguns dias da semana">🗓️ varia</span>' : '';
@@ -4498,7 +4529,7 @@ function renderPacServicosSelecionados() {
       '<div style="flex:1;font-size:.8rem">' + (svc ? svc.nome : 'Serviço') + '</div>' +
       '<input type="number" class="fc" style="width:70px" min="1" value="' + s.qtd_sessoes + '" onchange="atualizarQtdSessoesPacote(\'' + s.servico_id + '\',this.value)"/>' +
       '<span style="font-size:.7rem;color:var(--t3)">sessões</span>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerServicoPacote(\'' + s.servico_id + '\')">✕</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerServicoPacote(\'' + s.servico_id + '\')" title="Remover">✕</button>' +
       '</div>';
   }).join('');
 }
@@ -4963,7 +4994,7 @@ function renderProdutosVendaAvulsa() {
       '<span style="font-size:.7rem;color:var(--t3)">×</span>' +
       '<input type="text" inputmode="decimal" value="' + brlSemSimbolo(p.preco_unit) + '" style="width:76px;padding:4px 6px;font-size:.78rem" class="fc" title="Preço unitário — edite se não estiver certo" onfocus="this.select()" onchange="atualizarPrecoProdutoVendaAvulsa(\'' + p.produto_id + '\',this.value)"/>' +
       '<strong style="min-width:64px;text-align:right">' + brl(p.preco_unit * p.quantidade) + '</strong>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoVendaAvulsa(\'' + p.produto_id + '\')">✕</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerProdutoVendaAvulsa(\'' + p.produto_id + '\')" title="Remover">✕</button>' +
     '</div>';
   }).join('');
 }
@@ -5021,7 +5052,7 @@ function renderPacotesVendaAvulsa() {
       '<span style="flex:1;min-width:120px">🎁 ' + esc(p.nome) + '</span>' +
       '<input type="date" value="' + (p.data || today()) + '" style="width:132px;padding:4px 6px;font-size:.72rem" class="fc" title="Data da venda — pode registrar retroativo" onchange="atualizarDataPacoteVendaAvulsa(\'' + p.pacote_id + '\',this.value)"/>' +
       '<input type="text" inputmode="decimal" value="' + brlSemSimbolo(p.valor) + '" style="width:90px;padding:4px 6px;font-size:.78rem" class="fc" title="Valor pago — pode ajustar se der desconto" onfocus="this.select()" onchange="atualizarPrecoPacoteVendaAvulsa(\'' + p.pacote_id + '\',this.value)"/>' +
-      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerPacoteVendaAvulsa(\'' + p.pacote_id + '\')">✕</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--er)" onclick="removerPacoteVendaAvulsa(\'' + p.pacote_id + '\')" title="Remover">✕</button>' +
     '</div>';
   }).join('');
 }
@@ -5597,7 +5628,7 @@ function renderFotosGrid(fotos) {
   }
   grid.innerHTML = fotos.map(function(f, i){
     return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--bd)">' +
-      '<img src="' + escAttr(f.url) + '" style="width:100%;height:100%;object-fit:cover" loading="lazy"/>' +
+      '<img src="' + escAttr(f.url) + '" alt="Foto do salão ' + (i+1) + '" style="width:100%;height:100%;object-fit:cover" loading="lazy"/>' +
       '<button onclick="removerFotoSalao(\'' + escAttr(f.caminho) + '\')" title="Remover" ' +
       'style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.7rem;line-height:1">✕</button>' +
     '</div>';
@@ -6055,7 +6086,7 @@ function renderFotoProfissionalPreview(fotoUrl) {
   var preview = document.getElementById('epr-foto-preview');
   var btnRemover = document.getElementById('epr-foto-remover');
   if (fotoUrl) {
-    preview.innerHTML = '<img src="' + fotoUrl + '" style="width:100%;height:100%;object-fit:cover"/>';
+    preview.innerHTML = '<img src="' + fotoUrl + '" alt="Foto do profissional" style="width:100%;height:100%;object-fit:cover"/>';
     btnRemover.style.display = 'inline-block';
   } else {
     preview.innerHTML = '👤';
