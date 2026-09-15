@@ -379,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.45.0-race-condition-pacotes-fiado-estoque' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.46.0-race-condition-estoque-completo' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1087,7 +1087,12 @@ app.post('/api/profissionais/:id/compras', auth, async (req, res) => {
           if (Number(produto.qtd_atual) < quantidade) {
             return res.status(422).json({ error: 'Estoque insuficiente pra "' + produto.nome + '". Atual: ' + produto.qtd_atual });
           }
-          await supabase.from('produtos').update({ qtd_atual: Number(produto.qtd_atual) - quantidade }).eq('id', item.produto_id);
+          const { data: estoqueOk1 } = await supabase.from('produtos')
+            .update({ qtd_atual: Number(produto.qtd_atual) - quantidade })
+            .eq('id', item.produto_id).eq('qtd_atual', produto.qtd_atual).select().maybeSingle();
+          if (!estoqueOk1) {
+            return res.status(409).json({ error: 'O estoque de "' + produto.nome + '" mudou nesse instante (outra venda concorrente) — confira e tenta de novo.' });
+          }
           itensProcessados.push({ tipo: 'produto', produto_id: item.produto_id, nome: produto.nome, quantidade, valor: valorItem });
         } else if (item.tipo === 'servico' && item.servico_id) {
           const { data: servico } = await supabase.from('servicos')
@@ -1114,7 +1119,12 @@ app.post('/api/profissionais/:id/compras', auth, async (req, res) => {
         if (!produto) return res.status(404).json({ error: 'Produto não encontrado' });
         if (Number(produto.qtd_atual) < 1) return res.status(422).json({ error: 'Produto sem estoque disponível' });
         descricaoFinal = descricaoFinal || produto.nome;
-        await supabase.from('produtos').update({ qtd_atual: Number(produto.qtd_atual) - 1 }).eq('id', produto_id);
+        const { data: estoqueOk2 } = await supabase.from('produtos')
+          .update({ qtd_atual: Number(produto.qtd_atual) - 1 })
+          .eq('id', produto_id).eq('qtd_atual', produto.qtd_atual).select().maybeSingle();
+        if (!estoqueOk2) {
+          return res.status(409).json({ error: 'O estoque de "' + produto.nome + '" mudou nesse instante (outra venda concorrente) — confira e tenta de novo.' });
+        }
       }
     }
 
@@ -3188,7 +3198,11 @@ app.post('/api/estoque/:id/movimentar', auth, requirePermissao('estoque_gerencia
   const delta = tipo === 'entrada' ? Number(quantidade) : -Number(quantidade);
   const nova  = Number(prod.qtd_atual) + delta;
   if (nova < 0) return res.status(422).json({ error: 'Estoque insuficiente. Atual: ' + prod.qtd_atual });
-  await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
+  const { data: estoqueOkMov } = await supabase.from('produtos')
+    .update({ qtd_atual: nova }).eq('id', req.params.id).eq('qtd_atual', prod.qtd_atual).select().maybeSingle();
+  if (!estoqueOkMov) {
+    return res.status(409).json({ error: 'O estoque de "' + prod.nome + '" mudou nesse instante (outra movimentação concorrente) — confira e tenta de novo.' });
+  }
   await supabase.from('movimentacoes_estoque').insert({
     salao_id: req.salao_id, produto_id: req.params.id,
     tipo, quantidade, motivo, usuario_id: req.user.id
@@ -3212,7 +3226,11 @@ app.post('/api/estoque/:id/consumir', auth, requirePermissao('estoque'), async (
   const nova = Number(prod.qtd_atual) - Number(quantidade);
   if (nova < 0) return res.status(422).json({ error: 'Estoque insuficiente. Atual: ' + prod.qtd_atual });
 
-  await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
+  const { data: estoqueOkConsumir } = await supabase.from('produtos')
+    .update({ qtd_atual: nova }).eq('id', req.params.id).eq('qtd_atual', prod.qtd_atual).select().maybeSingle();
+  if (!estoqueOkConsumir) {
+    return res.status(409).json({ error: 'O estoque de "' + prod.nome + '" mudou nesse instante (outro registro concorrente) — confira e tenta de novo.' });
+  }
   await supabase.from('movimentacoes_estoque').insert({
     salao_id: req.salao_id, produto_id: req.params.id, tipo: 'consumo',
     quantidade, motivo: motivo || null, profissional_id, cliente_id: cliente_id || null,
@@ -3242,7 +3260,11 @@ app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque_gerenciar'),
   const dataFinal = data || new Date().toISOString().split('T')[0];
   const pagoFinal = pago !== false;
 
-  await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', req.params.id);
+  const { data: estoqueOkVender } = await supabase.from('produtos')
+    .update({ qtd_atual: nova }).eq('id', req.params.id).eq('qtd_atual', prod.qtd_atual).select().maybeSingle();
+  if (!estoqueOkVender) {
+    return res.status(409).json({ error: 'O estoque de "' + prod.nome + '" mudou nesse instante (outra venda concorrente) — confira e tenta de novo.' });
+  }
 
   // Se veio um agendamento_id, é uma venda feita DENTRO da comanda de um
   // atendimento que já está aberto (pedido explícito: "vender produto já
