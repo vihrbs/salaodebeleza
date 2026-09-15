@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.40.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.41.0-frontend</div>
       </div>
     </div>
 
@@ -3613,9 +3613,12 @@ function confirmarPagamentoCom() {
   }})
   .then(function(r){
     closeM('m-pagar-com');
-    var msg = 'Comissão de ' + PAGAR_COM_ESTADO.nome + ' paga! ✅';
+    var nadaPagoAgora = Number(r && r.total_comissao || 0) === 0 && excluirFiado;
+    var msg = nadaPagoAgora
+      ? 'Nada a pagar agora — tudo esse período ficou represado (fiado). Acompanhe em "🔒 Comissões Represadas".'
+      : 'Comissão de ' + PAGAR_COM_ESTADO.nome + ' paga! ✅';
     if (r && r.valor_parcelas_descontado > 0) msg += ' (' + brl(r.valor_parcelas_descontado) + ' de compra descontado)';
-    if (excluirFiado && PAGAR_COM_ESTADO.fiadoPendente > 0) msg += ' — ' + brl(PAGAR_COM_ESTADO.fiadoPendente) + ' represado até o cliente pagar';
+    if (!nadaPagoAgora && excluirFiado && PAGAR_COM_ESTADO.fiadoPendente > 0) msg += ' — ' + brl(PAGAR_COM_ESTADO.fiadoPendente) + ' represado até o cliente pagar';
     toast(msg, 'ok');
     loadCom();
   })
