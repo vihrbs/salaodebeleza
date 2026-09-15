@@ -379,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.43.0-auditoria-performance-ux' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.44.0-race-condition-agendamento' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1828,6 +1828,38 @@ async function criarAgendamentoUnico({
   const { data: ag, error } = await supabase.from('agendamentos')
     .insert(insertPayload).select().single();
   if (error) throw error;
+
+  // Reconfere DEPOIS de inserir, pela mesma razão explicada na rota
+  // pública de agendamento: a verificação acima e esse insert são duas
+  // chamadas separadas ao banco, sem trava atômica entre elas — dois
+  // agendamentos pro mesmo profissional/horário criados quase ao mesmo
+  // tempo (ex.: duas pessoas da equipe agendando ao mesmo tempo) podem
+  // passar as duas pela checagem antes de qualquer uma inserir. Só roda
+  // essa reconfirmação quando a checagem de conflito também rodou acima
+  // (pularChecagemConflito é pra vendas avulsas, que documentam algo que
+  // já aconteceu — não faz sentido "desfazer" isso por conflito de agenda).
+  if (!pularChecagemConflito) {
+    const { data: conflitantesAposInsert } = await supabase.from('agendamentos')
+      .select('id, data_hora, duracao_min, created_at')
+      .eq('salao_id', salaoId).eq('profissional_id', profissionalId)
+      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .neq('status', 'cancelado');
+
+    const novoInicioMinReconf = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
+    const novoFimMinReconf = novoInicioMinReconf + duracao_total;
+    const realmenteConflitantes = (conflitantesAposInsert || []).filter(function(a) {
+      var aInicio = utcParaMinutosBrasil(a.data_hora);
+      var aFim = aInicio + (a.duracao_min || 60);
+      return (novoInicioMinReconf < aFim && novoFimMinReconf > aInicio);
+    }).sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+
+    if (realmenteConflitantes.length > 1 && realmenteConflitantes[0].id !== ag.id) {
+      // Perdeu a corrida — desfaz o que essa chamada criou e devolve
+      // conflito, igual devolveria se a primeira checagem já tivesse pego
+      await supabase.from('agendamentos').delete().eq('id', ag.id);
+      return { status: 'conflito', data_hora: data_hora_final };
+    }
+  }
 
   // A comissão é calculada sobre o preço CHEIO do serviço naquele dia (que
   // já reflete o preço específico do dia da semana, se houver) — o
@@ -4736,6 +4768,39 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
       .select().single();
 
     if (error) throw error;
+
+    // Reconfere DEPOIS de inserir — a verificação de conflito acima e esse
+    // insert são duas operações separadas, sem trava atômica entre elas
+    // (o Supabase via REST não dá pra fazer isso numa transação só, do
+    // jeito que essa parte do sistema está construída). Isso abre uma
+    // janela pequena onde DUAS pessoas confirmando o mesmíssimo horário
+    // quase ao mesmo tempo passariam as duas pela verificação antes de
+    // qualquer uma inserir. Aqui a gente fecha essa janela: busca de novo,
+    // já com o que acabou de ser inserido, e se aparecer mais de um
+    // agendamento conflitando pro mesmo profissional/horário, só o mais
+    // antigo (criado primeiro) fica — o(s) outro(s) são desfeitos, com o
+    // cliente que perdeu a corrida recebendo o erro de conflito.
+    const { data: conflitantesAposInsert } = await supabase.from('agendamentos')
+      .select('id, data_hora, duracao_min, created_at')
+      .eq('salao_id', salao_id).eq('profissional_id', profissional_id)
+      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .neq('status', 'cancelado');
+
+    const realmenteConflitantes = (conflitantesAposInsert || []).filter(function(ag) {
+      var agInicio = utcParaMinutosBrasil(ag.data_hora);
+      var agFim = agInicio + (ag.duracao_min || 60);
+      return (inicioMin < agFim && fimMin > agInicio);
+    }).sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+
+    if (realmenteConflitantes.length > 1 && realmenteConflitantes[0].id !== agendamento.id) {
+      // Perdeu a corrida — alguém inseriu um agendamento pra esse mesmo
+      // horário um instante antes. Desfaz o que essa requisição criou
+      // (incluindo o registro de serviço, se já tiver sido criado abaixo)
+      // e devolve conflito, igual à verificação normal.
+      await supabase.from('agendamento_servicos').delete().eq('agendamento_id', agendamento.id);
+      await supabase.from('agendamentos').delete().eq('id', agendamento.id);
+      return res.status(409).json({ error: 'Este horário acabou de ser reservado por outra pessoa. Escolha outro horário.' });
+    }
 
     // Cria registro em agendamento_servicos — a % do PROFISSIONAL manda
     // (mesma regra do agendamento criado pelo painel admin), serviço só
