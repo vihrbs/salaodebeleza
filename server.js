@@ -379,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.41.0-auditoria-comissao-fiado' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.42.0-auditoria-seguranca' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1515,7 +1515,7 @@ app.get('/api/clientes/:id/credito', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/clientes/:id/credito', auth, async (req, res) => {
+app.post('/api/clientes/:id/credito', auth, requirePermissao('clientes'), async (req, res) => {
   const { valor, motivo } = req.body;
   if (!valor || Number(valor) <= 0) return res.status(422).json({ error: 'Informe um valor maior que zero' });
   try {
@@ -1689,7 +1689,7 @@ app.get('/api/agendamentos', auth, async (req, res) => {
 // "comanda" do cliente) — recalcula sozinho o valor_total do agendamento
 // (soma de todos os serviços) e o lançamento financeiro vinculado, pra
 // tudo ficar consistente sem precisar mexer em mais nada manualmente.
-app.put('/api/agendamento-servicos/:id', auth, async (req, res) => {
+app.put('/api/agendamento-servicos/:id', auth, requirePermissao('agenda'), async (req, res) => {
   const { preco } = req.body;
   if (preco === undefined || preco === null || Number(preco) < 0 || isNaN(Number(preco))) {
     return res.status(422).json({ error: 'Informe um preço válido' });
@@ -3929,7 +3929,7 @@ app.get('/api/saloes/meu', auth, async (req, res) => {
   res.json(data || {});
 });
 
-app.put('/api/saloes/meu', auth, async (req, res) => {
+app.put('/api/saloes/meu', auth, requirePermissao('config'), async (req, res) => {
   const { nome, telefone, whatsapp, email, endereco, cidade, estado, configuracoes, sobre } = req.body;
   const updates = { nome, telefone, whatsapp, email, endereco, cidade, estado, sobre };
   if (configuracoes) {
@@ -3959,7 +3959,7 @@ const MAX_FOTOS_SALAO = 12;
 // mandar), sobe pro Supabase Storage, e adiciona a URL na lista de fotos
 // do salão. Não precisa de nenhuma biblioteca de upload (multer etc) —
 // o limite de 15mb do express.json() já dá folga suficiente pra fotos.
-app.post('/api/saloes/fotos', auth, async (req, res) => {
+app.post('/api/saloes/fotos', auth, requirePermissao('config'), async (req, res) => {
   const { imagem_base64, nome_arquivo } = req.body;
   if (!imagem_base64) return res.status(422).json({ error: 'Envie a imagem em base64' });
 
@@ -3996,7 +3996,7 @@ app.post('/api/saloes/fotos', auth, async (req, res) => {
 });
 
 // Remove uma foto específica da galeria (e do Storage também, não deixa lixo pra trás)
-app.delete('/api/saloes/fotos', auth, async (req, res) => {
+app.delete('/api/saloes/fotos', auth, requirePermissao('config'), async (req, res) => {
   const { caminho } = req.body;
   if (!caminho) return res.status(422).json({ error: 'Informe o caminho da foto a remover' });
   try {
