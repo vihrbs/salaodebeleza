@@ -379,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.40.0-fiado-permissao-separada' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.41.0-auditoria-comissao-fiado' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -3634,10 +3634,13 @@ app.post('/api/comissoes/fechar', auth, async (req, res) => {
 
     const total_comissao = total_comissao_servicos + total_caixinhas + total_comissao_produtos;
 
-    // Só bloqueia se realmente não sobrou NADA pra fechar (nem serviço, nem
-    // produto) — antes só olhava serviço, então um profissional que só
-    // vendeu produto no período (sem atender ninguém) nunca conseguia fechar.
-    if (total_servicos === 0 && total_comissao_produtos === 0 && total_caixinhas === 0) {
+    // Só bloqueia se realmente não sobrou NADA pra fechar — nem serviço,
+    // nem produto, nem sequer algo excluído por fiado. Esse último caso é
+    // importante: se o período TODO for fiado e a pessoa escolheu excluir,
+    // não é "nada pra fechar" — é "tudo represado", e precisa continuar
+    // até criar o fechamento (com R$0 pago agora), senão a exclusão nunca
+    // fica registrada e esses atendimentos somem de "Comissões Represadas".
+    if (total_servicos === 0 && total_comissao_produtos === 0 && total_caixinhas === 0 && atendimentosFiadoExcluidos.length === 0) {
       return res.status(400).json({ error: 'Nenhum serviço ou venda novo pra fechar neste período (pode já ter sido pago num fechamento anterior que se sobrepõe a essas datas).' });
     }
 
