@@ -379,7 +379,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.44.0-race-condition-agendamento' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.45.0-race-condition-pacotes-fiado-estoque' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1975,7 +1975,16 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
 
     // Comanda criada com sucesso — agora sim debita as sessões usadas do(s) pacote(s)
     for (const consumo of consumosParaAplicar) {
-      const sessoesAtualizadas = (consumo.pacoteCliente.sessoes || []).map(s =>
+      // Rebusca o pacote fresco bem na hora de debitar, em vez de usar o
+      // que foi lido no começo da requisição — reduz bastante a janela de
+      // corrida entre a checagem de disponibilidade (lá em cima) e esse
+      // update (o Supabase via REST não dá pra travar a linha, então não
+      // elimina 100%, mas encolhe bastante a chance de duas requisições
+      // quase simultâneas debitarem a mesma sessão sobre dados velhos).
+      const { data: pcFresco } = await supabase.from('pacotes_clientes')
+        .select('sessoes').eq('id', consumo.pacoteCliente.id).single();
+      const sessoesBase = (pcFresco && pcFresco.sessoes) || consumo.pacoteCliente.sessoes || [];
+      const sessoesAtualizadas = sessoesBase.map(s =>
         s.servico_id === consumo.servicoId ? { ...s, qtd_usada: s.qtd_usada + 1 } : s
       );
       const todasEsgotadas = sessoesAtualizadas.every(s => s.qtd_usada >= s.qtd_total);
@@ -1999,7 +2008,16 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
       const valorProduto = (item.valor !== undefined && item.valor !== null && item.valor !== '')
         ? Number(item.valor) : Number(prod.preco_venda || 0) * quantidade;
 
-      await supabase.from('produtos').update({ qtd_atual: nova }).eq('id', item.produto_id);
+      // Só desconta se o estoque ainda estiver exatamente como foi lido —
+      // trava contra duas comandas vendendo a mesma última unidade quase
+      // ao mesmo tempo (ex.: duas pessoas da equipe atendendo em terminais
+      // diferentes). Se outra venda já descontou entre a leitura e agora,
+      // esse update não afeta nada, e a gente sabe que precisa avisar.
+      const { data: estoqueAtualizado } = await supabase.from('produtos')
+        .update({ qtd_atual: nova }).eq('id', item.produto_id).eq('qtd_atual', prod.qtd_atual).select().maybeSingle();
+      if (!estoqueAtualizado) {
+        return res.status(409).json({ error: 'O estoque de "' + prod.nome + '" mudou nesse instante (outra venda concorrente) — confira o estoque atual e tenta de novo.' });
+      }
       valorTotalAtual += valorProduto;
       await supabase.from('agendamentos').update({ valor_total: valorTotalAtual }).eq('id', agendamentoId);
 
@@ -2180,7 +2198,11 @@ app.post('/api/agendamentos', auth, async (req, res) => {
 
       // Agendamento criado com sucesso — agora sim debita as sessões usadas
       for (const consumo of consumosParaAplicar) {
-        const sessoesAtualizadas = (consumo.pacoteCliente.sessoes || []).map(s =>
+        // Mesma mitigação de corrida da Nova Comanda — rebusca fresco antes de debitar
+        const { data: pcFresco } = await supabase.from('pacotes_clientes')
+          .select('sessoes').eq('id', consumo.pacoteCliente.id).single();
+        const sessoesBase = (pcFresco && pcFresco.sessoes) || consumo.pacoteCliente.sessoes || [];
+        const sessoesAtualizadas = sessoesBase.map(s =>
           s.servico_id === consumo.servicoId ? { ...s, qtd_usada: s.qtd_usada + 1 } : s
         );
         const todasEsgotadas = sessoesAtualizadas.every(s => s.qtd_usada >= s.qtd_total);
@@ -2393,8 +2415,13 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
           .update({ preco: 0, comissao_valor: 0, pago_via_pacote: true, pacote_cliente_id: pc.id })
           .eq('id', linhaServico.id);
 
-        // Debita a sessão do pacote — só depois de confirmar que deu tudo certo acima
-        const sessoesAtualizadas = sessoesPacote.map(s =>
+        // Debita a sessão do pacote — só depois de confirmar que deu tudo certo acima.
+        // Mesma mitigação de corrida: rebusca fresco em vez de usar o que
+        // foi lido no começo dessa requisição.
+        const { data: pcFrescoConcluir } = await supabase.from('pacotes_clientes')
+          .select('sessoes').eq('id', pc.id).single();
+        const sessoesBaseConcluir = (pcFrescoConcluir && pcFrescoConcluir.sessoes) || sessoesPacote;
+        const sessoesAtualizadas = sessoesBaseConcluir.map(s =>
           s.servico_id === linhaServico.servico_id ? { ...s, qtd_usada: s.qtd_usada + 1 } : s
         );
         const todasEsgotadas = sessoesAtualizadas.every(s => s.qtd_usada >= s.qtd_total);
@@ -2903,10 +2930,21 @@ app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('fiado'
     const restante = Number((Number(lanc.valor) - valorPago).toFixed(2));
     const pagouTudo = restante <= 0.01;
 
+    // Trava contra duplo-clique/duas ações quase simultâneas pagando o
+    // mesmo lançamento: o update só é aceito SE o registro ainda estiver
+    // exatamente como foi lido (pago=false E valor igual ao que vimos).
+    // O Postgres resolve isso de forma atômica na própria consulta — se
+    // outra requisição alterou o registro entre a leitura e agora, esse
+    // update afeta ZERO linhas (não é uma corrida, é impossível dar
+    // "meio certo": ou pega o registro do jeito que esperava, ou não
+    // pega nada).
     if (pagouTudo) {
-      // Pagou o valor inteiro — só marca como pago, sem precisar quebrar em dois
       const { data } = await supabase.from('lancamentos')
-        .update({ pago: true, forma_pgto: forma_pgto || lanc.forma_pgto }).eq('id', lanc.id).select().single();
+        .update({ pago: true, forma_pgto: forma_pgto || lanc.forma_pgto })
+        .eq('id', lanc.id).eq('pago', false).eq('valor', lanc.valor).select().maybeSingle();
+      if (!data) {
+        return res.status(409).json({ error: 'Esse lançamento acabou de ser alterado por outra ação. Atualize a tela e confira antes de tentar de novo.' });
+      }
       return res.json({ pago_total: true, lancamento: data });
     }
 
@@ -2920,7 +2958,15 @@ app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('fiado'
     }).select().single();
 
     const { data: atualizado } = await supabase.from('lancamentos')
-      .update({ valor: restante }).eq('id', lanc.id).select().single();
+      .update({ valor: restante }).eq('id', lanc.id).eq('pago', false).eq('valor', lanc.valor).select().maybeSingle();
+
+    if (!atualizado) {
+      // Outra ação alterou o lançamento original entre a leitura e agora
+      // — desfaz esse pagamento parcial que acabou de criar, pra não
+      // ficar um registro de pagamento duplicado/fantasma no Financeiro.
+      await supabase.from('lancamentos').delete().eq('id', pagamento.id);
+      return res.status(409).json({ error: 'Esse lançamento acabou de ser alterado por outra ação. Atualize a tela e tente de novo.' });
+    }
 
     res.json({ pago_total: false, restante, pagamento, lancamento: atualizado });
   } catch(e) { res.status(500).json({ error: e.message }); }
