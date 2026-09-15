@@ -492,7 +492,7 @@ footer a{color:var(--accent); text-decoration:none; font-weight:600}
     </div>
   </div>
 
-  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.9.0-agendar</div></footer>
+  <footer>Agendamento via <a href="https://belezaprooficial.com.br" target="_blank">Beleza Pro</a><div style="font-size:.6rem;opacity:.55;margin-top:4px">v4.10.0-agendar</div></footer>
 </div>
 
 <a id="wa-fab" class="wa-fab" style="display:none" target="_blank" title="Falar no WhatsApp">
@@ -751,7 +751,7 @@ function init() {
 
       loadServicos();
     })
-    .catch(function(){ showError('Não foi possível carregar este salão.'); });
+    .catch(function(){ showError('Não foi possível carregar este salão.', 'init()'); });
 }
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -787,9 +787,11 @@ function renderAvaliacoesPublicas(dados) {
   wrap.innerHTML = html;
 }
 
-function showError(msg) {
+function showError(msg, acaoTentarDeNovo) {
   document.getElementById('card-content').innerHTML =
-    '<div class="card-bd"><div class="err-box" style="display:block">' + msg + '</div></div>';
+    '<div class="card-bd"><div class="err-box" style="display:block">' + msg + '</div>' +
+    (acaoTentarDeNovo ? '<button class="btn btn-primary" style="margin-top:14px" onclick="' + acaoTentarDeNovo + '">🔄 Tentar de novo</button>' : '') +
+    '</div>';
 }
 
 function loadServicos() {
@@ -802,7 +804,7 @@ function loadServicos() {
       renderServicos(list);
       renderServicosPreview(list);
     })
-    .catch(function(){ showError('Erro ao carregar serviços.'); });
+    .catch(function(){ showError('Erro ao carregar serviços.', 'loadServicos()'); });
 }
 
 function renderServicos(list) {
@@ -813,8 +815,8 @@ function renderServicos(list) {
     list.forEach(function(s){
       html += '<div class="svc-item" onclick="selectServico(\'' + s.id + '\')">' +
         '<div class="svc-icon">' + iconeServico(s.categoria) + '</div>' +
-        '<div class="svc-info"><div class="svc-name">' + s.nome + '</div>' +
-        '<div class="svc-meta">' + (s.categoria||'') + (s.duracao_min ? ' · ' + s.duracao_min + ' min' : '') + '</div></div>' +
+        '<div class="svc-info"><div class="svc-name">' + esc(s.nome) + '</div>' +
+        '<div class="svc-meta">' + esc(s.categoria||'') + (s.duracao_min ? ' · ' + s.duracao_min + ' min' : '') + '</div></div>' +
         '<div class="svc-price">R$ ' + Number(s.preco).toFixed(2).replace('.',',') + '</div></div>';
     });
   }
@@ -843,7 +845,7 @@ function loadProfissionais() {
       STATE.profissionais = list;
       renderProfissionais(list);
     })
-    .catch(function(){ showError('Erro ao carregar profissionais.'); });
+    .catch(function(){ showError('Erro ao carregar profissionais.', 'loadProfissionais()'); });
 }
 
 // Escurece um pouco uma cor hex — usado pra criar um gradiente sutil no
@@ -868,12 +870,12 @@ function renderProfissionais(list) {
       // Foto de verdade se o profissional tiver, senão um círculo com
       // gradiente sutil (mais elegante que uma cor lisa) e a inicial
       var avatar = p.foto_url
-        ? '<img class="pro-av" src="' + p.foto_url + '" alt="' + p.nome + '" loading="lazy"/>'
-        : '<div class="pro-av-inicial" style="background:linear-gradient(135deg,' + cor + ',' + escurecerCor(cor, 35) + ')">' + p.nome[0].toUpperCase() + '</div>';
+        ? '<img class="pro-av" src="' + p.foto_url + '" alt="' + esc(p.nome) + '" loading="lazy"/>'
+        : '<div class="pro-av-inicial" style="background:linear-gradient(135deg,' + cor + ',' + escurecerCor(cor, 35) + ')">' + esc(p.nome[0].toUpperCase()) + '</div>';
       html += '<div class="pro-item" onclick="selectProfissional(\''+p.id+'\')">' +
         '<div class="pro-av-wrap">' + avatar + '</div>' +
-        '<div class="pro-name">' + p.nome + '</div>' +
-        '<div class="pro-esp">' + (p.especialidade||'') + '</div></div>';
+        '<div class="pro-name">' + esc(p.nome) + '</div>' +
+        '<div class="pro-esp">' + esc(p.especialidade||'') + '</div></div>';
     });
     html += '</div>';
   }
@@ -976,7 +978,9 @@ function buscarHorarios(iso, tentativa) {
       html += '</div><button class="btn btn-primary" style="margin-top:16px" onclick="goToForm()" id="btn-continuar" disabled>Continuar</button>';
       timeArea.innerHTML = html;
     })
-    .catch(function(){ timeArea.innerHTML = '<div class="no-slots">Erro ao buscar horários.</div>'; });
+    .catch(function(){
+      timeArea.innerHTML = '<div class="no-slots">Erro ao buscar horários.</div><button class="btn btn-primary" style="margin-top:10px" onclick="buscarHorarios(\'' + iso + '\', 0)">🔄 Tentar de novo</button>';
+    });
 }
 
 function selectHora(h, el) {
@@ -992,8 +996,8 @@ function goToForm() {
   var html = '<div class="card-hd"><div class="eyebrow">Passo 4 de 4</div><div class="card-title">Seus dados</div></div><div class="card-bd">';
 
   html += '<div class="summary">';
-  html += '<div class="sum-row"><span class="sum-label">Serviço</span><span class="sum-val">' + STATE.servico.nome + '</span></div>';
-  html += '<div class="sum-row"><span class="sum-label">Profissional</span><span class="sum-val">' + STATE.profissional.nome + '</span></div>';
+  html += '<div class="sum-row"><span class="sum-label">Serviço</span><span class="sum-val">' + esc(STATE.servico.nome) + '</span></div>';
+  html += '<div class="sum-row"><span class="sum-label">Profissional</span><span class="sum-val">' + esc(STATE.profissional.nome) + '</span></div>';
   html += '<div class="sum-row"><span class="sum-label">Data e hora</span><span class="sum-val">' + formatData(STATE.data) + ' às ' + STATE.hora + '</span></div>';
   html += '<div class="sum-row"><span class="sum-label">Total</span><span class="sum-total">R$ ' + Number(STATE.servico.preco).toFixed(2).replace('.',',') + '</span></div>';
   html += '</div>';
@@ -1080,12 +1084,12 @@ function showSuccess(res) {
   var html = '<div class="card-bd"><div class="success-wrap">';
   html += '<div class="success-icon">✓</div>';
   html += '<div class="success-title">Agendamento confirmado!</div>';
-  html += '<div class="success-sub">Te esperamos em ' + formatData(STATE.data) + ' às ' + STATE.hora + ' para o seu ' + STATE.servico.nome.toLowerCase() + '.</div>';
+  html += '<div class="success-sub">Te esperamos em ' + formatData(STATE.data) + ' às ' + STATE.hora + ' para o seu ' + esc(STATE.servico.nome.toLowerCase()) + '.</div>';
 
   html += '<div class="recibo">';
   html += '<div class="recibo-codigo">Código do agendamento<strong>' + gerarCodigoConfirmacao(STATE.agendamentoId) + '</strong></div>';
-  html += '<div class="recibo-row"><span class="recibo-label">Serviço</span><span class="recibo-val">' + STATE.servico.nome + '</span></div>';
-  html += '<div class="recibo-row"><span class="recibo-label">Profissional</span><span class="recibo-val">' + STATE.profissional.nome + '</span></div>';
+  html += '<div class="recibo-row"><span class="recibo-label">Serviço</span><span class="recibo-val">' + esc(STATE.servico.nome) + '</span></div>';
+  html += '<div class="recibo-row"><span class="recibo-label">Profissional</span><span class="recibo-val">' + esc(STATE.profissional.nome) + '</span></div>';
   html += '<div class="recibo-row"><span class="recibo-label">Data</span><span class="recibo-val">' + formatData(STATE.data) + '</span></div>';
   html += '<div class="recibo-row"><span class="recibo-label">Horário</span><span class="recibo-val">' + STATE.hora + '</span></div>';
   html += '<div class="recibo-perfuracao"></div>';
