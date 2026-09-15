@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.41.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.42.0-frontend</div>
       </div>
     </div>
 
@@ -1664,9 +1664,10 @@ var D = {
 function loadAll() {
   loadKPIs(); loadDashTl(); loadTopSvc(); loadAlertas(); loadAvaliacoes(); loadFechamentoCaixa();
   loadAgenda(); loadClientes(); loadFin(); loadEst();
-  loadCom(); loadPros(); loadSvcs(); loadPacotes();
+  loadCom();
+  var promessaPros = loadPros(); var promessaSvcs = loadSvcs(); loadPacotes();
   renderCal(); renderDashChart();
-  fillSelects();
+  fillSelects(promessaPros, promessaSvcs);
   carregarHorarioFuncionamento(); // busca cedo o horário de funcionamento (usado no filtro de horários livres do Novo Agendamento)
   loadMovimentacoesEstoque();
 }
@@ -3170,7 +3171,7 @@ function abrirPagarFiado(cliente) {
           '<option value="Cartão Débito">💳 Débito</option>' +
           '<option value="Cartão Crédito">💳 Crédito</option>' +
         '</select>' +
-        '<button class="btn btnp btnsm" onclick="pagarItemFiado(\'' + item.id + '\')">Pagar</button>' +
+        '<button class="btn btnp btnsm" id="' + itemId + '-btn" onclick="pagarItemFiado(\'' + item.id + '\')">Pagar</button>' +
       '</div>' +
       '<div style="font-size:.66rem;color:var(--t3);margin-top:4px">💡 Pode pagar só uma parte agora — o restante continua aqui como fiado, pra pagar depois.</div>' +
     '</div>';
@@ -3181,16 +3182,21 @@ function abrirPagarFiado(cliente) {
 function pagarItemFiado(lancamentoId) {
   var inputValor = document.getElementById('pgf-' + lancamentoId + '-valor');
   var selectForma = document.getElementById('pgf-' + lancamentoId + '-forma');
+  var btn = document.getElementById('pgf-' + lancamentoId + '-btn');
   var valor = parseFloat(inputValor.value);
   if (!valor || valor <= 0) { toast('Informe um valor válido','er'); return; }
   if (!selectForma.value) { toast('Selecione a forma de pagamento','er'); return; }
+  btn.disabled = true; btn.textContent = '...';
   apiFetch('/api/financeiro/lancamentos/' + lancamentoId + '/pagar', { method: 'POST', body: { valor: valor, forma_pgto: selectForma.value } })
     .then(function(r){
       toast(r && r.pago_total ? 'Pago totalmente! ✅' : 'Pagamento parcial registrado! Restante continua como fiado: ' + brl(r.restante), 'ok');
       closeM('m-pagar-fiado');
       loadFiado(); loadFin();
     })
-    .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); });
+    .catch(function(e){
+      toast('Erro: ' + (e.message||'tente novamente'), 'er');
+      btn.disabled = false; btn.textContent = 'Pagar';
+    });
 }
 
 function exportarFiado() {
@@ -3649,20 +3655,24 @@ function renderComissoesRepresadas(lista) {
       '<div style="display:flex;align-items:center;gap:10px">' +
         '<strong style="color:var(--ac)">' + brl(r.comissao) + '</strong>' +
         (r.ja_pode_liberar
-          ? '<button class="btn btnp btnsm" onclick="liberarComissaoRepresada(\'' + r.agendamento_id + '\')">✅ Liberar</button>'
+          ? '<button class="btn btnp btnsm" onclick="liberarComissaoRepresada(\'' + r.agendamento_id + '\', this)">✅ Liberar</button>'
           : '<span class="badge bw" style="font-size:.62rem">⏳ Fiado ainda pendente</span>') +
       '</div>' +
     '</div>';
   }).join('');
 }
 
-function liberarComissaoRepresada(agendamentoId) {
+function liberarComissaoRepresada(agendamentoId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
   apiFetch('/api/comissoes/represadas/' + agendamentoId + '/liberar', { method: 'POST' })
     .then(function(r){
       toast('Comissão de ' + brl(r.valor) + ' liberada! ✅ Já entra no próximo fechamento desse profissional.', 'ok');
       abrirComissoesRepresadas(); // recarrega a lista
     })
-    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+    .catch(function(e){
+      toast('Erro: '+(e.message||'tente novamente'),'er');
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Liberar'; }
+    });
 }
 
 // Abre o modal de fechar comissões — a tabela (fcom-t) já vem preenchida
@@ -4050,14 +4060,15 @@ function renderHistoricoComissoes(dados) {
 
 // ── PROFISSIONAIS ───────────────────────────────────────
 function loadPros() {
-  apiFetch('/api/profissionais').then(function(r){
+  return apiFetch('/api/profissionais').then(function(r){
     PROS = r || []; renderPros(PROS);
     var selFiltro = document.getElementById('mov-hist-filtro-prof');
     if (selFiltro) {
       selFiltro.innerHTML = '<option value="">Todos os profissionais</option>' +
         PROS.map(function(p){ return '<option value="' + p.id + '">' + esc(p.nome) + '</option>'; }).join('');
     }
-  }).catch(function(){ PROS = DEMO ? D.pros : []; renderPros(PROS); });
+    return PROS;
+  }).catch(function(){ PROS = DEMO ? D.pros : []; renderPros(PROS); return PROS; });
 }
 
 function renderPros(list) {
@@ -4346,9 +4357,10 @@ function pagarParcela(parcelaId, profId) {
 
 // ── SERVIÇOS ────────────────────────────────────────────
 function loadSvcs() {
-  apiFetch('/api/servicos').then(function(r){
+  return apiFetch('/api/servicos').then(function(r){
     SVCS = r || []; renderSvcs(SVCS);
-  }).catch(function(){ SVCS = DEMO ? D.svcs : []; renderSvcs(SVCS); });
+    return SVCS;
+  }).catch(function(){ SVCS = DEMO ? D.svcs : []; renderSvcs(SVCS); return SVCS; });
 }
 
 function renderSvcs(list) {
@@ -4557,10 +4569,15 @@ function salvarVendaPacote() {
 }
 
 // ── FILL SELECTS ────────────────────────────────────────
-function fillSelects() {
+function fillSelects(promessaPros, promessaSvcs) {
+  // Reaproveita o resultado de loadPros()/loadSvcs() (se vier como
+  // parâmetro) em vez de buscar profissionais e serviços de novo — antes
+  // essa função sempre refazia as duas chamadas, mesmo elas tendo sido
+  // buscadas segundos antes pelo loadAll(), dobrando essas duas
+  // requisições em todo carregamento do painel.
   Promise.allSettled([
-    apiFetch('/api/profissionais'),
-    apiFetch('/api/servicos'),
+    promessaPros || apiFetch('/api/profissionais'),
+    promessaSvcs || apiFetch('/api/servicos'),
     apiFetch('/api/clientes?limit=5000')
   ]).then(function(results){
     var pros  = (results[0].status==='fulfilled' && results[0].value && results[0].value.length) ? results[0].value : D.pros;
