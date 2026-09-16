@@ -420,7 +420,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.47.0-rate-limit-rotas-publicas' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.48.0-arredondamento-comissao' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1927,7 +1927,7 @@ async function criarAgendamentoUnico({
     const pacoteClienteId = pacotePorServico[sv.id] || null;
     return {
       agendamento_id: ag.id, servico_id: sv.id, preco: precoDoServicoNesseDia,
-      comissao_pct: cpct, comissao_valor: (precoDoServicoNesseDia * cpct) / 100,
+      comissao_pct: cpct, comissao_valor: Number(((precoDoServicoNesseDia * cpct) / 100).toFixed(2)),
       pago_via_pacote: !!pacoteClienteId, pacote_cliente_id: pacoteClienteId
     };
   });
@@ -2082,7 +2082,7 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
       // profissional, separada da % de serviço (uma pessoa pode ganhar 40%
       // no serviço e só 10% em produto, por exemplo — são coisas diferentes)
       const pctProduto = Number(prof.comissao_produto_pct) || 0;
-      const comissaoProdutoValor = valorProduto * (pctProduto / 100);
+      const comissaoProdutoValor = Number((valorProduto * (pctProduto / 100)).toFixed(2));
 
       await supabase.from('movimentacoes_estoque').insert({
         salao_id: req.salao_id, produto_id: item.produto_id, tipo: 'venda',
@@ -3336,7 +3336,7 @@ app.post('/api/estoque/:id/vender', auth, requirePermissao('estoque_gerenciar'),
     const { data: profVendedor } = await supabase.from('profissionais')
       .select('comissao_produto_pct').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
     const pctProduto = Number(profVendedor?.comissao_produto_pct) || 0;
-    comissaoProdutoValor = valorFinal * (pctProduto / 100);
+    comissaoProdutoValor = Number((valorFinal * (pctProduto / 100)).toFixed(2));
   }
 
   await supabase.from('movimentacoes_estoque').insert({
@@ -4918,7 +4918,7 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
     await supabase.from('agendamento_servicos').insert({
       agendamento_id: agendamento.id, servico_id: servico.id,
       preco: precoEfetivo, comissao_pct: cpct,
-      comissao_valor: (precoEfetivo * cpct) / 100
+      comissao_valor: Number(((precoEfetivo * cpct) / 100).toFixed(2))
     });
 
     // Cria lançamento financeiro pendente
