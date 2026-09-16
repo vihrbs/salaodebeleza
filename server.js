@@ -453,7 +453,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.56.0-limite-compras-profissional' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.59.0-validacao-upload-imagem' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -529,7 +529,7 @@ async function enviarCodigoVerificacao(email, nome, codigo) {
 // ═══════════════════════════════════════════════════
 
 // REGISTER — cria salão + admin
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', limitarTaxa(5, 60), async (req, res) => {
   const { nome_salao, nome, senha, telefone } = req.body;
   const email = normalizarEmail(req.body.email);
   if (!nome_salao || !nome || !email || !senha) {
@@ -787,7 +787,7 @@ app.post('/api/auth/apple', async (req, res) => {
 });
 
 // LOGIN
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', limitarTaxa(10, 15), async (req, res) => {
   const { senha } = req.body;
   const email = normalizarEmail(req.body.email);
   if (!email || !senha) return res.status(422).json({ error: 'Email e senha obrigatórios' });
@@ -1000,7 +1000,7 @@ async function notificarProfissionalComissaoFechada(email, nomeProfissional, val
 
 // Pede o link de redefinição. Por segurança, SEMPRE responde com sucesso —
 // não revela se o e-mail existe ou não no sistema.
-app.post('/api/auth/esqueci-senha', async (req, res) => {
+app.post('/api/auth/esqueci-senha', limitarTaxa(5, 60), async (req, res) => {
   const email = normalizarEmail(req.body.email);
   if (!email) return res.status(422).json({ error: 'E-mail é obrigatório' });
   try {
@@ -3098,6 +3098,19 @@ app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('fiado'
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Protege contra "injeção de fórmula" em CSV — se um valor começar com
+// =, +, -, @ (ou tab/quebra de linha), o Excel/Sheets pode interpretar
+// como fórmula assim que o arquivo é aberto, em vez de tratar como texto
+// puro. Isso importa aqui porque o nome do cliente é digitado livremente
+// por qualquer pessoa no link público de agendamento — sem essa
+// proteção, alguém poderia digitar um nome desses de propósito, e a
+// "fórmula" rodaria no computador de quem exportou o CSV depois.
+function sanitizarCelulaCsv(valor) {
+  var texto = String(valor == null ? '' : valor);
+  if (/^[=+\-@\t\r]/.test(texto)) return "'" + texto;
+  return texto;
+}
+
 app.get('/api/financeiro/fiado/exportar', auth, requirePermissao('financeiro'), async (req, res) => {
   try {
     const { data: pendentes, error } = await supabase.from('lancamentos')
@@ -3126,7 +3139,7 @@ app.get('/api/financeiro/fiado/exportar', auth, requirePermissao('financeiro'), 
     const linhas = Object.values(porCliente).sort((a, b) => b.total - a.total);
     const cabecalho = 'Cliente;Telefone;Total Devido;Quantidade de Cobrancas;Pendente Desde\n';
     const corpo = linhas.map(l =>
-      [l.nome, l.telefone, l.total.toFixed(2).replace('.', ','), l.qtd, l.maisAntiga].join(';')
+      [sanitizarCelulaCsv(l.nome), sanitizarCelulaCsv(l.telefone), l.total.toFixed(2).replace('.', ','), l.qtd, l.maisAntiga].join(';')
     ).join('\n');
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -4183,6 +4196,19 @@ app.put('/api/saloes/meu', auth, requirePermissao('config'), async (req, res) =>
 // centenas de imagens sem querer e estourar o armazenamento do plano
 const MAX_FOTOS_SALAO = 12;
 
+// Extrai e valida uma imagem enviada como data URI (data:image/...;base64,...).
+// Usa uma LISTA EXPLÍCITA de formatos aceitos, em vez de um padrão genérico
+// tipo "image/qualquercoisa" — sem isso, um tipo como "image/svg" (SVG é um
+// formato baseado em XML que pode ter <script> embutido) passaria pela
+// validação e ficaria hospedado publicamente, arriscando rodar script no
+// navegador de quem abrisse a foto direto.
+const TIPOS_IMAGEM_ACEITOS = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+function extrairImagemValidada(imagemBase64) {
+  const match = String(imagemBase64 || '').match(/^data:([\w/+-]+);base64,(.+)$/);
+  if (!match || !TIPOS_IMAGEM_ACEITOS.has(match[1])) return null;
+  return { tipoMime: match[1], extensao: match[1].split('/')[1], buffer: Buffer.from(match[2], 'base64') };
+}
+
 // Recebe a foto em base64 (o front já lê o arquivo e converte antes de
 // mandar), sobe pro Supabase Storage, e adiciona a URL na lista de fotos
 // do salão. Não precisa de nenhuma biblioteca de upload (multer etc) —
@@ -4200,11 +4226,9 @@ app.post('/api/saloes/fotos', auth, requirePermissao('config'), async (req, res)
     }
 
     // Separa o cabeçalho "data:image/jpeg;base64," do conteúdo de verdade
-    const match = imagem_base64.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!match) return res.status(422).json({ error: 'Formato de imagem inválido' });
-    const tipoMime = match[1];
-    const extensao = tipoMime.split('/')[1] || 'jpg';
-    const buffer = Buffer.from(match[2], 'base64');
+    const imagemValida = extrairImagemValidada(imagem_base64);
+    if (!imagemValida) return res.status(422).json({ error: 'Formato de imagem inválido — envie JPEG, PNG, GIF ou WEBP' });
+    const { tipoMime, extensao, buffer } = imagemValida;
 
     if (buffer.length > 8 * 1024 * 1024) {
       return res.status(422).json({ error: 'Imagem muito grande (máximo 8MB). Tente comprimir antes de enviar.' });
@@ -4251,11 +4275,9 @@ app.post('/api/profissionais/:id/foto', auth, requirePermissao('profissionais'),
       .select('id, foto_url, foto_caminho').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
     if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
 
-    const match = imagem_base64.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!match) return res.status(422).json({ error: 'Formato de imagem inválido' });
-    const tipoMime = match[1];
-    const extensao = tipoMime.split('/')[1] || 'jpg';
-    const buffer = Buffer.from(match[2], 'base64');
+    const imagemValida = extrairImagemValidada(imagem_base64);
+    if (!imagemValida) return res.status(422).json({ error: 'Formato de imagem inválido — envie JPEG, PNG, GIF ou WEBP' });
+    const { tipoMime, extensao, buffer } = imagemValida;
     if (buffer.length > 8 * 1024 * 1024) {
       return res.status(422).json({ error: 'Imagem muito grande (máximo 8MB). Tente comprimir antes de enviar.' });
     }
@@ -4308,11 +4330,9 @@ app.post('/api/meu-perfil/foto', auth, async (req, res) => {
       .select('id, foto_caminho').eq('id', req.user.profissional_id).eq('salao_id', req.salao_id).single();
     if (!prof) return res.status(404).json({ error: 'Profissional não encontrado' });
 
-    const match = imagem_base64.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!match) return res.status(422).json({ error: 'Formato de imagem inválido' });
-    const tipoMime = match[1];
-    const extensao = tipoMime.split('/')[1] || 'jpg';
-    const buffer = Buffer.from(match[2], 'base64');
+    const imagemValida = extrairImagemValidada(imagem_base64);
+    if (!imagemValida) return res.status(422).json({ error: 'Formato de imagem inválido — envie JPEG, PNG, GIF ou WEBP' });
+    const { tipoMime, extensao, buffer } = imagemValida;
     if (buffer.length > 8 * 1024 * 1024) {
       return res.status(422).json({ error: 'Imagem muito grande (máximo 8MB). Tente comprimir antes de enviar.' });
     }
