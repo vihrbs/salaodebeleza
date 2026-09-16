@@ -104,6 +104,30 @@ function utcParaMinutosBrasil(dataHoraUTC) {
   return totalMinBrasil;
 }
 
+// Minutos de dataHoraUTC em relação à MEIA-NOITE (BRT) de diaBaseISO
+// ("YYYY-MM-DD") — diferente de utcParaMinutosBrasil, aqui o resultado
+// carrega a informação de QUE DIA é, não só a hora: pode vir negativo
+// (aconteceu antes da meia-noite de diaBase — ex.: um agendamento de
+// ontem às 23h45 vira -15) ou passar de 1439 (se ultrapassar a meia-
+// noite de diaBase pro dia seguinte). Isso existe especificamente pra
+// checagem de conflito de horário não se confundir quando um
+// agendamento atravessa a virada do dia — usar só "hora do dia" faria
+// um atendimento de ontem às 23h45 (que só termina 00h15 de hoje)
+// parecer não-conflitante com um novo agendamento de hoje aterrissando
+// nesse mesmo intervalo, porque os dois teriam "hora do dia" parecidas
+// mas em dias diferentes, sem nada ligando um ao outro.
+function minutosRelativosAoDia(dataHoraUTC, diaBaseISO) {
+  var dt = new Date(dataHoraUTC);
+  var meiaNoiteBase = new Date(diaBaseISO + 'T03:00:00Z'); // 00:00 BRT do dia base, em UTC
+  return Math.round((dt.getTime() - meiaNoiteBase.getTime()) / 60000);
+}
+
+function subtrairDia(dataISO) {
+  var d = new Date(dataISO + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().split('T')[0];
+}
+
 // Se o profissional tiver horário de almoço configurado, devolve o
 // intervalo [inicioMin, fimMin] pra ser tratado como "ocupado" — igual
 // bloquear um horário nesse intervalo. Se não tiver configurado, devolve
@@ -298,7 +322,7 @@ async function aplicarTaxaMaquininha(agendamentoId, salaoId, valorTotal, formaPg
     for (const s of servicos) {
       const proporcao = Number(s.preco || 0) / valorTotal;
       const deducao = Math.round(taxaProfissional * proporcao * 100) / 100;
-      const novaComissao = Math.max(0, Number(s.comissao_valor || 0) - deducao);
+      const novaComissao = Math.max(0, Number((Number(s.comissao_valor || 0) - deducao).toFixed(2)));
       await supabase.from('agendamento_servicos')
         .update({ comissao_valor: novaComissao }).eq('id', s.id);
     }
@@ -343,7 +367,7 @@ async function aplicarTaxaMaquininhaDividida(agendamentoId, salaoId, valorTotal,
     for (const s of servicos) {
       const proporcao = Number(s.preco || 0) / valorTotal;
       const deducao = Math.round(taxaProfissional * proporcao * 100) / 100;
-      const novaComissao = Math.max(0, Number(s.comissao_valor || 0) - deducao);
+      const novaComissao = Math.max(0, Number((Number(s.comissao_valor || 0) - deducao).toFixed(2)));
       await supabase.from('agendamento_servicos')
         .update({ comissao_valor: novaComissao }).eq('id', s.id);
     }
@@ -391,8 +415,17 @@ function gerarParcelas(valorTotal, numParcelas, dataCompraISO) {
   const [ano, mes, dia] = dataCompraISO.split('-').map(Number);
 
   for (let i = 1; i <= numParcelas; i++) {
-    const mesVencimento = mes - 1 + (i - 1); // 0-indexed pro Date.UTC
-    const venc = new Date(Date.UTC(ano, mesVencimento, dia));
+    const mesVencimento = mes - 1 + (i - 1); // 0-indexed pro Date.UTC; pode passar de 11, o próprio Date.UTC normaliza o ano
+    // Descobre o mês/ano de destino já normalizado, pra saber quantos dias
+    // esse mês tem — sem isso, uma compra no dia 29, 30 ou 31 "vaza" pro
+    // mês seguinte quando o mês de destino é mais curto (ex.: comprou dia
+    // 31/01 em 3x — a parcela de fevereiro deveria cair no fim de
+    // fevereiro, mas fevereiro não tem dia 31, e o JS empurraria sozinho
+    // pra 03 de março, fazendo duas parcelas caírem no mesmo mês).
+    const dataBase = new Date(Date.UTC(ano, mesVencimento, 1));
+    const ultimoDiaDoMesDestino = new Date(Date.UTC(dataBase.getUTCFullYear(), dataBase.getUTCMonth() + 1, 0)).getUTCDate();
+    const diaAjustado = Math.min(dia, ultimoDiaDoMesDestino);
+    const venc = new Date(Date.UTC(dataBase.getUTCFullYear(), dataBase.getUTCMonth(), diaAjustado));
     let valor = valorParcela;
     if (i === numParcelas) valor = Math.round((valorTotal - somaParcial) * 100) / 100;
     somaParcial = Math.round((somaParcial + valor) * 100) / 100;
@@ -420,11 +453,20 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.48.0-arredondamento-comissao' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.56.0-limite-compras-profissional' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+}
+
+// E-mail é sempre tratado sem diferenciar maiúscula/minúscula (é assim
+// que todo provedor de e-mail de verdade trata) — sem isso, alguém que
+// cadastra como "Joao@Gmail.com" e depois digita "joao@gmail.com" pra
+// entrar (bem comum, principalmente com autocapitalização do celular)
+// recebe "e-mail ou senha incorretos" mesmo com a senha certa.
+function normalizarEmail(email) {
+  return String(email || '').trim().toLowerCase();
 }
 
 function gerarCodigoVerificacao() {
@@ -488,7 +530,8 @@ async function enviarCodigoVerificacao(email, nome, codigo) {
 
 // REGISTER — cria salão + admin
 app.post('/api/auth/register', async (req, res) => {
-  const { nome_salao, nome, email, senha, telefone } = req.body;
+  const { nome_salao, nome, senha, telefone } = req.body;
+  const email = normalizarEmail(req.body.email);
   if (!nome_salao || !nome || !email || !senha) {
     return res.status(422).json({ error: 'Preencha todos os campos obrigatórios' });
   }
@@ -653,7 +696,7 @@ app.post('/api/auth/google', async (req, res) => {
     if (!payload.email_verified) return res.status(403).json({ error: 'Seu e-mail do Google não está verificado' });
 
     const googleId = payload.sub;
-    const email = payload.email;
+    const email = normalizarEmail(payload.email);
     const nome = payload.name || email.split('@')[0];
 
     // Já existe conta com esse Google ou esse e-mail (ex.: criou por senha antes)?
@@ -715,7 +758,7 @@ app.post('/api/auth/apple', async (req, res) => {
     // PRIMEIRA vez que a pessoa autoriza — depois disso o app precisa ter
     // guardado isso já. Por isso aceita vir do corpo da requisição também
     // (o frontend manda no primeiro login), com o token como prioridade.
-    const email = payload.email || emailInformado;
+    const email = normalizarEmail(payload.email || emailInformado);
     if (!email) return res.status(422).json({ error: 'Não recebemos seu e-mail da Apple — tenta entrar de novo' });
     const nome = nomeInformado || email.split('@')[0];
 
@@ -745,7 +788,8 @@ app.post('/api/auth/apple', async (req, res) => {
 
 // LOGIN
 app.post('/api/auth/login', async (req, res) => {
-  const { email, senha } = req.body;
+  const { senha } = req.body;
+  const email = normalizarEmail(req.body.email);
   if (!email || !senha) return res.status(422).json({ error: 'Email e senha obrigatórios' });
   try {
     const { data: usuario } = await supabase
@@ -794,7 +838,8 @@ app.get('/api/auth/me', auth, async (req, res) => {
 
 // Confirma o código de verificação enviado por e-mail
 app.post('/api/auth/verificar-email', async (req, res) => {
-  const { email, codigo } = req.body;
+  const { codigo } = req.body;
+  const email = normalizarEmail(req.body.email);
   if (!email || !codigo) return res.status(422).json({ error: 'E-mail e código são obrigatórios' });
   try {
     const { data: usuario } = await supabase.from('usuarios')
@@ -817,7 +862,7 @@ app.post('/api/auth/verificar-email', async (req, res) => {
 
 // Reenvia um novo código de verificação
 app.post('/api/auth/reenviar-codigo', async (req, res) => {
-  const { email } = req.body;
+  const email = normalizarEmail(req.body.email);
   if (!email) return res.status(422).json({ error: 'E-mail é obrigatório' });
   try {
     const { data: usuario } = await supabase.from('usuarios')
@@ -956,7 +1001,7 @@ async function notificarProfissionalComissaoFechada(email, nomeProfissional, val
 // Pede o link de redefinição. Por segurança, SEMPRE responde com sucesso —
 // não revela se o e-mail existe ou não no sistema.
 app.post('/api/auth/esqueci-senha', async (req, res) => {
-  const { email } = req.body;
+  const email = normalizarEmail(req.body.email);
   if (!email) return res.status(422).json({ error: 'E-mail é obrigatório' });
   try {
     const { data: usuario } = await supabase.from('usuarios')
@@ -1197,7 +1242,8 @@ app.get('/api/profissionais/:id/compras', auth, async (req, res) => {
     const { data, error } = await supabase.from('compras_profissional')
       .select('*, parcelas_compra_profissional(*)')
       .eq('salao_id', req.salao_id).eq('profissional_id', req.params.id)
-      .order('data_compra', { ascending: false });
+      .order('data_compra', { ascending: false })
+      .limit(200); // mais que suficiente pra qualquer profissional; evita crescer sem fim com os anos
     if (error) throw error;
     res.json(data || []);
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -1704,7 +1750,7 @@ app.get('/api/agendamentos', auth, async (req, res) => {
              clientes(id, nome, telefone),
              profissionais(id, nome, cor_agenda),
              agendamento_servicos(id, preco, servicos(id, nome, duracao_min))`)
-    .eq('salao_id', req.salao_id).order('data_hora');
+    .eq('salao_id', req.salao_id);
 
   // Janela ampliada em UTC para cobrir o dia completo no fuso do Brasil (UTC-3)
   if (data) {
@@ -1730,6 +1776,17 @@ app.get('/api/agendamentos', auth, async (req, res) => {
   // item (data_hora mais cedo), mostrando o cliente/valor ERRADO na tela de
   // Concluir Atendimento (não o que a pessoa realmente clicou).
   if (req.query.id) q = q.eq('id', req.query.id);
+
+  // Salvaguarda: se ninguém passou NENHUM filtro (nem data, nem id, nem
+  // cliente), essa consulta devolveria o histórico inteiro do salão desde
+  // o primeiro dia — hoje isso ainda é pequeno, mas cresce pra sempre. Só
+  // limita quando não tem filtro nenhum (pega os 500 mais recentes);
+  // qualquer busca já filtrada continua com a ordem cronológica normal
+  // de sempre, sem limite artificial.
+  const semNenhumFiltro = !data && !data_inicio && !data_fim && !req.query.id && !req.query.cliente_id;
+  q = semNenhumFiltro
+    ? q.order('data_hora', { ascending: false }).limit(500)
+    : q.order('data_hora');
 
   const { data: rows, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
@@ -1791,12 +1848,24 @@ app.get('/api/agendamentos/:id/produtos', auth, async (req, res) => {
 
 // ── AGENDAMENTO RECORRENTE ────────────────────────────
 // Soma um intervalo (semanal/quinzenal/mensal) a uma data "YYYY-MM-DD" e
-// retorna a próxima data no mesmo formato.
-function adicionarIntervaloRecorrencia(dataISO, frequencia) {
+// retorna a próxima data no mesmo formato. Pra "mensal", recebe também o
+// diaOriginal (dia da primeira ocorrência da série) — necessário porque
+// se um mês no meio da série for mais curto (ex.: fevereiro não tem dia
+// 31), o dia "encolhe" só NAQUELE mês (28), mas os meses seguintes que
+// TÊM 31 dias precisam voltar a usar o dia 31 original — sem isso, uma
+// vez que o dia encolhe ele fica encolhido pra sempre no resto da série,
+// mesmo em meses que comportariam o dia certo.
+function adicionarIntervaloRecorrencia(dataISO, frequencia, diaOriginal) {
   const [ano, mes, dia] = dataISO.split('-').map(Number);
   if (frequencia === 'semanal')   return new Date(Date.UTC(ano, mes - 1, dia + 7)).toISOString().split('T')[0];
   if (frequencia === 'quinzenal') return new Date(Date.UTC(ano, mes - 1, dia + 14)).toISOString().split('T')[0];
-  if (frequencia === 'mensal')    return new Date(Date.UTC(ano, mes, dia)).toISOString().split('T')[0];
+  if (frequencia === 'mensal') {
+    const diaAlvo = diaOriginal || dia;
+    const dataBase = new Date(Date.UTC(ano, mes, 1)); // dia 1 do mês seguinte, sempre válido
+    const ultimoDiaDoMesDestino = new Date(Date.UTC(dataBase.getUTCFullYear(), dataBase.getUTCMonth() + 1, 0)).getUTCDate();
+    const diaAjustado = Math.min(diaAlvo, ultimoDiaDoMesDestino);
+    return new Date(Date.UTC(dataBase.getUTCFullYear(), dataBase.getUTCMonth(), diaAjustado)).toISOString().split('T')[0];
+  }
   throw new Error('Frequência de recorrência inválida');
 }
 
@@ -1806,9 +1875,10 @@ function adicionarIntervaloRecorrencia(dataISO, frequencia) {
 function gerarDatasRecorrencia(dataInicialISO, frequencia, dataFimISO) {
   const MAX_OCORRENCIAS = 52;
   const datas = [dataInicialISO];
+  const diaOriginal = Number(dataInicialISO.split('-')[2]);
   let atual = dataInicialISO;
   while (datas.length < MAX_OCORRENCIAS) {
-    const proxima = adicionarIntervaloRecorrencia(atual, frequencia);
+    const proxima = adicionarIntervaloRecorrencia(atual, frequencia, diaOriginal);
     if (proxima > dataFimISO) break; // comparação lexicográfica funciona em "YYYY-MM-DD"
     datas.push(proxima);
     atual = proxima;
@@ -1842,17 +1912,21 @@ async function criarAgendamentoUnico({
   // agenda" nesse caso, já que não tá reservando nada, só documentando uma
   // venda que já foi concluída.
   if (!pularChecagemConflito) {
+    // Busca também o final do dia anterior — pega o caso de um
+    // agendamento de ontem que atravessa a virada e ainda ocupa os
+    // primeiros minutos de hoje.
+    const inicioDiaAmpliado = subtrairDia(dataParte) + 'T03:00:00+00:00';
     const { data: existentes } = await supabase.from('agendamentos')
       .select('id, data_hora, duracao_min')
       .eq('salao_id', salaoId).eq('profissional_id', profissionalId)
-      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .gte('data_hora', inicioDiaAmpliado).lte('data_hora', fimDia)
       .neq('status', 'cancelado');
 
-    const novoInicioMin = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
+    const novoInicioMin = minutosRelativosAoDia(new Date(data_hora_final).toISOString(), dataParte);
     const novoFimMin    = novoInicioMin + duracao_total;
 
     const conflito = (existentes || []).find(function(ag) {
-      var agInicio = utcParaMinutosBrasil(ag.data_hora);
+      var agInicio = minutosRelativosAoDia(ag.data_hora, dataParte);
       var agFim = agInicio + (ag.duracao_min || 60);
       return (novoInicioMin < agFim && novoFimMin > agInicio);
     });
@@ -1890,16 +1964,17 @@ async function criarAgendamentoUnico({
   // (pularChecagemConflito é pra vendas avulsas, que documentam algo que
   // já aconteceu — não faz sentido "desfazer" isso por conflito de agenda).
   if (!pularChecagemConflito) {
+    const inicioDiaAmpliadoReconf = subtrairDia(dataParte) + 'T03:00:00+00:00';
     const { data: conflitantesAposInsert } = await supabase.from('agendamentos')
       .select('id, data_hora, duracao_min, created_at')
       .eq('salao_id', salaoId).eq('profissional_id', profissionalId)
-      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .gte('data_hora', inicioDiaAmpliadoReconf).lte('data_hora', fimDia)
       .neq('status', 'cancelado');
 
-    const novoInicioMinReconf = utcParaMinutosBrasil(new Date(data_hora_final).toISOString());
+    const novoInicioMinReconf = minutosRelativosAoDia(new Date(data_hora_final).toISOString(), dataParte);
     const novoFimMinReconf = novoInicioMinReconf + duracao_total;
     const realmenteConflitantes = (conflitantesAposInsert || []).filter(function(a) {
-      var aInicio = utcParaMinutosBrasil(a.data_hora);
+      var aInicio = minutosRelativosAoDia(a.data_hora, dataParte);
       var aFim = aInicio + (a.duracao_min || 60);
       return (novoInicioMinReconf < aFim && novoFimMinReconf > aInicio);
     }).sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
@@ -3899,7 +3974,8 @@ app.delete('/api/comissoes/fechamento/:id', auth, async (req, res) => {
 app.post('/api/usuarios', auth, async (req, res) => {
   // Só admin pode criar usuários
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
-  const { nome, cargo, email, senha, perfil, permissoes, profissional_id } = req.body;
+  const { nome, cargo, senha, perfil, permissoes, profissional_id } = req.body;
+  const email = normalizarEmail(req.body.email);
   if (!nome || !email || !senha) return res.status(422).json({ error: 'Nome, email e senha obrigatórios' });
   if (String(senha).length < 6) return res.status(422).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
   if (!emailValido(email)) return res.status(422).json({ error: 'Informe um e-mail válido' });
@@ -4562,6 +4638,12 @@ app.get('/api/super-admin/logs', auth, requireSuperAdmin, (req, res) => {
 app.get('/api/publico/salao/:slug', async (req, res) => {
   try {
     const parametro = req.params.slug;
+    // Slug sempre foi gravado em minúsculo (a função que gera slug já faz
+    // isso) — se alguém digitar o link com maiúscula, ou o navegador
+    // autocapitalizar o começo da URL (acontece em alguns celulares),
+    // sem isso o link simplesmente não acha o salão. UUID não precisa
+    // desse tratamento — o Postgres já compara por valor, não por texto.
+    const parametroSlug = parametro.toLowerCase();
     // "id" é UUID no banco — comparar um valor que não tem cara de UUID
     // (tipo um slug "barbearia-rbs") contra essa coluna trava a consulta
     // INTEIRA com erro de tipo, não só ignora aquele lado do "ou". Por
@@ -4571,8 +4653,8 @@ app.get('/api/publico/salao/:slug', async (req, res) => {
     const query = supabase.from('saloes')
       .select('id, nome, slug, telefone, endereco, cidade, fotos, configuracoes, sobre');
     const { data, error } = pareceUuid
-      ? await query.or(`id.eq.${parametro},slug.eq.${parametro}`).single()
-      : await query.eq('slug', parametro).single();
+      ? await query.or(`id.eq.${parametro},slug.eq.${parametroSlug}`).single()
+      : await query.eq('slug', parametroSlug).single();
     if (error || !data) return res.status(404).json({ error: 'Salão não encontrado' });
 
     // Monta o horário dos 7 dias da semana pro cliente ver de cara — usa o
@@ -4827,13 +4909,19 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
     // pro dia, se houver; senão o preço padrão do serviço)
     const precoEfetivo = precoEfetivoServico(servico, data_hora);
 
-    // Busca ou cria cliente pelo telefone
+    // Busca ou cria cliente pelo telefone — compara só os dígitos (sem
+    // parênteses, espaço ou traço), porque a mesma pessoa pode digitar o
+    // número diferente em cada visita (ex.: "(11) 98765-4321" numa vez e
+    // "11987654321" na outra). Sem isso, o mesmo cliente virava um
+    // cadastro novo a cada jeito diferente de digitar, fragmentando
+    // histórico, avaliação e pacote da pessoa em vários registros.
+    const telefoneLimpo = normalizarTelefone(telefone);
     let { data: cliente } = await supabase.from('clientes')
-      .select('id').eq('salao_id', salao_id).eq('telefone', telefone).maybeSingle();
+      .select('id').eq('salao_id', salao_id).eq('telefone', telefoneLimpo).maybeSingle();
 
     if (!cliente) {
       const { data: novoCliente, error: cliErr } = await supabase.from('clientes')
-        .insert({ salao_id, nome, telefone, status: 'novo' })
+        .insert({ salao_id, nome, telefone: telefoneLimpo, status: 'novo' })
         .select('id').single();
       if (cliErr) throw cliErr;
       cliente = novoCliente;
@@ -4845,15 +4933,18 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
     const fimMin = inicioMin + servico.duracao_min;
     const inicioDia = data + 'T03:00:00+00:00';
     const fimDia     = adicionarDia(data) + 'T02:59:59+00:00';
+    // Amplia pro final do dia anterior também, pra pegar um agendamento de
+    // ontem que atravessa a virada e ainda ocupa os primeiros minutos de hoje
+    const inicioDiaAmpliado = subtrairDia(data) + 'T03:00:00+00:00';
 
     const { data: existentes } = await supabase.from('agendamentos')
       .select('data_hora, duracao_min')
       .eq('salao_id', salao_id).eq('profissional_id', profissional_id)
-      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .gte('data_hora', inicioDiaAmpliado).lte('data_hora', fimDia)
       .neq('status', 'cancelado');
 
     const temConflito = (existentes || []).some(function(ag) {
-      var agInicio = utcParaMinutosBrasil(ag.data_hora);
+      var agInicio = minutosRelativosAoDia(ag.data_hora, data);
       var agFim = agInicio + (ag.duracao_min || 60);
       return (inicioMin < agFim && fimMin > agInicio);
     });
@@ -4892,11 +4983,11 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
     const { data: conflitantesAposInsert } = await supabase.from('agendamentos')
       .select('id, data_hora, duracao_min, created_at')
       .eq('salao_id', salao_id).eq('profissional_id', profissional_id)
-      .gte('data_hora', inicioDia).lte('data_hora', fimDia)
+      .gte('data_hora', inicioDiaAmpliado).lte('data_hora', fimDia)
       .neq('status', 'cancelado');
 
     const realmenteConflitantes = (conflitantesAposInsert || []).filter(function(ag) {
-      var agInicio = utcParaMinutosBrasil(ag.data_hora);
+      var agInicio = minutosRelativosAoDia(ag.data_hora, data);
       var agFim = agInicio + (ag.duracao_min || 60);
       return (inicioMin < agFim && fimMin > agInicio);
     }).sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
@@ -4966,8 +5057,8 @@ app.post('/api/publico/cancelar/:agendamentoId', limitarTaxa(10, 15), async (req
 
     if (!ag) return res.status(404).json({ error: 'Agendamento não encontrado' });
 
-    const telefoneLimpo = telefone.replace(/\D/g, '');
-    const telefoneCadastrado = (ag.clientes && ag.clientes.telefone || '').replace(/\D/g, '');
+    const telefoneLimpo = normalizarTelefone(telefone);
+    const telefoneCadastrado = normalizarTelefone(ag.clientes && ag.clientes.telefone);
     if (telefoneLimpo !== telefoneCadastrado) {
       return res.status(403).json({ error: 'Telefone não corresponde ao agendamento' });
     }
