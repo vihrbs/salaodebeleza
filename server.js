@@ -26,12 +26,53 @@ console.error = function(...args) {
 };
 
 const app = express();
+// Necessário pra req.ip refletir o IP real de quem está acessando, e não
+// o do proxy da Railway (que fica na frente de toda requisição em
+// produção) — sem isso, todo visitante apareceria com o mesmo IP (o do
+// proxy), e qualquer limite por IP feito mais abaixo não serviria pra nada.
+app.set('trust proxy', true);
 app.use(cors());
 // Limite bem generoso — necessário pra importações em lote (ex.: histórico
 // de vendas de outro sistema, que pode ter milhares de linhas numa única
 // requisição). O padrão do Express (100kb) é pequeno demais pra isso e
 // rejeita a requisição antes mesmo de chegar nas rotas.
 app.use(express.json({ limit: '15mb' }));
+
+// ── LIMITADOR DE TAXA PRA ROTAS PÚBLICAS ──────────────────
+// Protege contra spam nas rotas sem login (agendar, avaliar, cancelar) —
+// sem precisar de nenhuma biblioteca nova, só um contador em memória por
+// IP. Como o servidor roda numa instância só (não em vários processos
+// separados), guardar isso em memória é suficiente; não seria em um
+// ambiente com múltiplos servidores atrás de um balanceador, mas não é o
+// caso aqui.
+const limitesPorIp = new Map(); // chave: "ip:rota" → { count, resetAt }
+
+function limitarTaxa(maxTentativas, janelaMinutos) {
+  return function(req, res, next) {
+    const chave = req.ip + ':' + req.path;
+    const agora = Date.now();
+    const registro = limitesPorIp.get(chave);
+    if (!registro || agora > registro.resetAt) {
+      limitesPorIp.set(chave, { count: 1, resetAt: agora + janelaMinutos * 60000 });
+      return next();
+    }
+    if (registro.count >= maxTentativas) {
+      return res.status(429).json({ error: 'Muitas tentativas em pouco tempo. Aguarde alguns minutos antes de tentar de novo.' });
+    }
+    registro.count++;
+    next();
+  };
+}
+
+// Limpeza periódica — sem isso, IPs antigos ficariam acumulando na
+// memória pra sempre e nunca seriam liberados.
+setInterval(() => {
+  const agora = Date.now();
+  for (const [chave, registro] of limitesPorIp) {
+    if (agora > registro.resetAt) limitesPorIp.delete(chave);
+  }
+}, 10 * 60 * 1000);
+
 
 // ── Supabase ─────────────────────────────────────────
 const { createClient } = require('@supabase/supabase-js');
@@ -379,7 +420,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.46.0-race-condition-estoque-completo' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.47.0-rate-limit-rotas-publicas' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -4629,7 +4670,7 @@ app.get('/api/publico/avaliacao/:agendamentoId', async (req, res) => {
 // Registra a avaliação — nota de 1 a 5 + comentário opcional. Uma nota por
 // atendimento (não deixa avaliar o mesmo duas vezes, evita gente girando o
 // link e inflando as próprias notas).
-app.post('/api/publico/avaliacao/:agendamentoId', async (req, res) => {
+app.post('/api/publico/avaliacao/:agendamentoId', limitarTaxa(15, 60), async (req, res) => {
   const { nota, comentario } = req.body;
   const notaNum = Number(nota);
   if (!notaNum || notaNum < 1 || notaNum > 5) {
@@ -4767,7 +4808,7 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
 });
 
 // Cria agendamento público (cliente final)
-app.post('/api/publico/agendar/:salaoId', async (req, res) => {
+app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) => {
   const { nome, telefone, servico_id, profissional_id, data, hora_inicio } = req.body;
   if (!nome || !telefone || !servico_id || !profissional_id || !data || !hora_inicio) {
     return res.status(422).json({ error: 'Todos os campos são obrigatórios' });
@@ -4914,7 +4955,7 @@ app.post('/api/publico/agendar/:salaoId', async (req, res) => {
 });
 
 // Cliente cancela seu próprio agendamento pelo link público (validado por telefone)
-app.post('/api/publico/cancelar/:agendamentoId', async (req, res) => {
+app.post('/api/publico/cancelar/:agendamentoId', limitarTaxa(10, 15), async (req, res) => {
   const { telefone } = req.body;
   if (!telefone) return res.status(422).json({ error: 'Telefone obrigatório para confirmar o cancelamento' });
 
