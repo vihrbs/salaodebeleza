@@ -176,7 +176,7 @@ async function auth(req, res, next) {
   try {
     const payload = jwt.verify(header.split(' ')[1], JWT_SECRET);
     const { data: usuario } = await supabase
-      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id, super_admin, ultimo_login, tokens_validos_apos')
+      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id, super_admin, ultimo_login, tokens_validos_apos, saloes(ativo, trial_ate)')
       .eq('id', payload.sub).single();
     if (!usuario || !usuario.ativo) return res.status(401).json({ error: 'Usuário inválido' });
 
@@ -188,6 +188,33 @@ async function auth(req, res, next) {
     // token foi emitido, carimbado pela própria biblioteca de JWT.
     if (usuario.tokens_validos_apos && payload.iat * 1000 < new Date(usuario.tokens_validos_apos).getTime()) {
       return res.status(401).json({ error: 'Sua sessão expirou porque a senha foi alterada. Entre novamente.' });
+    }
+
+    // Bloqueio de trial vencido / salão suspenso — antes disso, essa
+    // checagem só existia em "/api/pagamento/status", que só INFORMA a
+    // situação; nada no servidor de fato impedia continuar usando o
+    // sistema depois do trial acabar sem pagar (só o frontend escondia
+    // telas). Super admin nunca é bloqueado (precisa acessar tudo pra
+    // administrar a plataforma), e as rotas de pagamento/login ficam
+    // isentas — a pessoa PRECISA conseguir chegar até o pagamento pra
+    // reativar o próprio acesso.
+    const rotasIsentasDeTrial = ['/api/pagamento/', '/api/auth/', '/health'];
+    const rotaIsenta = rotasIsentasDeTrial.some(p => req.path.startsWith(p));
+    if (!usuario.super_admin && !rotaIsenta && usuario.saloes) {
+      const salaoInfo = usuario.saloes;
+      const suspenso = salaoInfo.ativo === false;
+      let expirado = false;
+      if (salaoInfo.trial_ate) {
+        const trial = new Date(salaoInfo.trial_ate);
+        trial.setHours(23, 59, 59, 999); // não corta antes do fim do último dia
+        expirado = new Date() > trial;
+      }
+      if (suspenso || expirado) {
+        return res.status(402).json({
+          error: suspenso ? 'Acesso suspenso. Fale com o suporte.' : 'Seu período de acesso expirou. Renove o pagamento pra continuar usando o sistema.',
+          trial_expirado: true
+        });
+      }
     }
 
     req.user     = usuario;
@@ -464,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.62.0-idempotencia-webhook-pagamento' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.64.0-suspender-reembolso-chargeback' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -4476,6 +4503,40 @@ app.post('/api/pagamento/webhook', async (req, res) => {
           pago: true,
           mp_payment_id: String(data.id)
         }).catch(() => {}); // ignora erro se tabela nao existir
+      }
+
+      // Reembolso ou contestação (chargeback) depois do pagamento já ter
+      // sido aprovado — suspende o acesso desse salão automaticamente e
+      // lança uma saída revertendo a receita que tinha sido registrada,
+      // pra o financeiro continuar refletindo a realidade (o dinheiro
+      // voltou, não é mais receita de verdade).
+      else if ((pgto.status === 'refunded' || pgto.status === 'charged_back') && pgto.external_reference) {
+        const salao_id = pgto.external_reference;
+
+        // Mesma trava de idempotência de antes, mas numa categoria
+        // separada ("Reembolso") — não pode ser confundida com a checagem
+        // do pagamento original (que usa "Assinatura"), senão nunca
+        // acharia diferença entre "esse pagamento já foi aprovado" e
+        // "esse reembolso já foi processado".
+        const { data: reembolsoJaProcessado } = await supabase.from('lancamentos')
+          .select('id').eq('mp_payment_id', String(data.id)).eq('categoria', 'Reembolso').maybeSingle();
+        if (reembolsoJaProcessado) { res.sendStatus(200); return; }
+
+        await supabase.from('saloes').update({ ativo: false }).eq('id', salao_id);
+
+        await supabase.from('lancamentos').insert({
+          salao_id: salao_id,
+          tipo: 'saida',
+          categoria: 'Reembolso',
+          descricao: (pgto.status === 'charged_back' ? 'Chargeback' : 'Reembolso') + ' - Mensalidade Beleza Pro',
+          valor: pgto.transaction_amount || 59.90,
+          data: new Date().toISOString().split('T')[0],
+          forma_pgto: pgto.payment_type_id || 'mercado_pago',
+          pago: true,
+          mp_payment_id: String(data.id)
+        }).catch(() => {});
+
+        console.error('[AUDITORIA] Salão ' + salao_id + ' suspenso automaticamente por ' + pgto.status + ' do pagamento ' + data.id + ' em ' + new Date().toISOString());
       }
     }
   } catch(e) { console.error('Webhook erro:', e.message); }
