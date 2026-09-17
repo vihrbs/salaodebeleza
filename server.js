@@ -464,7 +464,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.60.0-invalidar-sessao-troca-senha' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.62.0-idempotencia-webhook-pagamento' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -4445,6 +4445,19 @@ app.post('/api/pagamento/webhook', async (req, res) => {
       // Se aprovado, renova acesso do salao por 30 dias
       if (pgto.status === 'approved' && pgto.external_reference) {
         const salao_id = pgto.external_reference;
+
+        // Trava de idempotência — o Mercado Pago (e qualquer webhook de
+        // pagamento, por natureza) pode chamar essa rota MAIS de uma vez
+        // pro MESMO pagamento (reenvio por falha de rede, retry de
+        // confiabilidade, etc.). Sem essa checagem, cada vez que o
+        // webhook repetisse a mesma notificação, o sistema estenderia o
+        // trial mais 30 dias E lançaria mais uma "receita" no financeiro
+        // que na vida real não voltou a entrar — duplicando dinheiro que
+        // não existe.
+        const { data: jaProcessado } = await supabase.from('lancamentos')
+          .select('id').eq('mp_payment_id', String(data.id)).maybeSingle();
+        if (jaProcessado) { res.sendStatus(200); return; }
+
         const prox = new Date();
         prox.setDate(prox.getDate() + 30);
         await supabase.from('saloes')
@@ -4460,7 +4473,8 @@ app.post('/api/pagamento/webhook', async (req, res) => {
           valor: pgto.transaction_amount || 59.90,
           data: new Date().toISOString().split('T')[0],
           forma_pgto: pgto.payment_type_id || 'mercado_pago',
-          pago: true
+          pago: true,
+          mp_payment_id: String(data.id)
         }).catch(() => {}); // ignora erro se tabela nao existir
       }
     }
@@ -4620,6 +4634,14 @@ app.post('/api/super-admin/saloes/:id/entrar-como', auth, requireSuperAdmin, asy
     if (!usuarioAdmin) return res.status(404).json({ error: 'Esse salão não tem um usuário admin ativo pra entrar como' });
 
     const token = jwt.sign({ sub: usuarioAdmin.id }, JWT_SECRET, { expiresIn: '2h' });
+
+    // Registro de auditoria — é uma ação de alto privilégio (o super admin
+    // passa a agir como o dono de QUALQUER salão), então fica registrado
+    // quem usou, em qual salão, e quando — tanto pra proteção do próprio
+    // super admin (prova de quando e por que entrou) quanto pra confiança
+    // de quem usa o sistema.
+    console.error('[AUDITORIA] Super admin ' + (req.user.nome || req.user.email) + ' entrou como admin do salão ' + req.params.id + ' (' + usuarioAdmin.nome + ' / ' + usuarioAdmin.email + ') em ' + new Date().toISOString());
+
     res.json({ token, usuario_nome: usuarioAdmin.nome, usuario_email: usuarioAdmin.email });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
