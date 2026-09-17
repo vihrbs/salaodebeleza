@@ -176,9 +176,20 @@ async function auth(req, res, next) {
   try {
     const payload = jwt.verify(header.split(' ')[1], JWT_SECRET);
     const { data: usuario } = await supabase
-      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id, super_admin, ultimo_login')
+      .from('usuarios').select('id, nome, email, perfil, salao_id, ativo, profissional_id, super_admin, ultimo_login, tokens_validos_apos')
       .eq('id', payload.sub).single();
     if (!usuario || !usuario.ativo) return res.status(401).json({ error: 'Usuário inválido' });
+
+    // Se a senha foi trocada (por ela mesma ou por "esqueci senha") depois
+    // que esse token foi emitido, ele para de valer — sem isso, se alguém
+    // já tivesse copiado o token de sessão de outra pessoa antes da troca,
+    // continuaria com acesso até o token expirar por conta própria (até 7
+    // dias), mesmo com a senha já trocada. "iat" é o instante em que o
+    // token foi emitido, carimbado pela própria biblioteca de JWT.
+    if (usuario.tokens_validos_apos && payload.iat * 1000 < new Date(usuario.tokens_validos_apos).getTime()) {
+      return res.status(401).json({ error: 'Sua sessão expirou porque a senha foi alterada. Entre novamente.' });
+    }
+
     req.user     = usuario;
     req.salao_id = usuario.salao_id;
 
@@ -453,7 +464,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.59.0-validacao-upload-imagem' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.60.0-invalidar-sessao-troca-senha' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1032,7 +1043,7 @@ app.post('/api/auth/redefinir-senha', async (req, res) => {
     }
     const senha_hash = await bcrypt.hash(senha, 12);
     await supabase.from('usuarios').update({
-      senha_hash, reset_senha_token: null, reset_senha_expira: null
+      senha_hash, reset_senha_token: null, reset_senha_expira: null, tokens_validos_apos: new Date()
     }).eq('id', usuario.id);
     res.json({ message: 'Senha redefinida com sucesso!' });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -1057,7 +1068,7 @@ app.post('/api/auth/alterar-senha', auth, async (req, res) => {
     if (!confere) return res.status(403).json({ error: 'Senha atual incorreta' });
 
     const senha_hash = await bcrypt.hash(senha_nova, 12);
-    await supabase.from('usuarios').update({ senha_hash }).eq('id', usuario.id);
+    await supabase.from('usuarios').update({ senha_hash, tokens_validos_apos: new Date() }).eq('id', usuario.id);
     res.json({ message: 'Senha alterada com sucesso!' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
