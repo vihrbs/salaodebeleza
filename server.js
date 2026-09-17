@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.64.0-suspender-reembolso-chargeback' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.66.0-credito-nova-comanda' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2230,6 +2230,25 @@ app.post('/api/vendas-avulsas', auth, requirePermissao('agenda'), async (req, re
     }
     if (pacotesVendidos.length) {
       await supabase.from('agendamentos').update({ valor_total: valorTotalAtual }).eq('id', agendamentoId);
+    }
+
+    // Cliente pagando com o saldo de crédito que já tinha guardado — só
+    // permite se o saldo cobrir o valor TOTAL da comanda (aqui não existe
+    // "dividir pagamento" como no Concluir Atendimento, então crédito
+    // precisa cobrir tudo ou a pessoa escolhe outra forma).
+    if (!deixar_aberto && forma_pgto === 'Credito_Cliente') {
+      const { data: clienteCredito } = await supabase.from('clientes')
+        .select('saldo_credito').eq('id', cliente_id).eq('salao_id', req.salao_id).single();
+      const saldoAtualCliente = Number(clienteCredito?.saldo_credito || 0);
+      if (saldoAtualCliente < valorTotalAtual - 0.01) {
+        return res.status(422).json({ error: 'Cliente só tem R$ ' + saldoAtualCliente.toFixed(2).replace('.', ',') + ' de crédito — a comanda é de R$ ' + valorTotalAtual.toFixed(2).replace('.', ',') });
+      }
+      const novoSaldoCliente = Number((saldoAtualCliente - valorTotalAtual).toFixed(2));
+      await supabase.from('clientes').update({ saldo_credito: novoSaldoCliente }).eq('id', cliente_id);
+      await supabase.from('movimentacoes_credito_cliente').insert({
+        salao_id: req.salao_id, cliente_id, valor: -valorTotalAtual,
+        tipo: 'usado', motivo: 'Usado na comanda de ' + new Date().toLocaleDateString('pt-BR'), criado_por: req.user.id
+      });
     }
 
     // Se pediu pra deixar em aberto, NÃO conclui agora — fica como
@@ -5006,6 +5025,7 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
 // Cria agendamento público (cliente final)
 app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) => {
   const { nome, telefone, servico_id, profissional_id, data, hora_inicio } = req.body;
+  const email = req.body.email ? normalizarEmail(req.body.email) : null;
   if (!nome || !telefone || !servico_id || !profissional_id || !data || !hora_inicio) {
     return res.status(422).json({ error: 'Todos os campos são obrigatórios' });
   }
@@ -5031,14 +5051,18 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
     // histórico, avaliação e pacote da pessoa em vários registros.
     const telefoneLimpo = normalizarTelefone(telefone);
     let { data: cliente } = await supabase.from('clientes')
-      .select('id').eq('salao_id', salao_id).eq('telefone', telefoneLimpo).maybeSingle();
+      .select('id, email').eq('salao_id', salao_id).eq('telefone', telefoneLimpo).maybeSingle();
 
     if (!cliente) {
       const { data: novoCliente, error: cliErr } = await supabase.from('clientes')
-        .insert({ salao_id, nome, telefone: telefoneLimpo, status: 'novo' })
+        .insert({ salao_id, nome, telefone: telefoneLimpo, email, status: 'novo' })
         .select('id').single();
       if (cliErr) throw cliErr;
       cliente = novoCliente;
+    } else if (email && !cliente.email) {
+      // Cliente já existia mas nunca tinha e-mail — completa com o que
+      // ele informou agora, sem sobrescrever se já tivesse um cadastrado
+      await supabase.from('clientes').update({ email }).eq('id', cliente.id);
     }
 
     // Verifica conflito de horário (segurança)
