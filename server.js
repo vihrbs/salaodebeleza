@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.67.0-email-confirmacao-cliente' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.68.0-email-obrigatorio-agendar' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -5045,9 +5045,10 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
 app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) => {
   const { nome, telefone, servico_id, profissional_id, data, hora_inicio } = req.body;
   const email = req.body.email ? normalizarEmail(req.body.email) : null;
-  if (!nome || !telefone || !servico_id || !profissional_id || !data || !hora_inicio) {
+  if (!nome || !telefone || !servico_id || !profissional_id || !data || !hora_inicio || !email) {
     return res.status(422).json({ error: 'Todos os campos são obrigatórios' });
   }
+  if (!emailValido(email)) return res.status(422).json({ error: 'Informe um e-mail válido' });
 
   try {
     const salao_id = req.params.salaoId;
