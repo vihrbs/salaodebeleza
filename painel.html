@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.47.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.48.0-frontend</div>
       </div>
     </div>
 
@@ -2218,14 +2218,15 @@ function abrirModalConcluir(id) {
              '<div style="margin-top:4px;font-size:.78rem;font-weight:700;color:var(--gold)">Total: ' + brl(ag.valor_total) + '</div>';
       document.getElementById('concluir-valor-original').value = ag.valor_total || 0;
 
-      if (ag.cliente_id) {
+      var clienteIdDesseAgendamento = ag.clientes && ag.clientes.id;
+      if (clienteIdDesseAgendamento) {
         // Sessões de pacote — só mostra se algum dos serviços DESSE
         // atendimento tiver sessão disponível num pacote ativo do cliente
-        apiFetch('/api/clientes/' + ag.cliente_id + '/pacotes').then(function(pacotesCliente){
+        apiFetch('/api/clientes/' + clienteIdDesseAgendamento + '/pacotes').then(function(pacotesCliente){
           renderSessoesPacoteConcluir(ag, pacotesCliente || []);
         }).catch(function(){});
 
-        apiFetch('/api/clientes/' + ag.cliente_id + '/credito').then(function(cred){
+        apiFetch('/api/clientes/' + clienteIdDesseAgendamento + '/credito').then(function(cred){
           if (cred && cred.saldo > 0) {
             var btnCredito = document.getElementById('fpg-btn-saldo-cliente');
             btnCredito.style.display = 'block';
@@ -2446,7 +2447,7 @@ function usarSessaoPacoteConcluir(agendamentoServicoId, pacoteClienteId, agendam
   apiFetch('/api/agendamentos?id=' + agendamentoId).then(function(r){
     var ag = r && r[0];
     if (!ag) return;
-    apiFetch('/api/clientes/' + ag.cliente_id + '/pacotes').then(function(pacotesCliente){
+    apiFetch('/api/clientes/' + (ag.clientes && ag.clientes.id) + '/pacotes').then(function(pacotesCliente){
       renderSessoesPacoteConcluir(ag, pacotesCliente || []);
     });
   });
