@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.66.0-credito-nova-comanda' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.67.0-email-confirmacao-cliente' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1012,6 +1012,25 @@ async function notificarProfissionalNovoAgendamento(email, nomeProfissional, nom
     'Valor: ' + valorFmt + '\n\n' +
     '— Beleza Pro';
   return enviarEmailSimples(email, '📅 Novo agendamento — ' + nomeCliente, corpo);
+}
+
+// Confirma pro CLIENTE que o agendamento dele foi marcado — só dispara se
+// ele tiver informado o e-mail no link público (é opcional, então boa
+// parte não vai ter). Diferente da notificação pro profissional (que
+// avisa "você ganhou um agendamento"), essa é o comprovante pra quem
+// marcou, incluindo o nome do salão pra deixar claro de onde veio.
+async function notificarClienteConfirmacaoAgendamento(email, nomeCliente, nomeSalao, nomeProfissional, dataHoraISO, servicoNome, valorTotal) {
+  const { data, hora } = formatarDataHoraBrasil(dataHoraISO);
+  const valorFmt = 'R$ ' + Number(valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const corpo = 'Olá ' + nomeCliente + '!\n\n' +
+    'Seu agendamento em ' + nomeSalao + ' foi confirmado:\n\n' +
+    'Serviço: ' + servicoNome + '\n' +
+    'Profissional: ' + nomeProfissional + '\n' +
+    'Data: ' + data + ' às ' + hora + '\n' +
+    'Valor: ' + valorFmt + '\n\n' +
+    'Precisa cancelar ou remarcar? Entre em contato direto com o salão.\n\n' +
+    '— ' + nomeSalao;
+  return enviarEmailSimples(email, '✅ Agendamento confirmado — ' + nomeSalao, corpo);
 }
 
 // Avisa o profissional de uma série de agendamentos recorrentes de uma vez (evita spam de e-mails)
@@ -5169,6 +5188,20 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
         }).catch(e => console.error('Erro inesperado ao notificar profissional (link público):', e.message));
     } else {
       console.log('Profissional ' + profissional_id + ' sem e-mail cadastrado — notificação (link público) não enviada.');
+    }
+
+    // Confirmação pro CLIENTE — só dispara se ele informou e-mail (é
+    // opcional no formulário do link público). Busca o nome do salão só
+    // aqui, na hora de montar o e-mail, pra não gastar consulta extra em
+    // toda requisição de quem não deu e-mail (a maioria).
+    if (email) {
+      supabase.from('saloes').select('nome').eq('id', salao_id).single().then(({ data: salaoNome }) => {
+        notificarClienteConfirmacaoAgendamento(
+          email, nome, (salaoNome && salaoNome.nome) || 'o salão', prof ? prof.nome : '—', data_hora, servico.nome, precoEfetivo
+        ).then(r => {
+          if (!r.enviado) console.error('Confirmação de agendamento (cliente) NÃO enviada pra ' + email + ': ' + r.motivo);
+        });
+      }).catch(e => console.error('Erro inesperado ao notificar cliente (link público):', e.message));
     }
 
     res.status(201).json({
