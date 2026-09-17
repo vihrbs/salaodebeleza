@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.44.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.47.0-frontend</div>
       </div>
     </div>
 
@@ -690,7 +690,8 @@ select.fc option{background:var(--bg2)}
           <button class="btn btns btnsm" data-status="concluido" onclick="filtrarComandasPorStatus('concluido')">Concluídas</button>
           <button class="btn btns btnsm" data-status="cancelado" onclick="filtrarComandasPorStatus('cancelado')">Canceladas</button>
         </div>
-        <button class="btn btns" style="margin-left:auto" onclick="abrirNovoAgendamento()">📅 Agendar</button>
+        <button class="btn btns" style="margin-left:auto" onclick="abrirComandasEsquecidas()">⏳ Comandas Não Fechadas</button>
+        <button class="btn btns" onclick="abrirNovoAgendamento()">📅 Agendar</button>
         <button class="btn btnp" onclick="abrirNovaComanda()">+ Nova Comanda</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;align-items:start" id="cmd-layout">
@@ -1164,6 +1165,12 @@ function escAttr(str) {
 }
 
 function toast(msg, type) {
+  // Enquanto a tela de bloqueio (trial vencido/suspenso) estiver em pé, não
+  // mostra mais nenhum toast — sem isso, as várias chamadas que rodam
+  // juntas no carregamento normal da tela iriam todas falhar juntas nesse
+  // momento e empilhar toast repetido por cima da tela de bloqueio, que já
+  // é a mensagem clara por si só.
+  if (document.getElementById('bloqueio-screen')) return;
   var c = document.getElementById('toasts');
   var el = document.createElement('div');
   var icons = {ok:'✅', er:'❌', inf:'ℹ️'};
@@ -1186,6 +1193,17 @@ function apiFetch(path, opts) {
   if (opts.body && typeof opts.body === 'object') opts.body = JSON.stringify(opts.body);
   return fetch(API + path, opts).then(function(r){
     if (r.status === 401) { doLogout(); throw new Error('Sessão expirada'); }
+    if (r.status === 402) {
+      // Trial vencido ou salão suspenso — mostra a tela de bloqueio (que
+      // já existia, mas só era acionada pela checagem periódica de
+      // status) direto na primeira chamada que falhar por esse motivo,
+      // em vez de deixar cada uma das várias chamadas que rodam juntas
+      // no carregamento da tela gerar seu próprio toast de erro repetido.
+      return r.json().catch(function(){ return {}; }).then(function(e){
+        if (typeof bloquearSistema === 'function') bloquearSistema();
+        throw new Error(e.error || 'Seu período de acesso expirou.');
+      });
+    }
     if (!r.ok) {
       // Se o servidor devolver algo que não é JSON (ex.: página de erro de
       // um proxy por causa de requisição grande demais, ou timeout), não
@@ -3746,6 +3764,54 @@ function abrirHistoricoComissoes() {
 
 // ── Atendimentos detalhados — lista item por item (não só o total
 // fechado), com filtro de profissional e período livre.
+// ── Comandas não fechadas (vários dias, não só hoje) ────
+function abrirComandasEsquecidas() {
+  openM('m-comandas-esquecidas');
+  carregarComandasEsquecidas(15, document.querySelector('#m-comandas-esquecidas button.btnp'));
+}
+
+function carregarComandasEsquecidas(dias, btnClicado) {
+  document.querySelectorAll('#m-comandas-esquecidas .btn').forEach(function(b){
+    if (b.classList.contains('btnp') || b.classList.contains('btns')) {
+      b.classList.remove('btnp'); b.classList.add('btns');
+    }
+  });
+  if (btnClicado) { btnClicado.classList.remove('btns'); btnClicado.classList.add('btnp'); }
+
+  var hoje = new Date();
+  var inicio = new Date(hoje); inicio.setDate(inicio.getDate() - dias);
+  var fimStr = today();
+  var iniStr = inicio.getFullYear()+'-'+String(inicio.getMonth()+1).padStart(2,'0')+'-'+String(inicio.getDate()).padStart(2,'0');
+
+  var lista = document.getElementById('comandas-esquecidas-lista');
+  lista.innerHTML = '<div class="lc"><div class="spin"></div></div>';
+
+  apiFetch('/api/agendamentos?data_inicio=' + iniStr + '&data_fim=' + fimStr + '&status=agendado,confirmado,em_atendimento')
+    .then(function(r){ renderComandasEsquecidas(r || []); })
+    .catch(function(e){ lista.innerHTML = '<div class="empty">Erro: ' + esc(e.message||'') + '</div>'; });
+}
+
+function renderComandasEsquecidas(lista) {
+  var el = document.getElementById('comandas-esquecidas-lista');
+  // Só interessa o que já passou da hora — um agendamento pra daqui a 3
+  // dias não é "esquecido", só ainda não chegou a vez dele
+  var agora = new Date();
+  var atrasadas = lista.filter(function(a){ return new Date(a.data_hora) < agora; })
+    .sort(function(a,b){ return new Date(a.data_hora) - new Date(b.data_hora); });
+
+  if (!atrasadas.length) { el.innerHTML = '<div class="empty">✅ Nenhuma comanda esquecida nesse período — tudo certo!</div>'; return; }
+
+  el.innerHTML = '<div style="font-size:.78rem;color:var(--er);margin-bottom:10px">⚠️ ' + atrasadas.length + ' comanda(s) não fechada(s)</div>' +
+    atrasadas.map(function(a){
+      var dataFormatada = new Date(a.data_hora).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+      var svc = (a.agendamento_servicos||[]).map(function(s){ return s.servicos && s.servicos.nome; }).filter(Boolean).join(', ') || '—';
+      return '<div style="padding:10px 4px;border-bottom:1px solid var(--bd2);cursor:pointer" onclick="closeM(\'m-comandas-esquecidas\');abrirDetalhesAgendamento(\'' + a.id + '\')" onmouseover="this.style.background=\'var(--bg3)\'" onmouseout="this.style.background=\'\'">' +
+        '<div style="display:flex;justify-content:space-between;font-size:.82rem;font-weight:700"><span>' + esc(a.clientes && a.clientes.nome || 'Cliente') + '</span><span style="color:var(--ac)">' + brl(a.valor_total) + '</span></div>' +
+        '<div style="font-size:.7rem;color:var(--t3)">' + dataFormatada + ' · ' + esc(a.profissionais && a.profissionais.nome || '—') + ' · ' + esc(svc) + '</div>' +
+      '</div>';
+    }).join('');
+}
+
 function abrirDetalhamentoAtendimentos() {
   var sel = document.getElementById('dat-filtro-prof');
   sel.innerHTML = '<option value="">Todos os profissionais</option>' +
@@ -4739,6 +4805,7 @@ function abrirNovaComanda() {
   renderSessoesPacoteVendaAvulsa();
   document.querySelectorAll('#va-fpg-options .fpg-btn').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('va-fpg-aberto').classList.remove('on');
+  document.getElementById('va-fpg-btn-saldo-cliente').style.display = 'none';
 
   var selProf = document.getElementById('va-prof');
   selProf.innerHTML = '<option value="">Selecionar...</option>' +
@@ -4821,6 +4888,21 @@ function selecionarClienteVendaAvulsa(id, nome) {
   resultados.style.display = 'none';
   resultados.innerHTML = '';
   carregarSessoesPacoteDisponiveisVendaAvulsa(id);
+  carregarSaldoCreditoVendaAvulsa(id);
+}
+
+function carregarSaldoCreditoVendaAvulsa(clienteId) {
+  var btn = document.getElementById('va-fpg-btn-saldo-cliente');
+  btn.style.display = 'none';
+  btn.textContent = '🎁 Usar saldo do cliente';
+  if (!clienteId) return;
+  apiFetch('/api/clientes/' + clienteId + '/credito').then(function(cred){
+    if (cred && cred.saldo > 0) {
+      btn.style.display = 'block';
+      btn.dataset.saldoDisponivel = cred.saldo;
+      btn.textContent = '🎁 Usar saldo do cliente (' + brl(cred.saldo) + ' disponível)';
+    }
+  }).catch(function(){});
 }
 
 function carregarSessoesPacoteDisponiveisVendaAvulsa(clienteId) {
@@ -5142,6 +5224,23 @@ function confirmarVendaAvulsa() {
   var fpgBtn = document.querySelector('#va-fpg-options .fpg-btn.on');
   var deixarAberto = document.getElementById('va-fpg-aberto').classList.contains('on');
   if (!fpgBtn && !deixarAberto) { toast('Selecione a forma de pagamento, ou "Deixar em aberto"','er'); return; }
+
+  // Se escolheu pagar tudo com o saldo do cliente, confere se o saldo
+  // disponível cobre o total — senão avisa em vez de deixar faltar
+  if (fpgBtn && fpgBtn.dataset.val === 'Credito_Cliente') {
+    var totalServicosValida = 0;
+    document.querySelectorAll('#va-svcs .svc-pill.on').forEach(function(pill){
+      if (!SERVICOS_PAGOS_VIA_PACOTE_VENDA_AVULSA[pill.dataset.id]) totalServicosValida += Number(pill.dataset.preco || 0);
+    });
+    var totalGeral = totalServicosValida
+      + VENDA_AVULSA_PRODUTOS.reduce(function(s,p){ return s + (p.preco_unit*p.quantidade); }, 0)
+      + VENDA_AVULSA_PACOTES.reduce(function(s,p){ return s + p.valor; }, 0);
+    var saldoDisp = parseFloat(fpgBtn.dataset.saldoDisponivel) || 0;
+    if (saldoDisp < totalGeral - 0.01) {
+      toast('O cliente só tem ' + brl(saldoDisp) + ' de saldo — o total é ' + brl(totalGeral) + '. Escolha outra forma pra completar.', 'er');
+      return;
+    }
+  }
 
   var btn = document.getElementById('va-btn-confirmar');
   btn.disabled = true; btn.textContent = 'Salvando...';
@@ -7735,6 +7834,7 @@ function dispensarBannerPWA() {
           <button type="button" class="fpg-btn" data-val="Dinheiro" onclick="selecionarFpgVendaAvulsa(this)">💵 Dinheiro</button>
           <button type="button" class="fpg-btn" data-val="Cartão Débito" onclick="selecionarFpgVendaAvulsa(this)">💳 Débito</button>
           <button type="button" class="fpg-btn" data-val="Cartão Crédito" onclick="selecionarFpgVendaAvulsa(this)">💳 Crédito</button>
+          <button type="button" class="fpg-btn" data-val="Credito_Cliente" id="va-fpg-btn-saldo-cliente" style="display:none;grid-column:1/-1" onclick="selecionarFpgVendaAvulsa(this)">🎁 Usar saldo do cliente</button>
         </div>
         <button type="button" class="fpg-btn" id="va-fpg-aberto" style="width:100%;margin-top:8px" onclick="selecionarFpgAbertoVendaAvulsa()">⏳ Deixar em aberto — cobrar depois</button>
         <div style="font-size:.68rem;color:var(--t3);margin-top:4px">A comanda fica registrada como "em atendimento". Você conclui e escolhe a forma de pagamento depois, direto no card dela em Comandas.</div>
@@ -8061,6 +8161,23 @@ function dispensarBannerPWA() {
       <div id="hcom-lista"><div class="lc"><div class="spin"></div></div></div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-historico-com')">Fechar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-comandas-esquecidas">
+  <div class="mbox md">
+    <div class="mh"><span class="mt">⏳ Comandas Não Fechadas</span><button class="mx" onclick="closeM('m-comandas-esquecidas')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.78rem;color:var(--t3);margin-bottom:12px">Atendimentos que já passaram da hora e nunca foram concluídos nem cancelados — ficam "perdidos" se ninguém for ver, porque não aparecem no dia de hoje.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <button class="btn btns btnsm" onclick="carregarComandasEsquecidas(7,this)">Últimos 7 dias</button>
+        <button class="btn btnp btnsm" onclick="carregarComandasEsquecidas(15,this)">Últimos 15 dias</button>
+        <button class="btn btns btnsm" onclick="carregarComandasEsquecidas(30,this)">Últimos 30 dias</button>
+        <button class="btn btns btnsm" onclick="carregarComandasEsquecidas(90,this)">Últimos 90 dias</button>
+      </div>
+      <div id="comandas-esquecidas-lista"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-comandas-esquecidas')">Fechar</button></div>
   </div>
 </div>
 
