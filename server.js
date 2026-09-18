@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.68.0-email-obrigatorio-agendar' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.69.0-corrige-filtro-status-multiplo' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1826,7 +1826,7 @@ app.get('/api/agendamentos', auth, async (req, res) => {
     q = q.eq('profissional_id', req.query.profissional_id);
   }
 
-  if (status)          q = q.eq('status', status);
+  if (status)          q = q.in('status', status.split(','));
   if (req.query.cliente_id) q = q.eq('cliente_id', req.query.cliente_id);
   // Bug real corrigido: essa rota ignorava completamente o ?id=X — sempre
   // devolvia a lista inteira do salão, e quem chamava pegava só o primeiro
