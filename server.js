@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.69.0-corrige-filtro-status-multiplo' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.70.0-revisao-30-mudancas' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1840,7 +1840,7 @@ app.get('/api/agendamentos', auth, async (req, res) => {
   // limita quando não tem filtro nenhum (pega os 500 mais recentes);
   // qualquer busca já filtrada continua com a ordem cronológica normal
   // de sempre, sem limite artificial.
-  const semNenhumFiltro = !data && !data_inicio && !data_fim && !req.query.id && !req.query.cliente_id;
+  const semNenhumFiltro = !data && !data_inicio && !data_fim && !req.query.id && !req.query.cliente_id && !status;
   q = semNenhumFiltro
     ? q.order('data_hora', { ascending: false }).limit(500)
     : q.order('data_hora');
@@ -4980,20 +4980,27 @@ app.get('/api/publico/horarios/:salaoId', async (req, res) => {
     const [horaFecha] = horaFechaCfg.split(':').map(Number);
 
     // Busca agendamentos já marcados nesse dia para esse profissional
-    // Janela ampliada em UTC para cobrir o dia completo no fuso do Brasil (UTC-3)
+    // Janela ampliada em UTC para cobrir o dia completo no fuso do Brasil
+    // (UTC-3) — e também o final do dia ANTERIOR, pra pegar um
+    // agendamento de ontem que atravessa a virada e ainda ocupa os
+    // primeiros minutos de hoje (mesmo cuidado que já existe na
+    // checagem de conflito ao criar o agendamento).
     const inicioDia = data + 'T03:00:00+00:00';
     const fimDia     = adicionarDia(data) + 'T02:59:59+00:00';
+    const inicioDiaAmpliadoSlots = subtrairDia(data) + 'T03:00:00+00:00';
     const { data: ocupados } = await supabase.from('agendamentos')
       .select('data_hora, duracao_min')
       .eq('salao_id', req.params.salaoId)
       .eq('profissional_id', profissional_id)
-      .gte('data_hora', inicioDia)
+      .gte('data_hora', inicioDiaAmpliadoSlots)
       .lte('data_hora', fimDia)
       .neq('status', 'cancelado');
 
-    // Converte ocupados para minutos do dia [inicio, fim]
+    // Converte ocupados para minutos relativos ao dia sendo consultado —
+    // um agendamento de ontem que invade hoje entra com minuto NEGATIVO,
+    // continuando corretamente comparável com os horários de hoje
     const ocupadosMin = (ocupados || []).map(function(ag) {
-      var inicioMin = utcParaMinutosBrasil(ag.data_hora);
+      var inicioMin = minutosRelativosAoDia(ag.data_hora, data);
       var fimMin = inicioMin + (ag.duracao_min || 60);
       return [inicioMin, fimMin];
     });
@@ -5191,10 +5198,11 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
       console.log('Profissional ' + profissional_id + ' sem e-mail cadastrado — notificação (link público) não enviada.');
     }
 
-    // Confirmação pro CLIENTE — só dispara se ele informou e-mail (é
-    // opcional no formulário do link público). Busca o nome do salão só
-    // aqui, na hora de montar o e-mail, pra não gastar consulta extra em
-    // toda requisição de quem não deu e-mail (a maioria).
+    // Confirmação pro CLIENTE por e-mail (agora obrigatório no formulário
+    // do link público, então sempre deveria vir preenchido — o "if"
+    // continua aqui como segurança extra, caso algum dia isso mude).
+    // Busca o nome do salão só aqui, na hora de montar o e-mail, pra não
+    // gastar consulta extra em toda requisição.
     if (email) {
       supabase.from('saloes').select('nome').eq('id', salao_id).single().then(({ data: salaoNome }) => {
         notificarClienteConfirmacaoAgendamento(
