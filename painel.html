@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.48.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.49.0-frontend</div>
       </div>
     </div>
 
@@ -2139,9 +2139,8 @@ function mudaStatus(id, status) {
   }
   // Para outros status (cancelar, iniciar etc), aplica direto
   apiFetch('/api/agendamentos/' + id + '/status', {method:'PATCH', body:{status:status}})
-    .then(function(){ loadDashTl(); loadAgenda(); })
-    .catch(function(){});
-  toast('Status: ' + (SL[status]||status), 'ok');
+    .then(function(){ loadDashTl(); loadAgenda(); toast('Status: ' + (SL[status]||status), 'ok'); })
+    .catch(function(e){ toast('Erro ao mudar status: ' + (e.message||'tente novamente'), 'er'); });
 }
 
 // ── Reabrir comanda concluída (admin only) ───────────
@@ -5573,14 +5572,17 @@ function saveLan() {
     tipo:document.getElementById('lan-t').value, descricao:desc, valor:val,
     data:document.getElementById('lan-dt').value, forma_pgto:document.getElementById('lan-p').value,
     categoria:document.getElementById('lan-c').value, cliente_id: clienteId, pago: LAN_PAGO_SELECIONADO
-  }}).catch(function(){});
-  toast('Lançamento registrado! ✅','ok'); closeM('m-lan'); loadFin();
+  }}).then(function(){
+    toast('Lançamento registrado! ✅','ok'); closeM('m-lan'); loadFin();
+  }).catch(function(e){ toast('Erro ao registrar: ' + (e.message||'tente novamente'), 'er'); });
 }
 function saveProd() {
   var nome = document.getElementById('p-n').value.trim();
   if (!nome) { toast('Nome obrigatório','er'); return; }
-  apiFetch('/api/estoque',{method:'POST',body:{nome:nome,categoria:document.getElementById('p-c').value,fornecedor:document.getElementById('p-f').value,qtd_atual:parseFloat(document.getElementById('p-q').value)||0,qtd_minima:parseFloat(document.getElementById('p-m').value)||5,preco_custo:parseFloat(document.getElementById('p-p').value)||null,preco_venda:parseFloat(document.getElementById('p-pv').value)||null}}).catch(function(){});
-  toast('Produto cadastrado! ✅','ok'); closeM('m-prod'); loadEst(); document.getElementById('p-n').value=''; document.getElementById('p-pv').value='';
+  apiFetch('/api/estoque',{method:'POST',body:{nome:nome,categoria:document.getElementById('p-c').value,fornecedor:document.getElementById('p-f').value,qtd_atual:parseFloat(document.getElementById('p-q').value)||0,qtd_minima:parseFloat(document.getElementById('p-m').value)||5,preco_custo:parseFloat(document.getElementById('p-p').value)||null,preco_venda:parseFloat(document.getElementById('p-pv').value)||null}})
+    .then(function(){
+      toast('Produto cadastrado! ✅','ok'); closeM('m-prod'); loadEst(); document.getElementById('p-n').value=''; document.getElementById('p-pv').value='';
+    }).catch(function(e){ toast('Erro ao cadastrar: ' + (e.message||'tente novamente'), 'er'); });
 }
 function savePro() {
   var nome = document.getElementById('pr-n').value.trim();
