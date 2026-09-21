@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.49.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.50.0-frontend</div>
       </div>
     </div>
 
@@ -4469,15 +4469,25 @@ function renderSvcs(list) {
       '<td>' + s.duracao_min + ' min</td>' +
       '<td><strong>' + brl(s.preco) + '</strong>' + tagPrecoDia + '</td>' +
       '<td><span class="badge bp">' + (s.comissao_pct||40) + '%</span></td>' +
-      '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toggleServicoAtivo(\'' + s.id + '\',this.checked)"/></td>' +
+      '<td><input type="checkbox" ' + (s.ativo?'checked':'') + ' onchange="toggleServicoAtivo(\'' + s.id + '\',this.checked,this,\'' + escAttr(s.nome) + '\')"/></td>' +
       '<td><div style="display:flex;gap:3px"><button class="btnic btn btnsm" onclick="editSvc(this)" data-svc="' + JSON.stringify(s).replace(/"/g,"&quot;") + '" title="Editar">✏️</button><button class="btnic btn btnsm" style="color:var(--er)" onclick="deletarServico(\'' + s.id + '\',\'' + escAttr(s.nome) + '\')" title="Remover">🗑</button></div></td></tr>';
   }).join('');
   setTimeout(iniciarSombrasScroll, 30);
 }
 
-function toggleServicoAtivo(id, ativo) {
+function toggleServicoAtivo(id, ativo, checkboxEl, nome) {
+  // Desativar aqui esconde o serviço da lista pra sempre (a busca só
+  // traz os ativos, e não existe hoje um jeito de ver/religar um serviço
+  // desativado pela tela) — por isso pede confirmação, igual o botão
+  // Excluir já pedia. Sem isso, um clique sem querer no checkbox
+  // "perdia" o serviço sem aviso nenhum, sem o mesmo cuidado que o botão
+  // de excluir tinha.
+  if (!ativo && !confirm('Desativar o serviço "' + nome + '"?\n\nEle vai sumir dessa lista e não vai poder ser escolhido em novos agendamentos. Hoje não tem um jeito de reativar pela tela — se precisar de volta, fale comigo.')) {
+    if (checkboxEl) checkboxEl.checked = true;
+    return;
+  }
   apiFetch('/api/servicos/' + id, { method: 'PUT', body: { ativo: ativo } })
-    .then(function(){ toast(ativo ? 'Serviço ativado' : 'Serviço desativado', ativo ? 'ok' : 'er'); })
+    .then(function(){ toast(ativo ? 'Serviço ativado' : 'Serviço desativado', ativo ? 'ok' : 'er'); if (!ativo) loadSvcs(); })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); loadSvcs(); });
 }
 
