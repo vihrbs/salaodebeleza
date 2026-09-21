@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.70.0-revisao-30-mudancas' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.74.0-corrige-cargo-usuario' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1127,7 +1127,35 @@ app.get('/api/profissionais', auth, async (req, res) => {
     .from('profissionais').select('*')
     .eq('salao_id', req.salao_id).eq('ativo', true).order('nome');
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || []);
+  const profissionais = data || [];
+  if (!profissionais.length) return res.json([]);
+
+  // Estatísticas do mês atual (serviços feitos, faturado) — a tela de
+  // Profissionais mostra isso em cada card. Antes esse campo nunca vinha
+  // preenchido (a rota só devolvia as colunas da própria tabela), então
+  // todo card mostrava "0 Serviços" e "R$0,00" sempre, mesmo com histórico
+  // de verdade. Busca todos os atendimentos concluídos do mês DE UMA VEZ
+  // (não um por profissional), e agrupa aqui — evita N+1 consulta.
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+  const { data: agsMes } = await supabase.from('agendamentos')
+    .select('profissional_id, valor_total, agendamento_servicos(id)')
+    .eq('salao_id', req.salao_id).eq('status', 'concluido')
+    .gte('data_hora', inicioMes + 'T03:00:00+00:00').lte('data_hora', adicionarDia(fimMes) + 'T02:59:59+00:00');
+
+  const statsPorProfissional = {};
+  (agsMes || []).forEach(ag => {
+    if (!statsPorProfissional[ag.profissional_id]) statsPorProfissional[ag.profissional_id] = { total_servicos: 0, faturado: 0 };
+    statsPorProfissional[ag.profissional_id].total_servicos += (ag.agendamento_servicos || []).length;
+    statsPorProfissional[ag.profissional_id].faturado += Number(ag.valor_total || 0);
+  });
+
+  res.json(profissionais.map(p => ({
+    ...p,
+    total_servicos: statsPorProfissional[p.id]?.total_servicos || 0,
+    faturado: statsPorProfissional[p.id]?.faturado || 0
+  })));
 });
 
 app.post('/api/profissionais', auth, requirePermissao('profissionais'), async (req, res) => {
@@ -3051,7 +3079,11 @@ app.get('/api/financeiro/resumo', auth, requirePermissao('financeiro'), async (r
   const fim = new Date(y, m, 0).toISOString().split('T')[0];
   const { data } = await supabase.from('lancamentos').select('tipo, valor, pago')
     .eq('salao_id', req.salao_id).gte('data', inicio).lte('data', fim);
-  const receita = (data || []).filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0);
+  // "Receita" só conta o que já foi pago de verdade — fiado em aberto não
+  // entra aqui até a pessoa realmente pagar (mesmo que o atendimento em si
+  // já tenha acontecido nesse mês). Antes contava fiado como receita na
+  // hora, mesmo sem o dinheiro ter entrado ainda.
+  const receita = (data || []).filter(l => l.tipo === 'entrada' && l.pago).reduce((s, l) => s + Number(l.valor), 0);
   const despesa = (data || []).filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0);
 
   // "A receber" é dívida em aberto de VERDADE — não faz sentido limitar
@@ -3141,8 +3173,13 @@ app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('fiado'
     // "meio certo": ou pega o registro do jeito que esperava, ou não
     // pega nada).
     if (pagouTudo) {
+      // Atualiza também a data pra hoje — passa a refletir quando o
+      // dinheiro realmente entrou (data do pagamento), não mais quando o
+      // atendimento aconteceu. Isso é o que faz a receita do mês contar
+      // fiado só depois de pago de verdade, no mês em que foi pago.
+      const hojeStr = new Date().toISOString().split('T')[0];
       const { data } = await supabase.from('lancamentos')
-        .update({ pago: true, forma_pgto: forma_pgto || lanc.forma_pgto })
+        .update({ pago: true, forma_pgto: forma_pgto || lanc.forma_pgto, data: hojeStr })
         .eq('id', lanc.id).eq('pago', false).eq('valor', lanc.valor).select().maybeSingle();
       if (!data) {
         return res.status(409).json({ error: 'Esse lançamento acabou de ser alterado por outra ação. Atualize a tela e confira antes de tentar de novo.' });
@@ -3305,7 +3342,14 @@ app.post('/api/financeiro/lancamentos/lote', auth, requirePermissao('financeiro'
 app.patch('/api/financeiro/lancamentos/:id', auth, requirePermissao('financeiro'), async (req, res) => {
   const { pago, forma_pgto } = req.body;
   const updates = {};
-  if (typeof pago === 'boolean') updates.pago = pago;
+  if (typeof pago === 'boolean') {
+    updates.pago = pago;
+    // Quando passa a valer como pago agora, a data também vira hoje — é a
+    // data do pagamento que decide em qual mês a receita conta, não a
+    // data original do atendimento/lançamento (que pode ter sido bem
+    // antes, no caso de algo que ficou pendente por um tempo).
+    if (pago) updates.data = new Date().toISOString().split('T')[0];
+  }
   if (forma_pgto) updates.forma_pgto = forma_pgto;
   const { data, error } = await supabase
     .from('lancamentos').update(updates)
@@ -4099,11 +4143,11 @@ app.post('/api/usuarios', auth, async (req, res) => {
     const codigoVerificacao = gerarCodigoVerificacao();
     const { data, error } = await supabase.from('usuarios')
       .insert({
-        salao_id: req.salao_id, nome, email, senha_hash, perfil: perfil_final,
+        salao_id: req.salao_id, nome, cargo: cargo || null, email, senha_hash, perfil: perfil_final,
         profissional_id: profissional_id_final, email_verificado: false,
         codigo_verificacao: codigoVerificacao, codigo_verificacao_expira: expiracaoCodigoVerificacao()
       })
-      .select('id, nome, email, perfil, profissional_id, email_verificado').single();
+      .select('id, nome, cargo, email, perfil, profissional_id, email_verificado').single();
     if (error) throw error;
 
     // Espera o resultado real do envio, pra devolver pro admin se deu certo ou não
@@ -4130,7 +4174,7 @@ app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   try {
     const { data: usuarios, error } = await supabase.from('usuarios')
-      .select('id, nome, email, perfil, ativo, ultimo_login, profissional_id, email_verificado')
+      .select('id, nome, cargo, email, perfil, ativo, ultimo_login, profissional_id, email_verificado')
       .eq('salao_id', req.salao_id).order('nome');
     if (error) throw error;
 
