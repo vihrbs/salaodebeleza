@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.74.0-corrige-cargo-usuario' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.76.0-validacao-assinatura-webhook' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -525,6 +525,26 @@ function extrairMensagemErroResend(textoResposta) {
     return json.message || json.error || textoResposta || 'sem detalhes';
   } catch(e) {
     return textoResposta || 'sem detalhes';
+  }
+}
+
+// Calcula as permissões de um usuário — admin sempre tem tudo, funcionário
+// usa o que foi configurado pra ele (com uma lista básica como fallback se
+// não tiver nada configurado ainda). Usada nos 3 jeitos de logar (senha,
+// Google, Apple) — antes só o login por senha calculava isso, e os dois
+// logins sociais devolviam permissões vazias pra usuário já existente.
+async function buscarPermissoesUsuario(usuario) {
+  if (usuario.perfil === 'admin') {
+    return ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
+  }
+  try {
+    const { data: perm } = await supabase.from('usuario_permissoes')
+      .select('permissoes').eq('usuario_id', usuario.id).maybeSingle();
+    return (perm && perm.permissoes && perm.permissoes.length)
+      ? perm.permissoes
+      : ['dashboard','agenda','clientes','estoque','comissoes'];
+  } catch(e) {
+    return ['dashboard','agenda','clientes','estoque','comissoes'];
   }
 }
 
@@ -745,6 +765,7 @@ app.post('/api/auth/google', async (req, res) => {
     if (usuario) {
       if (!usuario.google_id) await supabase.from('usuarios').update({ google_id: googleId }).eq('id', usuario.id);
       await supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id);
+      usuario.permissoes = await buscarPermissoesUsuario(usuario);
       const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ token, usuario, novo_cadastro: false });
     }
@@ -807,6 +828,7 @@ app.post('/api/auth/apple', async (req, res) => {
     if (usuario) {
       if (!usuario.apple_id) await supabase.from('usuarios').update({ apple_id: appleId }).eq('id', usuario.id);
       await supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id);
+      usuario.permissoes = await buscarPermissoesUsuario(usuario);
       const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ token, usuario, novo_cadastro: false });
     }
@@ -844,21 +866,7 @@ app.post('/api/auth/login', limitarTaxa(10, 15), async (req, res) => {
 
     const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
     const { senha_hash, ...userSafe } = usuario;
-    // Retorna permissões do usuário
-    if (userSafe.perfil === 'admin') {
-      userSafe.permissoes = ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
-    } else {
-      // Busca permissões customizadas do banco
-      try {
-        const { data: perm } = await supabase.from('usuario_permissoes')
-          .select('permissoes').eq('usuario_id', usuario.id).maybeSingle();
-        userSafe.permissoes = (perm && perm.permissoes && perm.permissoes.length)
-          ? perm.permissoes
-          : ['dashboard','agenda','clientes','estoque','comissoes'];
-      } catch(e) {
-        userSafe.permissoes = ['dashboard','agenda','clientes','estoque','comissoes'];
-      }
-    }
+    userSafe.permissoes = await buscarPermissoesUsuario(userSafe);
     res.json({ token, usuario: userSafe });
   } catch(e) {
     res.status(500).json({ error: 'Erro ao fazer login' });
@@ -4541,7 +4549,46 @@ app.post('/api/pagamento/criar', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Confere se a notificação do webhook realmente veio do Mercado Pago —
+// só ativa quando MP_WEBHOOK_SECRET estiver configurado (variável de
+// ambiente), pra nunca quebrar o webhook de quem ainda não gerou essa
+// chave no painel do Mercado Pago. Segue exatamente o algoritmo oficial
+// deles: HMAC-SHA256 de um "manifest" (id:...;request-id:...;ts:...;)
+// comparado, de forma segura contra ataque de tempo, com o valor "v1"
+// que vem no cabeçalho x-signature.
+function validarAssinaturaWebhookMP(req) {
+  if (!process.env.MP_WEBHOOK_SECRET) return true; // segredo não configurado ainda — não bloqueia
+  const assinatura = req.headers['x-signature'];
+  if (!assinatura) return false;
+
+  let ts, v1;
+  assinatura.split(',').forEach(parte => {
+    const [chave, valor] = parte.split('=').map(s => s && s.trim());
+    if (chave === 'ts') ts = valor;
+    if (chave === 'v1') v1 = valor;
+  });
+  if (!ts || !v1) return false;
+
+  const dataId = req.query['data.id'];
+  const requestId = req.headers['x-request-id'];
+  let manifest = '';
+  if (dataId) manifest += 'id:' + String(dataId).toLowerCase() + ';';
+  if (requestId) manifest += 'request-id:' + requestId + ';';
+  manifest += 'ts:' + ts + ';';
+
+  const esperado = crypto.createHmac('sha256', process.env.MP_WEBHOOK_SECRET).update(manifest).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(esperado), Buffer.from(v1));
+  } catch(e) {
+    return false; // tamanhos diferentes, por exemplo — nunca deixa isso derrubar o servidor
+  }
+}
+
 app.post('/api/pagamento/webhook', async (req, res) => {
+  if (!validarAssinaturaWebhookMP(req)) {
+    console.error('[SEGURANÇA] Webhook de pagamento recebido com assinatura inválida ou ausente — recusado.');
+    return res.sendStatus(401);
+  }
   const { type, data } = req.body;
   try {
     if ((type === 'payment' || type === 'payment.updated' || type === 'payment.created') && data?.id) {
