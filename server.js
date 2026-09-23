@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.83.0-vinculo-admin-historico-acessos' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.84.0-plano-atual-dinamico' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -619,7 +619,7 @@ app.post('/api/auth/register', limitarTaxa(5, 60), async (req, res) => {
     trial_ate.setDate(trial_ate.getDate() + 14);
 
     const { data: plano } = await supabase
-      .from('planos').select('id').eq('nome', 'Starter').single();
+      .from('planos').select('id').eq('nome', 'ProMax').single();
 
     const { data: salao, error: salaoErr } = await supabase
       .from('saloes')
@@ -729,7 +729,7 @@ async function criarSalaoESocialUsuario({ nome_salao, nome, email, googleId, app
   const trial_ate = new Date();
   trial_ate.setDate(trial_ate.getDate() + 14);
 
-  const { data: plano } = await supabase.from('planos').select('id').eq('nome', 'Starter').single();
+  const { data: plano } = await supabase.from('planos').select('id').eq('nome', 'ProMax').single();
   const { data: salao, error: salaoErr } = await supabase.from('saloes')
     .insert({ nome: nome_salao, slug, plano_id: plano?.id, trial_ate }).select().single();
   if (salaoErr) throw salaoErr;
