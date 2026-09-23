@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.54.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.55.0-frontend</div>
       </div>
     </div>
 
@@ -579,6 +579,12 @@ select.fc option{background:var(--bg2)}
       <div id="modo-suporte-banner" style="display:none;background:linear-gradient(90deg,rgba(251,191,36,.2),rgba(251,191,36,.1));border-bottom:1px solid rgba(251,191,36,.35);padding:10px 20px;align-items:center;justify-content:space-between;font-size:.8rem;gap:12px;flex-wrap:wrap;color:var(--warn)">
         <span id="modo-suporte-msg">🔑 Você está vendo o sistema como outro salão (modo suporte)</span>
         <button onclick="voltarModoSuperAdmin()" style="background:var(--warn);color:#0F0E0C;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">← Voltar ao meu modo</button>
+      </div>
+
+      <!-- BANNER MODO ADMIN VENDO COMO OUTRO USUÁRIO (dentro do mesmo salão) -->
+      <div id="modo-admin-usuario-banner" style="display:none;background:linear-gradient(90deg,rgba(251,191,36,.2),rgba(251,191,36,.1));border-bottom:1px solid rgba(251,191,36,.35);padding:10px 20px;align-items:center;justify-content:space-between;font-size:.8rem;gap:12px;flex-wrap:wrap;color:var(--warn)">
+        <span id="modo-admin-usuario-msg">🔑 Você está vendo como outro usuário</span>
+        <button onclick="voltarModoAdmin()" style="background:var(--warn);color:#0F0E0C;border:none;border-radius:50px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap">← Voltar à minha conta</button>
       </div>
 
       <!-- BANNER TRIAL -->
@@ -1505,6 +1511,19 @@ function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado,
       document.getElementById('modo-suporte-msg').textContent = '🔑 Você está vendo o sistema como "' + nomeModoSuporteSalao + '" (modo suporte)';
     } else {
       bannerSuporte.style.display = 'none';
+    }
+  }
+
+  // Mesma ideia, mas pro admin do salão entrando como um usuário do
+  // próprio salão (não atravessa salão diferente).
+  var nomeModoAdminUsuario = localStorage.getItem('bpro_admin_nome_usuario');
+  var bannerAdminUsuario = document.getElementById('modo-admin-usuario-banner');
+  if (bannerAdminUsuario) {
+    if (localStorage.getItem('bpro_tk_admin_original') && nomeModoAdminUsuario) {
+      bannerAdminUsuario.style.display = 'flex';
+      document.getElementById('modo-admin-usuario-msg').textContent = '🔑 Você está vendo como "' + nomeModoAdminUsuario + '"';
+    } else {
+      bannerAdminUsuario.style.display = 'none';
     }
   }
   if (permissoes && permissoes.length) {
@@ -4057,6 +4076,27 @@ function renderSuperAdminSaloes(lista) {
 // "Entrar como" — guarda a sessão de super admin de lado, troca pro token
 // do salão escolhido, e recarrega a página já logado como aquele admin.
 // Um aviso fixo fica na tela avisando "modo suporte", com botão de voltar.
+function entrarComoUsuario(uid, nome) {
+  if (!confirm('Entrar como "' + nome + '"?\n\nVocê vai ver o sistema exatamente como esse usuário vê (com as permissões dele). Pra voltar, use o botão que vai aparecer no topo da tela.')) return;
+  apiFetch('/api/usuarios/' + uid + '/entrar-como', { method: 'POST' })
+    .then(function(r){
+      localStorage.setItem('bpro_tk_admin_original', localStorage.getItem('bpro_tk'));
+      localStorage.setItem('bpro_admin_nome_usuario', nome);
+      localStorage.setItem('bpro_tk', r.token);
+      window.location.reload();
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
+}
+
+function voltarModoAdmin() {
+  var tokenOriginal = localStorage.getItem('bpro_tk_admin_original');
+  if (!tokenOriginal) return;
+  localStorage.setItem('bpro_tk', tokenOriginal);
+  localStorage.removeItem('bpro_tk_admin_original');
+  localStorage.removeItem('bpro_admin_nome_usuario');
+  window.location.reload();
+}
+
 function entrarComoSalao(salaoId, salaoNome) {
   if (!confirm('Entrar como administrador de "' + salaoNome + '"?\n\nVocê vai ver o sistema exatamente como esse salão vê. Pra voltar ao seu modo normal, use o botão que vai aparecer no topo da tela.')) return;
   apiFetch('/api/super-admin/saloes/' + salaoId + '/entrar-como', { method: 'POST' })
@@ -7016,7 +7056,7 @@ function loadUsuarios() {
   apiFetch('/api/usuarios').then(function(r) {
     var list = r || [];
     if (!list.length) { el.innerHTML = '<div class="empty">Nenhum usuário cadastrado além de você.</div>'; return; }
-    el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vínculo</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>' +
+    el.innerHTML = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vínculo</th><th>Último acesso</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>' +
       list.map(function(u) {
         var isAdmin = u.perfil === 'admin';
         var perfBadge = isAdmin
@@ -7030,12 +7070,15 @@ function loadUsuarios() {
           ? '<span class="badge bs">✅ Verificado</span>'
           : '<span class="badge bw" style="cursor:pointer" onclick="reenviarCodigoVerificacao(\'' + escAttr(u.email) + '\')" title="Clique para reenviar o código">⚠️ Não verificado</span>';
 
-        var acoes = isAdmin ? '<span style="font-size:.7rem;color:var(--t3)">—</span>' :
+        var botaoEntrarComo = (u.email !== USER_EMAIL) ?
+          '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="entrarComoUsuario(this.dataset.uid,this.dataset.unome)" title="Entrar como esse usuário">🔑</button>' : '';
+        var acoes = isAdmin ? botaoEntrarComo || '<span style="font-size:.7rem;color:var(--t3)">—</span>' :
           '<div style="display:flex;gap:4px">' +
+          botaoEntrarComo +
           '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="abrirEditPerms(this.dataset.uid,this.dataset.unome)" title="Editar permissões">✏️</button>' +
           '<button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Excluir">🗑</button>' +
           '</div>';
-        return '<tr><td><strong>' + esc(u.nome) + '</strong><div style="font-size:.68rem;color:var(--t3)">' + esc(u.cargo||'') + '</div></td><td style="font-size:.78rem">' + esc(u.email) + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td>' + emailStatus + '</td><td>' + acoes + '</td></tr>';
+        return '<tr><td><strong>' + esc(u.nome) + '</strong><div style="font-size:.68rem;color:var(--t3)">' + esc(u.cargo||'') + '</div></td><td style="font-size:.78rem">' + esc(u.email) + '</td><td>' + perfBadge + '</td><td>' + vinculo + '</td><td style="font-size:.76rem;color:var(--t2)">' + fmtUltimoAcesso(u.ultimo_login) + '</td><td>' + emailStatus + '</td><td>' + acoes + '</td></tr>';
       }).join('') + '</tbody></table>';
     setTimeout(iniciarSombrasScroll, 30);
   }).catch(function(e) {
