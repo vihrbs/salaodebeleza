@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.50.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.53.0-frontend</div>
       </div>
     </div>
 
@@ -809,9 +809,14 @@ select.fc option{background:var(--bg2)}
 
     <!-- SERVIÇOS -->
     <div class="page" id="page-servicos">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-        <button class="btn btns" onclick="openImport('servicos')" style="margin-right:8px">📥 Importar</button>
-        <button class="btn btnp" onclick="openM('m-svc')">+ Novo Serviço</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--t2);cursor:pointer">
+          <input type="checkbox" id="svc-mostrar-inativos" onchange="loadSvcs()"/> Mostrar desativados
+        </label>
+        <div>
+          <button class="btn btns" onclick="openImport('servicos')" style="margin-right:8px">📥 Importar</button>
+          <button class="btn btnp" onclick="openM('m-svc')">+ Novo Serviço</button>
+        </div>
       </div>
       <div class="card">
         <div class="tw"><table><thead><tr><th>Serviço</th><th>Categoria</th><th>Duração</th><th>Preço</th><th>Comissão</th><th>Ativo</th><th>Ações</th></tr></thead>
@@ -3191,7 +3196,9 @@ function abrirPagarFiado(cliente) {
     var itemId = 'pgf-' + item.id;
     return '<div style="padding:10px 0;border-bottom:1px solid var(--bd2)">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
-        '<div><div style="font-size:.78rem;font-weight:600">' + esc(item.descricao||item.categoria||'Cobrança') + '</div><div style="font-size:.66rem;color:var(--t3)">' + fdt(item.data) + '</div></div>' +
+        '<div><div style="font-size:.78rem;font-weight:600">' + esc(item.descricao||item.categoria||'Cobrança') + '</div><div style="font-size:.66rem;color:var(--t3)">' + fdt(item.data) +
+          (item.agendamento_id ? ' · <a href="#" onclick="closeM(\'m-pagar-fiado\');abrirDetalhesAgendamento(\'' + item.agendamento_id + '\');return false;" style="color:var(--ac);text-decoration:underline">Ver comanda</a>' : '') +
+        '</div></div>' +
         '<div style="font-weight:700">' + brl(item.valor) + '</div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
@@ -3205,21 +3212,63 @@ function abrirPagarFiado(cliente) {
         '</select>' +
         '<button class="btn btnp btnsm" id="' + itemId + '-btn" onclick="pagarItemFiado(\'' + item.id + '\')">Pagar</button>' +
       '</div>' +
+      '<div id="' + itemId + '-2a-forma" style="display:none;margin-top:6px;gap:6px;flex-wrap:wrap;align-items:center">' +
+        '<input type="number" class="fc" style="font-size:.78rem;flex:1;min-width:90px" id="' + itemId + '-valor2" step="0.01" min="0.01" placeholder="Valor da 2ª forma"/>' +
+        '<select class="fc" style="font-size:.78rem;flex:1;min-width:110px" id="' + itemId + '-forma2">' +
+          '<option value="">Forma de pagamento...</option>' +
+          '<option value="PIX">💠 PIX</option>' +
+          '<option value="Dinheiro">💵 Dinheiro</option>' +
+          '<option value="Cartão Débito">💳 Débito</option>' +
+          '<option value="Cartão Crédito">💳 Crédito</option>' +
+        '</select>' +
+      '</div>' +
+      '<button type="button" onclick="alternarDividirPagamentoFiado(\'' + itemId + '\')" id="' + itemId + '-btn-dividir" style="background:none;border:none;color:var(--ac);font-size:.7rem;margin-top:6px;cursor:pointer;padding:0;text-decoration:underline">➗ Dividir entre 2 formas</button>' +
       '<div style="font-size:.66rem;color:var(--t3);margin-top:4px">💡 Pode pagar só uma parte agora — o restante continua aqui como fiado, pra pagar depois.</div>' +
     '</div>';
   }).join('');
   openM('m-pagar-fiado');
 }
 
+function alternarDividirPagamentoFiado(itemId) {
+  var area = document.getElementById(itemId + '-2a-forma');
+  var btn = document.getElementById(itemId + '-btn-dividir');
+  var ligando = area.style.display === 'none';
+  area.style.display = ligando ? 'flex' : 'none';
+  btn.textContent = ligando ? '➖ Usar só uma forma' : '➗ Dividir entre 2 formas';
+  if (!ligando) { document.getElementById(itemId + '-valor2').value = ''; document.getElementById(itemId + '-forma2').value = ''; }
+}
+
 function pagarItemFiado(lancamentoId) {
   var inputValor = document.getElementById('pgf-' + lancamentoId + '-valor');
   var selectForma = document.getElementById('pgf-' + lancamentoId + '-forma');
+  var inputValor2 = document.getElementById('pgf-' + lancamentoId + '-valor2');
+  var selectForma2 = document.getElementById('pgf-' + lancamentoId + '-forma2');
   var btn = document.getElementById('pgf-' + lancamentoId + '-btn');
   var valor = parseFloat(inputValor.value);
   if (!valor || valor <= 0) { toast('Informe um valor válido','er'); return; }
   if (!selectForma.value) { toast('Selecione a forma de pagamento','er'); return; }
+
+  var corpo;
+  var valor2 = parseFloat(inputValor2 && inputValor2.value);
+  // Só considera a 2ª forma se ela realmente estiver com valor E forma
+  // preenchidos — se dividiu mas deixou incompleto, avisa em vez de
+  // ignorar silenciosamente uma parte que a pessoa pensou ter informado
+  var segundaFormaAberta = document.getElementById('pgf-' + lancamentoId + '-2a-forma').style.display !== 'none';
+  if (segundaFormaAberta) {
+    if (!valor2 || valor2 <= 0 || !selectForma2.value) {
+      toast('Preencha valor e forma da 2ª parte, ou clica em "Usar só uma forma"','er');
+      return;
+    }
+    corpo = { formas_pagamento: [
+      { forma: selectForma.value, valor: valor },
+      { forma: selectForma2.value, valor: valor2 }
+    ] };
+  } else {
+    corpo = { valor: valor, forma_pgto: selectForma.value };
+  }
+
   btn.disabled = true; btn.textContent = '...';
-  apiFetch('/api/financeiro/lancamentos/' + lancamentoId + '/pagar', { method: 'POST', body: { valor: valor, forma_pgto: selectForma.value } })
+  apiFetch('/api/financeiro/lancamentos/' + lancamentoId + '/pagar', { method: 'POST', body: corpo })
     .then(function(r){
       toast(r && r.pago_total ? 'Pago totalmente! ✅' : 'Pagamento parcial registrado! Restante continua como fiado: ' + brl(r.restante), 'ok');
       closeM('m-pagar-fiado');
@@ -4450,7 +4499,10 @@ function pagarParcela(parcelaId, profId) {
 
 // ── SERVIÇOS ────────────────────────────────────────────
 function loadSvcs() {
-  return apiFetch('/api/servicos').then(function(r){
+  var mostrarInativosEl = document.getElementById('svc-mostrar-inativos');
+  var incluirInativos = mostrarInativosEl && mostrarInativosEl.checked;
+  var url = '/api/servicos' + (incluirInativos ? '?incluir_inativos=true' : '');
+  return apiFetch(url).then(function(r){
     SVCS = r || []; renderSvcs(SVCS);
     return SVCS;
   }).catch(function(){ SVCS = DEMO ? D.svcs : []; renderSvcs(SVCS); return SVCS; });
@@ -4464,7 +4516,8 @@ function renderSvcs(list) {
   document.getElementById('svc-tb').innerHTML = list.map(function(s){
     var temPrecoPorDia = s.precos_por_dia && Object.keys(s.precos_por_dia).length > 0;
     var tagPrecoDia = temPrecoPorDia ? ' <span class="badge bi" style="font-size:.6rem" title="Tem preço diferente em alguns dias da semana">🗓️ varia</span>' : '';
-    return '<tr><td><strong>' + esc(s.nome) + '</strong></td>' +
+    var estiloInativo = s.ativo ? '' : ' style="opacity:.5"';
+    return '<tr' + estiloInativo + '><td><strong>' + esc(s.nome) + '</strong>' + (s.ativo ? '' : ' <span style="font-size:.62rem;color:var(--t3)">(desativado)</span>') + '</td>' +
       '<td><span style="background:var(--bg);padding:2px 8px;border-radius:50px;font-size:.68rem;border:1px solid var(--bd)">' + esc(s.categoria) + '</span></td>' +
       '<td>' + s.duracao_min + ' min</td>' +
       '<td><strong>' + brl(s.preco) + '</strong>' + tagPrecoDia + '</td>' +
@@ -4476,18 +4529,15 @@ function renderSvcs(list) {
 }
 
 function toggleServicoAtivo(id, ativo, checkboxEl, nome) {
-  // Desativar aqui esconde o serviço da lista pra sempre (a busca só
-  // traz os ativos, e não existe hoje um jeito de ver/religar um serviço
-  // desativado pela tela) — por isso pede confirmação, igual o botão
-  // Excluir já pedia. Sem isso, um clique sem querer no checkbox
-  // "perdia" o serviço sem aviso nenhum, sem o mesmo cuidado que o botão
-  // de excluir tinha.
-  if (!ativo && !confirm('Desativar o serviço "' + nome + '"?\n\nEle vai sumir dessa lista e não vai poder ser escolhido em novos agendamentos. Hoje não tem um jeito de reativar pela tela — se precisar de volta, fale comigo.')) {
+  // Desativar esconde o serviço da lista principal (só aparece de novo
+  // marcando "Mostrar desativados") — ainda pede confirmação, porque
+  // continua removendo o serviço das opções de novo agendamento/comanda.
+  if (!ativo && !confirm('Desativar o serviço "' + nome + '"?\n\nEle deixa de aparecer nas opções de novo agendamento/comanda. Pra reativar depois, marca "Mostrar desativados" e liga o interruptor de novo.')) {
     if (checkboxEl) checkboxEl.checked = true;
     return;
   }
   apiFetch('/api/servicos/' + id, { method: 'PUT', body: { ativo: ativo } })
-    .then(function(){ toast(ativo ? 'Serviço ativado' : 'Serviço desativado', ativo ? 'ok' : 'er'); if (!ativo) loadSvcs(); })
+    .then(function(){ toast(ativo ? 'Serviço ativado' : 'Serviço desativado', ativo ? 'ok' : 'er'); loadSvcs(); })
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); loadSvcs(); });
 }
 
