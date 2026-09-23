@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.80.0-fiado-ver-comanda' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.81.0-corrige-permissao-estoque' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -4157,9 +4157,15 @@ app.post('/api/usuarios', auth, async (req, res) => {
   if (!emailValido(email)) return res.status(422).json({ error: 'Informe um e-mail válido' });
 
   const perfil_final = perfil === 'admin' ? 'admin' : 'custom';
-  const permissoes_final = perfil_final === 'admin'
+  let permissoes_final = perfil_final === 'admin'
     ? ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config']
     : (permissoes || ['dashboard','agenda','clientes','estoque','comissoes']);
+  // Mesma garantia da rota de editar permissões: "gerenciar estoque" sem
+  // o acesso básico de "estoque" deixaria a pessoa sem conseguir nem
+  // abrir a tela pra usar o que foi liberado.
+  if (permissoes_final.includes('estoque_gerenciar') && !permissoes_final.includes('estoque')) {
+    permissoes_final = [...permissoes_final, 'estoque'];
+  }
 
   try {
     const { data: existe } = await supabase.from('usuarios').select('id').eq('email', email).single();
@@ -4260,6 +4266,12 @@ app.put('/api/usuarios/:id/permissoes', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   const { permissoes, profissional_id } = req.body;
   if (!permissoes || !permissoes.length) return res.status(422).json({ error: 'Permissoes obrigatorias' });
+  // "Pode gerenciar estoque" sem o acesso básico de "Estoque" não faz
+  // sentido — a pessoa ficaria sem conseguir nem abrir a tela. Garante
+  // aqui também (não só na tela), caso essa combinação chegue de outro
+  // jeito no futuro.
+  const permissoesFinais = permissoes.includes('estoque_gerenciar') && !permissoes.includes('estoque')
+    ? [...permissoes, 'estoque'] : permissoes;
 
   try {
     // Valida que o usuário-alvo pertence a este salão
@@ -4282,7 +4294,7 @@ app.put('/api/usuarios/:id/permissoes', auth, async (req, res) => {
     }
 
     const { error } = await supabase.from('usuario_permissoes').upsert({
-      usuario_id: req.params.id, salao_id: req.salao_id, permissoes
+      usuario_id: req.params.id, salao_id: req.salao_id, permissoes: permissoesFinais
     }, { onConflict: 'usuario_id' });
     if (error) throw error;
 
@@ -4290,7 +4302,7 @@ app.put('/api/usuarios/:id/permissoes', auth, async (req, res) => {
       .update({ profissional_id: profissional_id_final })
       .eq('id', req.params.id).eq('salao_id', req.salao_id);
 
-    res.json({ message: 'Permissoes atualizadas', permissoes, profissional_id: profissional_id_final });
+    res.json({ message: 'Permissoes atualizadas', permissoes: permissoesFinais, profissional_id: profissional_id_final });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
