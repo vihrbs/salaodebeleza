@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.76.0-validacao-assinatura-webhook' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.80.0-fiado-ver-comanda' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1027,16 +1027,18 @@ async function notificarProfissionalNovoAgendamento(email, nomeProfissional, nom
 // parte não vai ter). Diferente da notificação pro profissional (que
 // avisa "você ganhou um agendamento"), essa é o comprovante pra quem
 // marcou, incluindo o nome do salão pra deixar claro de onde veio.
-async function notificarClienteConfirmacaoAgendamento(email, nomeCliente, nomeSalao, nomeProfissional, dataHoraISO, servicoNome, valorTotal) {
+async function notificarClienteConfirmacaoAgendamento(email, nomeCliente, nomeSalao, nomeProfissional, dataHoraISO, servicoNome, valorTotal, agendamentoId) {
   const { data, hora } = formatarDataHoraBrasil(dataHoraISO);
   const valorFmt = 'R$ ' + Number(valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const linkCancelar = 'https://belezaprooficial.com.br/agendar.html?cancelar=' + agendamentoId;
   const corpo = 'Olá ' + nomeCliente + '!\n\n' +
     'Seu agendamento em ' + nomeSalao + ' foi confirmado:\n\n' +
     'Serviço: ' + servicoNome + '\n' +
     'Profissional: ' + nomeProfissional + '\n' +
     'Data: ' + data + ' às ' + hora + '\n' +
     'Valor: ' + valorFmt + '\n\n' +
-    'Precisa cancelar ou remarcar? Entre em contato direto com o salão.\n\n' +
+    'Precisa cancelar? ' + linkCancelar + '\n' +
+    'Pra remarcar, entre em contato direto com o salão.\n\n' +
     '— ' + nomeSalao;
   return enviarEmailSimples(email, '✅ Agendamento confirmado — ' + nomeSalao, corpo);
 }
@@ -1395,9 +1397,13 @@ app.patch('/api/parcelas/:id/pagar', auth, async (req, res) => {
 // SERVIÇOS
 // ═══════════════════════════════════════════════════
 app.get('/api/servicos', auth, async (req, res) => {
-  const { data, error } = await supabase
-    .from('servicos').select('*')
-    .eq('salao_id', req.salao_id).eq('ativo', true).order('nome');
+  let q = supabase.from('servicos').select('*').eq('salao_id', req.salao_id).order('nome');
+  // Por padrão só traz os ativos (é o que todo o resto do sistema espera
+  // pra escolher serviço num agendamento/comanda) — só inclui os
+  // desativados quando pedido explicitamente, pra dar um jeito de vê-los
+  // e reativar, sem bagunçar os outros lugares que usam essa mesma rota.
+  if (req.query.incluir_inativos !== 'true') q = q.eq('ativo', true);
+  const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);
 });
@@ -3115,7 +3121,7 @@ app.get('/api/financeiro/resumo', auth, requirePermissao('financeiro'), async (r
 app.get('/api/financeiro/fiado', auth, requirePermissao('fiado'), async (req, res) => {
   try {
     const { data: pendentes, error } = await supabase.from('lancamentos')
-      .select('id, cliente_id, valor, data, descricao, categoria')
+      .select('id, cliente_id, valor, data, descricao, categoria, agendamento_id')
       .eq('salao_id', req.salao_id).eq('tipo', 'entrada').eq('pago', false)
       .not('cliente_id', 'is', null);
     if (error) throw error;
@@ -3141,7 +3147,7 @@ app.get('/api/financeiro/fiado', auth, requirePermissao('fiado'), async (req, re
       registro.total_devido += Number(l.valor);
       registro.quantidade_lancamentos += 1;
       if (l.data < registro.data_mais_antiga) registro.data_mais_antiga = l.data;
-      registro.itens.push({ id: l.id, valor: l.valor, data: l.data, descricao: l.descricao, categoria: l.categoria });
+      registro.itens.push({ id: l.id, valor: l.valor, data: l.data, descricao: l.descricao, categoria: l.categoria, agendamento_id: l.agendamento_id });
     });
 
     const lista = Object.values(porCliente).sort((a, b) => b.total_devido - a.total_devido);
@@ -3155,22 +3161,39 @@ app.get('/api/financeiro/fiado', auth, requirePermissao('fiado'), async (req, re
 // (o valor que entrou agora) e outro que continua pendente com o restante.
 // Assim o relatório de Fiado sempre reflete o saldo real que ainda falta.
 app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('fiado'), async (req, res) => {
-  const { valor, forma_pgto } = req.body;
+  const { valor, forma_pgto, formas_pagamento } = req.body;
   try {
     const { data: lanc } = await supabase.from('lancamentos')
       .select('*').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
     if (!lanc) return res.status(404).json({ error: 'Lançamento não encontrado' });
     if (lanc.pago) return res.status(409).json({ error: 'Esse lançamento já está pago' });
 
-    const valorPago = (valor !== undefined && valor !== null && valor !== '')
-      ? Number(valor) : Number(lanc.valor);
-    if (!valorPago || valorPago <= 0) return res.status(422).json({ error: 'Informe um valor válido' });
-    if (valorPago > Number(lanc.valor) + 0.01) {
+    // Aceita tanto o jeito simples (uma forma só) quanto dividido em mais
+    // de uma forma de pagamento — mesma ideia que já existe pra fechar
+    // atendimento. Internamente sempre trabalha com uma lista de formas,
+    // mesmo quando é só uma.
+    let formas;
+    if (Array.isArray(formas_pagamento) && formas_pagamento.length) {
+      formas = formas_pagamento
+        .map(f => ({ forma: f.forma, valor: Number(f.valor) }))
+        .filter(f => f.forma && f.valor > 0);
+      if (!formas.length) return res.status(422).json({ error: 'Informe ao menos uma forma de pagamento com valor' });
+    } else {
+      const valorPago = (valor !== undefined && valor !== null && valor !== '')
+        ? Number(valor) : Number(lanc.valor);
+      if (!valorPago || valorPago <= 0) return res.status(422).json({ error: 'Informe um valor válido' });
+      if (!forma_pgto) return res.status(422).json({ error: 'Selecione a forma de pagamento' });
+      formas = [{ forma: forma_pgto, valor: valorPago }];
+    }
+
+    const valorPagoTotal = Number(formas.reduce((s, f) => s + f.valor, 0).toFixed(2));
+    if (valorPagoTotal > Number(lanc.valor) + 0.01) {
       return res.status(422).json({ error: 'O valor pago não pode ser maior que o valor devido (' + lanc.valor + ')' });
     }
 
-    const restante = Number((Number(lanc.valor) - valorPago).toFixed(2));
+    const restante = Number((Number(lanc.valor) - valorPagoTotal).toFixed(2));
     const pagouTudo = restante <= 0.01;
+    const hojeStr = new Date().toISOString().split('T')[0];
 
     // Trava contra duplo-clique/duas ações quase simultâneas pagando o
     // mesmo lançamento: o update só é aceito SE o registro ainda estiver
@@ -3181,41 +3204,53 @@ app.post('/api/financeiro/lancamentos/:id/pagar', auth, requirePermissao('fiado'
     // "meio certo": ou pega o registro do jeito que esperava, ou não
     // pega nada).
     if (pagouTudo) {
-      // Atualiza também a data pra hoje — passa a refletir quando o
-      // dinheiro realmente entrou (data do pagamento), não mais quando o
-      // atendimento aconteceu. Isso é o que faz a receita do mês contar
-      // fiado só depois de pago de verdade, no mês em que foi pago.
-      const hojeStr = new Date().toISOString().split('T')[0];
+      // A primeira forma "vira" o próprio lançamento original (mesma
+      // trava de sempre). As formas extras (se dividiu entre mais de
+      // uma) entram como lançamentos novos, cada um já pago, pra cada
+      // forma ficar corretamente contabilizada no relatório por forma
+      // de pagamento — em vez de uma só forma "levar a culpa" pelo
+      // valor inteiro.
       const { data } = await supabase.from('lancamentos')
-        .update({ pago: true, forma_pgto: forma_pgto || lanc.forma_pgto, data: hojeStr })
+        .update({ pago: true, forma_pgto: formas[0].forma, valor: formas[0].valor, data: hojeStr })
         .eq('id', lanc.id).eq('pago', false).eq('valor', lanc.valor).select().maybeSingle();
       if (!data) {
         return res.status(409).json({ error: 'Esse lançamento acabou de ser alterado por outra ação. Atualize a tela e confira antes de tentar de novo.' });
       }
+      if (formas.length > 1) {
+        await supabase.from('lancamentos').insert(formas.slice(1).map(f => ({
+          salao_id: req.salao_id, cliente_id: lanc.cliente_id, tipo: lanc.tipo, categoria: lanc.categoria,
+          descricao: lanc.descricao + ' (parte do pagamento)', valor: f.valor,
+          data: hojeStr, forma_pgto: f.forma, pago: true, agendamento_id: lanc.agendamento_id || null
+        })));
+      }
       return res.json({ pago_total: true, lancamento: data });
     }
 
-    // Pagamento parcial: cria um novo lançamento com o valor pago agora
-    // (já quitado) e reduz o lançamento original pro saldo que ainda falta
-    const { data: pagamento } = await supabase.from('lancamentos').insert({
-      salao_id: req.salao_id, cliente_id: lanc.cliente_id, tipo: lanc.tipo, categoria: lanc.categoria,
-      descricao: lanc.descricao + ' (pagamento parcial)', valor: valorPago,
-      data: new Date().toISOString().split('T')[0], forma_pgto: forma_pgto || null, pago: true,
-      agendamento_id: lanc.agendamento_id || null
-    }).select().single();
+    // Pagamento parcial: cria um (ou mais, se dividiu forma) novo
+    // lançamento com o valor pago agora (já quitado) e reduz o
+    // lançamento original pro saldo que ainda falta
+    const { data: pagamentos, error: erroPagamentos } = await supabase.from('lancamentos').insert(
+      formas.map((f, i) => ({
+        salao_id: req.salao_id, cliente_id: lanc.cliente_id, tipo: lanc.tipo, categoria: lanc.categoria,
+        descricao: lanc.descricao + (formas.length > 1 ? ' (parte do pagamento)' : ' (pagamento parcial)'),
+        valor: f.valor, data: hojeStr, forma_pgto: f.forma, pago: true,
+        agendamento_id: lanc.agendamento_id || null
+      }))
+    ).select();
+    if (erroPagamentos) throw erroPagamentos;
 
     const { data: atualizado } = await supabase.from('lancamentos')
       .update({ valor: restante }).eq('id', lanc.id).eq('pago', false).eq('valor', lanc.valor).select().maybeSingle();
 
     if (!atualizado) {
       // Outra ação alterou o lançamento original entre a leitura e agora
-      // — desfaz esse pagamento parcial que acabou de criar, pra não
+      // — desfaz esse(s) pagamento(s) que acabou de criar, pra não
       // ficar um registro de pagamento duplicado/fantasma no Financeiro.
-      await supabase.from('lancamentos').delete().eq('id', pagamento.id);
+      await supabase.from('lancamentos').delete().in('id', pagamentos.map(p => p.id));
       return res.status(409).json({ error: 'Esse lançamento acabou de ser alterado por outra ação. Atualize a tela e tente de novo.' });
     }
 
-    res.json({ pago_total: false, restante, pagamento, lancamento: atualizado });
+    res.json({ pago_total: false, restante, pagamento: pagamentos[0], lancamento: atualizado });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -5297,7 +5332,7 @@ app.post('/api/publico/agendar/:salaoId', limitarTaxa(8, 15), async (req, res) =
     if (email) {
       supabase.from('saloes').select('nome').eq('id', salao_id).single().then(({ data: salaoNome }) => {
         notificarClienteConfirmacaoAgendamento(
-          email, nome, (salaoNome && salaoNome.nome) || 'o salão', prof ? prof.nome : '—', data_hora, servico.nome, precoEfetivo
+          email, nome, (salaoNome && salaoNome.nome) || 'o salão', prof ? prof.nome : '—', data_hora, servico.nome, precoEfetivo, agendamento.id
         ).then(r => {
           if (!r.enviado) console.error('Confirmação de agendamento (cliente) NÃO enviada pra ' + email + ': ' + r.motivo);
         });
