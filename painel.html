@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.53.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.54.0-frontend</div>
       </div>
     </div>
 
@@ -8481,7 +8481,7 @@ function dispensarBannerPWA() {
             <input type="checkbox" value="fiado" style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💳 Fiado
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
-            <input type="checkbox" value="estoque" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📦 Estoque
+            <input type="checkbox" id="nu-estoque" value="estoque" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 📦 Estoque
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor=this.querySelector('input').checked?'var(--ac)':'var(--bd)'">
             <input type="checkbox" value="comissoes" checked style="accent-color:var(--ac)" onchange="updatePermLabel(this)"/> 💸 Comissões
@@ -8505,7 +8505,7 @@ function dispensarBannerPWA() {
       </div>
       <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px;margin-top:10px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
-          <input type="checkbox" id="nu-estoque-gerenciar" value="estoque_gerenciar" style="accent-color:var(--warn)"/> 📦 Pode gerenciar estoque (criar, editar, excluir, ajustar quantidade e vender)
+          <input type="checkbox" id="nu-estoque-gerenciar" value="estoque_gerenciar" style="accent-color:var(--warn)" onchange="if(this.checked)document.getElementById('nu-estoque').checked=true"/> 📦 Pode gerenciar estoque (criar, editar, excluir, ajustar quantidade e vender)
         </label>
         <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Sem isso, quem tem acesso a Estoque só vê os produtos e registra consumo — não altera quantidade na mão.</div>
       </div>
@@ -8548,7 +8548,7 @@ function dispensarBannerPWA() {
           <input type="checkbox" value="fiado" style="accent-color:var(--ac)"/> 💳 Fiado
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
-          <input type="checkbox" value="estoque" style="accent-color:var(--ac)"/> 📦 Estoque
+          <input type="checkbox" id="ep-estoque" value="estoque" style="accent-color:var(--ac)"/> 📦 Estoque
         </label>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:var(--rs);cursor:pointer;font-size:.82rem">
           <input type="checkbox" value="comissoes" style="accent-color:var(--ac)"/> 💸 Comissões
@@ -8570,7 +8570,7 @@ function dispensarBannerPWA() {
       </div>
       <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px;margin-top:10px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
-          <input type="checkbox" id="ep-estoque-gerenciar" value="estoque_gerenciar" style="accent-color:var(--warn)"/> 📦 Pode gerenciar estoque (criar, editar, excluir produto, ajustar quantidade manualmente e vender pro cliente)
+          <input type="checkbox" id="ep-estoque-gerenciar" value="estoque_gerenciar" style="accent-color:var(--warn)" onchange="if(this.checked)document.getElementById('ep-estoque').checked=true"/> 📦 Pode gerenciar estoque (criar, editar, excluir produto, ajustar quantidade manualmente e vender pro cliente)
         </label>
         <div style="font-size:.68rem;color:var(--t3);margin-top:6px;margin-left:26px">Sem isso marcado, quem tem acesso a Estoque só consegue ver os produtos e registrar consumo (produto usado num atendimento) — não consegue aumentar/diminuir a quantidade na mão.</div>
       </div>
