@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.56.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.57.0-frontend</div>
       </div>
     </div>
 
@@ -980,10 +980,10 @@ select.fc option{background:var(--bg2)}
 
         <div class="card">
           <div class="ct">Plano Atual</div>
-          <div style="background:linear-gradient(135deg,var(--ac),#9B8FFF);border-radius:var(--rs);padding:16px;color:#fff;margin-bottom:12px">
-            <div style="font-size:.68rem;opacity:.7">PLANO</div>
-            <div style="font-size:1.2rem;font-weight:800" id="cfg-plan">Starter — Trial</div>
-            <div style="font-size:.72rem;opacity:.7">Trial ativo por 14 dias</div>
+          <div id="cfg-plan-card" style="background:linear-gradient(135deg,var(--ac),#9B8FFF);border-radius:var(--rs);padding:18px;color:#fff;margin-bottom:12px;box-shadow:0 6px 20px rgba(0,0,0,.25);transition:background .3s">
+            <div style="font-size:.66rem;opacity:.75;letter-spacing:.05em;font-weight:600">PLANO</div>
+            <div style="font-size:1.3rem;font-weight:800;margin-top:2px" id="cfg-plan">ProMax</div>
+            <div style="font-size:.76rem;opacity:.85;margin-top:4px" id="cfg-plan-status">Carregando...</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:5px;font-size:.78rem;color:var(--t2)">
             <div>✅ Agenda ilimitada</div><div>✅ Clientes e financeiro</div>
@@ -5888,6 +5888,34 @@ function removerFotoSalao(caminho) {
     .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); });
 }
 
+// Card "Plano Atual", em Config — mostra o nome real do plano (vem do
+// banco, não fixo no HTML) e o status real de pagamento. Antes esse
+// card estava com texto fixo "Starter — Trial" pra sempre, então
+// continuava dizendo "Trial ativo por 14 dias" mesmo depois do trial
+// acabar ou da pessoa já estar pagando de verdade.
+function atualizarCardPlanoAtual(dadosSalao) {
+  var nomePlano = (dadosSalao.planos && dadosSalao.planos.nome) || 'ProMax';
+  var elNome = document.getElementById('cfg-plan');
+  var elStatus = document.getElementById('cfg-plan-status');
+  var elCard = document.getElementById('cfg-plan-card');
+  if (!elNome) return;
+  elNome.textContent = nomePlano;
+
+  apiFetch('/api/pagamento/status').then(function(r){
+    if (!r) return;
+    if (r.trial_expirado && !r.ativo) {
+      elStatus.textContent = '⚠️ Pagamento pendente — acesso suspenso';
+      elCard.style.background = 'linear-gradient(135deg,#7A2E2E,#4A1D1D)';
+    } else if (r.em_trial) {
+      elStatus.textContent = 'Trial — ' + r.dias_restantes + ' dia(s) restante(s)';
+      elCard.style.background = 'linear-gradient(135deg,var(--ac),#9B8FFF)';
+    } else {
+      elStatus.textContent = '✅ Assinatura ativa';
+      elCard.style.background = 'linear-gradient(135deg,#1F7A4D,#2E9E63)';
+    }
+  }).catch(function(){});
+}
+
 function carregarHorarioFuncionamento() {
   apiFetch('/api/saloes/meu').then(function(r){
     if (!r) return;
@@ -5901,6 +5929,7 @@ function carregarHorarioFuncionamento() {
     if (document.getElementById('cfg-end') && !document.getElementById('cfg-end').value) document.getElementById('cfg-end').value = r.endereco || '';
     if (document.getElementById('cfg-sobre') && !document.getElementById('cfg-sobre').value) document.getElementById('cfg-sobre').value = r.sobre || '';
     renderFotosGrid(r.fotos || []);
+    atualizarCardPlanoAtual(r);
 
     if (!r.configuracoes) return;
     var cfg = r.configuracoes;
