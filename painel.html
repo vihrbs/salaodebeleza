@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.55.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.56.0-frontend</div>
       </div>
     </div>
 
@@ -4097,6 +4097,31 @@ function voltarModoAdmin() {
   window.location.reload();
 }
 
+function abrirHistoricoAcessos(uid, nome) {
+  document.getElementById('ha-uid').value = uid;
+  document.getElementById('ha-nome').textContent = nome;
+  document.getElementById('ha-data').value = today();
+  openM('m-historico-acessos');
+  carregarHistoricoAcessos();
+}
+
+function carregarHistoricoAcessos() {
+  var uid = document.getElementById('ha-uid').value;
+  var data = document.getElementById('ha-data').value;
+  var el = document.getElementById('ha-lista');
+  el.innerHTML = '<div class="lc"><div class="spin"></div></div>';
+  apiFetch('/api/usuarios/' + uid + '/acessos?data=' + data)
+    .then(function(lista){
+      if (!lista || !lista.length) { el.innerHTML = '<div class="empty">Nenhum acesso registrado nesse dia.</div>'; return; }
+      el.innerHTML = '<div style="font-size:.78rem;color:var(--t3);margin-bottom:8px">' + lista.length + ' acesso(s):</div>' +
+        lista.map(function(iso){
+          return '<div style="padding:8px 0;border-bottom:1px solid var(--bd2);font-size:.85rem">🕐 ' +
+            new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '</div>';
+        }).join('');
+    })
+    .catch(function(e){ el.innerHTML = '<div class="empty" style="color:var(--er)">Erro: ' + esc(e.message||'') + '</div>'; });
+}
+
 function entrarComoSalao(salaoId, salaoNome) {
   if (!confirm('Entrar como administrador de "' + salaoNome + '"?\n\nVocê vai ver o sistema exatamente como esse salão vê. Pra voltar ao seu modo normal, use o botão que vai aparecer no topo da tela.')) return;
   apiFetch('/api/super-admin/saloes/' + salaoId + '/entrar-como', { method: 'POST' })
@@ -7072,9 +7097,10 @@ function loadUsuarios() {
 
         var botaoEntrarComo = (u.email !== USER_EMAIL) ?
           '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="entrarComoUsuario(this.dataset.uid,this.dataset.unome)" title="Entrar como esse usuário">🔑</button>' : '';
-        var acoes = isAdmin ? botaoEntrarComo || '<span style="font-size:.7rem;color:var(--t3)">—</span>' :
+        var botaoVerAcessos = '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="abrirHistoricoAcessos(this.dataset.uid,this.dataset.unome)" title="Ver horários de acesso por dia">📋</button>';
+        var acoes = isAdmin ? '<div style="display:flex;gap:4px">' + botaoEntrarComo + botaoVerAcessos + '</div>' :
           '<div style="display:flex;gap:4px">' +
-          botaoEntrarComo +
+          botaoEntrarComo + botaoVerAcessos +
           '<button class="btnic btn btnsm" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="abrirEditPerms(this.dataset.uid,this.dataset.unome)" title="Editar permissões">✏️</button>' +
           '<button class="btnic btn btnsm" style="color:var(--er)" data-uid="'+u.id+'" data-unome="'+escAttr(u.nome)+'" onclick="deletarUsuario(this.dataset.uid,this.dataset.unome)" title="Excluir">🗑</button>' +
           '</div>';
@@ -7100,7 +7126,7 @@ function toggleTipoAcesso() {
   var mostrarPersonalizacao = !isAdmin; // recepcionista também mostra os checkboxes, só que pré-marcados
 
   document.getElementById('nu-permissoes-wrap').style.display = mostrarPersonalizacao ? 'block' : 'none';
-  document.getElementById('nu-profissional-wrap').style.display = isAdmin ? 'none' : 'block';
+  document.getElementById('nu-profissional-wrap').style.display = 'block';
 
   document.getElementById('tipo-admin-lbl').style.background = isAdmin ? 'rgba(201,169,110,.18)' : '';
   document.getElementById('tipo-admin-lbl').style.borderColor = isAdmin ? 'var(--ac)' : 'var(--bd)';
@@ -8503,7 +8529,7 @@ function dispensarBannerPWA() {
         <select class="fc" id="nu-profissional">
           <option value="">Nenhum — acesso administrativo às páginas liberadas</option>
         </select>
-        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Se vincular, este usuário só verá a própria agenda e a própria comissão — mesmo tendo acesso liberado a essas páginas.</div>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Pra Admin, é só organização — não restringe nada, ele continua vendo tudo. Pros outros perfis, restringe: só vê a própria agenda e a própria comissão, mesmo com acesso liberado a essas páginas.</div>
       </div>
       <div id="nu-permissoes-wrap" class="fg">
         <label class="fl">Permissões de acesso</label>
@@ -8560,6 +8586,22 @@ function dispensarBannerPWA() {
   </div>
 </div>
 
+<!-- Modal Histórico de Acessos -->
+<div class="mov" id="m-historico-acessos">
+  <div class="mbox">
+    <div class="mh"><span class="mt">📋 Acessos — <span id="ha-nome"></span></span><button class="mx" onclick="closeM('m-historico-acessos')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="ha-uid"/>
+      <div class="fg">
+        <label class="fl">Dia</label>
+        <input type="date" class="fc" id="ha-data" onchange="carregarHistoricoAcessos()"/>
+      </div>
+      <div id="ha-lista"><div class="lc"><div class="spin"></div></div></div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-historico-acessos')">Fechar</button></div>
+  </div>
+</div>
+
 <!-- Modal Editar Permissões -->
 <div class="mov" id="m-edit-perms">
   <div class="mbox md">
@@ -8571,7 +8613,7 @@ function dispensarBannerPWA() {
         <select class="fc" id="ep-profissional">
           <option value="">Nenhum — acesso administrativo às páginas liberadas</option>
         </select>
-        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Se vincular, este usuário só verá a própria agenda e a própria comissão.</div>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Pra Admin, é só organização — não restringe nada, ele continua vendo tudo. Pros outros perfis, restringe: só vê a própria agenda e a própria comissão.</div>
       </div>
       <div style="font-size:.8rem;color:var(--t2);margin-bottom:14px">Selecione o que este usuário pode acessar:</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="ep-checkboxes">
