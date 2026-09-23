@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.81.0-corrige-permissao-estoque' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.82.0-admin-entrar-como-usuario' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -4219,6 +4219,27 @@ app.post('/api/usuarios', auth, async (req, res) => {
 });
 
 // Listar usuários do salão
+// Dono do salão entrando como um funcionário do próprio salão (diferente
+// do "entrar como" do super admin, que atravessa salões diferentes — esse
+// aqui é sempre dentro do mesmo salão, pra ver exatamente o que aquele
+// funcionário vê e ajudar a resolver algo na prática).
+app.post('/api/usuarios/:id/entrar-como', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (req.params.id === req.user.id) return res.status(422).json({ error: 'Você já está na sua própria conta' });
+  try {
+    const { data: usuarioAlvo } = await supabase.from('usuarios')
+      .select('id, nome, email, perfil').eq('id', req.params.id).eq('salao_id', req.salao_id).eq('ativo', true).single();
+    if (!usuarioAlvo) return res.status(404).json({ error: 'Usuário não encontrado nesse salão' });
+
+    const token = jwt.sign({ sub: usuarioAlvo.id }, JWT_SECRET, { expiresIn: '2h' });
+
+    console.error('[AUDITORIA] Admin ' + (req.user.nome || req.user.email) + ' (salão ' + req.salao_id + ') entrou como ' +
+      usuarioAlvo.nome + ' / ' + usuarioAlvo.email + ' em ' + new Date().toISOString());
+
+    res.json({ token, usuario_nome: usuarioAlvo.nome, usuario_email: usuarioAlvo.email });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   try {
