@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.57.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.58.0-frontend</div>
       </div>
     </div>
 
@@ -6040,10 +6040,14 @@ function openClientModal(tr) {
   document.getElementById('ac-cliente-id').value = c.id;
   document.getElementById('ac-cliente-nome').textContent = c.nome || '—';
   document.getElementById('cp-saldo-credito').textContent = 'Carregando...';
+  document.getElementById('cp-total-fiado').textContent = 'Carregando...';
   openM('m-cli-perfil');
   apiFetch('/api/clientes/' + c.id + '/credito')
     .then(function(r){ document.getElementById('cp-saldo-credito').textContent = brl(r.saldo || 0); })
     .catch(function(){ document.getElementById('cp-saldo-credito').textContent = brl(0); });
+  apiFetch('/api/clientes/' + c.id + '/fiado')
+    .then(function(r){ document.getElementById('cp-total-fiado').textContent = brl(r.total_fiado || 0); })
+    .catch(function(){ document.getElementById('cp-total-fiado').textContent = brl(0); });
   // Carrega histórico de agendamentos do cliente
   var hist = document.getElementById('cp-historico');
   hist.innerHTML = '<div class="lc"><div class="spin"></div></div>';
@@ -6070,6 +6074,33 @@ function abrirAdicionarCredito() {
   document.getElementById('ac-valor').value = '';
   document.getElementById('ac-motivo').value = '';
   openM('m-add-credito');
+}
+
+// ── FIADO MANUAL (pra quem tá migrando cliente de outro sistema e já
+// precisa registrar uma dívida existente, sem simular uma comanda) ──
+function abrirAdicionarFiado() {
+  document.getElementById('af-valor').value = '';
+  document.getElementById('af-descricao').value = '';
+  document.getElementById('ac-cliente-nome-fiado').textContent = document.getElementById('ac-cliente-nome').textContent;
+  openM('m-add-fiado');
+}
+
+function confirmarAdicionarFiado() {
+  var clienteId = document.getElementById('ac-cliente-id').value;
+  var valor = parseFloat(document.getElementById('af-valor').value);
+  var descricao = document.getElementById('af-descricao').value.trim();
+  if (!valor || valor <= 0) { toast('Informe um valor maior que zero','er'); return; }
+
+  var btn = document.querySelector('#m-add-fiado .btnp');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  apiFetch('/api/clientes/' + clienteId + '/fiado', { method: 'POST', body: { valor: valor, descricao: descricao || undefined } })
+    .then(function(r){
+      toast('Fiado lançado! Total em aberto: ' + brl(r.total_fiado), 'ok');
+      document.getElementById('cp-total-fiado').textContent = brl(r.total_fiado);
+      closeM('m-add-fiado');
+    })
+    .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
+    .finally(function(){ btn.disabled = false; btn.textContent = 'Lançar Fiado'; });
 }
 
 function confirmarAdicionarCredito() {
@@ -8917,12 +8948,20 @@ function dispensarBannerPWA() {
         <div class="kc c2"><div class="ki c2">💰</div><div><div class="kv" id="cp-gasto">R$ 0,00</div><div class="kl">Total gasto</div></div></div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--rs);padding:12px 14px;margin-bottom:10px">
         <div>
           <div style="font-size:.68rem;color:var(--t3);text-transform:uppercase">🎁 Saldo em crédito</div>
           <div style="font-size:1.1rem;font-weight:800;color:var(--ok)" id="cp-saldo-credito">R$ 0,00</div>
         </div>
         <button class="btn btns btnsm" id="cp-btn-add-credito" onclick="abrirAdicionarCredito()">+ Adicionar</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px">
+        <div>
+          <div style="font-size:.68rem;color:var(--t3);text-transform:uppercase">🧾 Fiado em aberto</div>
+          <div style="font-size:1.1rem;font-weight:800;color:var(--er)" id="cp-total-fiado">R$ 0,00</div>
+        </div>
+        <button class="btn btns btnsm" onclick="abrirAdicionarFiado()">+ Adicionar</button>
       </div>
 
       <div class="ct">Histórico de agendamentos</div>
@@ -8962,6 +9001,19 @@ function dispensarBannerPWA() {
       <div style="font-size:.68rem;color:var(--t3);background:var(--bg3);padding:8px 10px;border-radius:var(--rs)">⚠️ Isso só guarda o saldo pra usar depois — não lança como recebimento no Financeiro. Se esse dinheiro ainda não estiver registrado lá, lança separado.</div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-add-credito')">Cancelar</button><button class="btn btnp" onclick="confirmarAdicionarCredito()">Adicionar</button></div>
+  </div>
+</div>
+
+<div class="mov" id="m-add-fiado">
+  <div class="mbox sm">
+    <div class="mh"><span class="mt">🧾 Lançar Fiado</span><button class="mx" onclick="closeM('m-add-fiado')">✕</button></div>
+    <div class="mb">
+      <div style="font-size:.82rem;color:var(--t2);margin-bottom:14px">Cliente: <strong id="ac-cliente-nome-fiado">—</strong></div>
+      <div class="fg"><label class="fl">Valor devido (R$)*</label><input type="number" class="fc" id="af-valor" step="0.01" placeholder="Ex.: 50,00"/></div>
+      <div class="fg"><label class="fl">Descrição (opcional)</label><input class="fc" id="af-descricao" placeholder="Ex.: Corte + Barba, referente a 10/09"/></div>
+      <div style="font-size:.68rem;color:var(--t3);background:var(--bg3);padding:8px 10px;border-radius:var(--rs)">💡 Ideal pra registrar uma dívida que já existia (ex.: migrando de outro sistema) — entra igual ao fiado normal, aparece na aba Fiado pra cobrar depois.</div>
+    </div>
+    <div class="mf"><button class="btn btns" onclick="closeM('m-add-fiado')">Cancelar</button><button class="btn btnp" onclick="confirmarAdicionarFiado()">Lançar Fiado</button></div>
   </div>
 </div>
 
