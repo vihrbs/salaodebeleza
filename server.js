@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.82.0-admin-entrar-como-usuario' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.83.0-vinculo-admin-historico-acessos' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -533,6 +533,15 @@ function extrairMensagemErroResend(textoResposta) {
 // não tiver nada configurado ainda). Usada nos 3 jeitos de logar (senha,
 // Google, Apple) — antes só o login por senha calculava isso, e os dois
 // logins sociais devolviam permissões vazias pra usuário já existente.
+// Guarda um registro de CADA login (não só o "último acesso", que fica
+// sobrescrito a cada vez) — é o que permite o histórico de horários de
+// acesso por dia. Nunca deixa uma falha aqui quebrar o login em si.
+async function registrarAcesso(usuarioId, salaoId) {
+  try {
+    await supabase.from('acessos_log').insert({ usuario_id: usuarioId, salao_id: salaoId, acessado_em: new Date() });
+  } catch(e) { console.error('Erro ao registrar acesso (não impede o login):', e.message); }
+}
+
 async function buscarPermissoesUsuario(usuario) {
   if (usuario.perfil === 'admin') {
     return ['dashboard','agenda','clientes','financeiro','estoque','comissoes','profissionais','servicos','pacotes','config'];
@@ -765,6 +774,7 @@ app.post('/api/auth/google', async (req, res) => {
     if (usuario) {
       if (!usuario.google_id) await supabase.from('usuarios').update({ google_id: googleId }).eq('id', usuario.id);
       await supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id);
+      registrarAcesso(usuario.id, usuario.salao_id);
       usuario.permissoes = await buscarPermissoesUsuario(usuario);
       const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ token, usuario, novo_cadastro: false });
@@ -828,6 +838,7 @@ app.post('/api/auth/apple', async (req, res) => {
     if (usuario) {
       if (!usuario.apple_id) await supabase.from('usuarios').update({ apple_id: appleId }).eq('id', usuario.id);
       await supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id);
+      registrarAcesso(usuario.id, usuario.salao_id);
       usuario.permissoes = await buscarPermissoesUsuario(usuario);
       const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ token, usuario, novo_cadastro: false });
@@ -863,6 +874,7 @@ app.post('/api/auth/login', limitarTaxa(10, 15), async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Email ou senha incorretos' });
 
     await supabase.from('usuarios').update({ ultimo_login: new Date() }).eq('id', usuario.id);
+    registrarAcesso(usuario.id, usuario.salao_id);
 
     const token = jwt.sign({ sub: usuario.id }, JWT_SECRET, { expiresIn: '7d' });
     const { senha_hash, ...userSafe } = usuario;
@@ -4173,7 +4185,7 @@ app.post('/api/usuarios', auth, async (req, res) => {
 
     // Se veio profissional_id, valida que pertence a este salão
     let profissional_id_final = null;
-    if (perfil_final === 'custom' && profissional_id) {
+    if (profissional_id) {
       const { data: prof } = await supabase.from('profissionais')
         .select('id, email').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
       if (!prof) return res.status(422).json({ error: 'Profissional inválido para este salão' });
@@ -4240,6 +4252,30 @@ app.post('/api/usuarios/:id/entrar-como', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Histórico de horários de acesso de um usuário num dia específico —
+// usa a data enviada, ou hoje se não vier nenhuma. Só admin do mesmo
+// salão pode ver, e só de usuário do próprio salão.
+app.get('/api/usuarios/:id/acessos', auth, async (req, res) => {
+  if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  try {
+    const { data: alvo } = await supabase.from('usuarios')
+      .select('id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado nesse salão' });
+
+    const dataAlvo = req.query.data || new Date().toISOString().split('T')[0];
+    const inicioDia = dataAlvo + 'T03:00:00+00:00';
+    const fimDia = adicionarDia(dataAlvo) + 'T02:59:59+00:00';
+
+    const { data, error } = await supabase.from('acessos_log')
+      .select('acessado_em').eq('usuario_id', req.params.id).eq('salao_id', req.salao_id)
+      .gte('acessado_em', inicioDia).lte('acessado_em', fimDia)
+      .order('acessado_em', { ascending: false });
+    if (error) throw error;
+
+    res.json((data || []).map(a => a.acessado_em));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/usuarios', auth, async (req, res) => {
   if (req.user.perfil !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
   try {
@@ -4301,7 +4337,7 @@ app.put('/api/usuarios/:id/permissoes', auth, async (req, res) => {
     if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado' });
 
     let profissional_id_final = null;
-    if (alvo.perfil !== 'admin' && profissional_id) {
+    if (profissional_id) {
       const { data: prof } = await supabase.from('profissionais')
         .select('id, email').eq('id', profissional_id).eq('salao_id', req.salao_id).single();
       if (!prof) return res.status(422).json({ error: 'Profissional inválido para este salão' });
