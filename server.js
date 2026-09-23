@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.84.0-plano-atual-dinamico' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.85.0-lancar-fiado-manual' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1720,6 +1720,42 @@ app.get('/api/clientes/:id/credito', auth, async (req, res) => {
       .order('created_at', { ascending: false }).limit(30);
 
     res.json({ saldo: Number(cliente.saldo_credito || 0), historico: historico || [] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/clientes/:id/fiado', auth, requirePermissao('clientes'), async (req, res) => {
+  const { data: totalFiado, error } = await supabase.from('lancamentos')
+    .select('valor').eq('cliente_id', req.params.id).eq('salao_id', req.salao_id)
+    .eq('tipo', 'entrada').eq('pago', false);
+  if (error) return res.status(500).json({ error: error.message });
+  const total = (totalFiado || []).reduce((s, l) => s + Number(l.valor), 0);
+  res.json({ total_fiado: total });
+});
+
+app.post('/api/clientes/:id/fiado', auth, requirePermissao('clientes'), async (req, res) => {
+  const { valor, descricao } = req.body;
+  if (!valor || Number(valor) <= 0) return res.status(422).json({ error: 'Informe um valor maior que zero' });
+  try {
+    const { data: cliente } = await supabase.from('clientes')
+      .select('id').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+    // Lançamento manual de fiado — pra quem está migrando cliente de
+    // outro sistema e já tem uma dívida existente pra registrar, sem
+    // precisar simular uma comanda pra isso.
+    const { data: lancamento, error } = await supabase.from('lancamentos').insert({
+      salao_id: req.salao_id, cliente_id: req.params.id, tipo: 'entrada', categoria: 'Fiado',
+      descricao: descricao || 'Fiado lançado manualmente', valor: Number(valor),
+      data: new Date().toISOString().split('T')[0], pago: false
+    }).select().single();
+    if (error) throw error;
+
+    const { data: totalFiado } = await supabase.from('lancamentos')
+      .select('valor').eq('cliente_id', req.params.id).eq('salao_id', req.salao_id)
+      .eq('tipo', 'entrada').eq('pago', false);
+    const total = (totalFiado || []).reduce((s, l) => s + Number(l.valor), 0);
+
+    res.status(201).json({ lancamento, total_fiado: total });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
