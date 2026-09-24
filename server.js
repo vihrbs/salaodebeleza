@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.85.0-lancar-fiado-manual' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.86.0-marcar-falta-cliente' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2903,11 +2903,20 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
           .eq('cliente_id', data.cliente_id).eq('salao_id', req.salao_id).eq('status', 'concluido');
         const total_visitas = ags ? ags.length : 0;
         const total_gasto   = ags ? ags.reduce((s, a) => s + Number(a.valor_total || 0), 0) : 0;
+
+        // Conta faltas também — recalculado do zero a cada vez (não só
+        // incrementado), pra ficar sempre certo mesmo se um agendamento
+        // marcado como falta for reaberto/mudado de volta depois.
+        const { count: total_faltas } = await supabase
+          .from('agendamentos').select('id', { count: 'exact', head: true })
+          .eq('cliente_id', data.cliente_id).eq('salao_id', req.salao_id).eq('status', 'nao_compareceu');
+
         let novo_status = 'ativo';
         if (total_visitas >= 10) novo_status = 'vip';
         else if (total_visitas === 1) novo_status = 'novo';
         await supabase.from('clientes').update({
-          historico_count: total_visitas, total_gasto: total_gasto, status: novo_status
+          historico_count: total_visitas, total_gasto: total_gasto, status: novo_status,
+          faltas_count: total_faltas || 0
         }).eq('id', data.cliente_id).eq('salao_id', req.salao_id);
       } catch(e) { console.error('Erro ao recalcular stats do cliente após cancelamento:', e.message); }
     }
