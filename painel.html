@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.58.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.60.0-frontend</div>
       </div>
     </div>
 
@@ -1541,6 +1541,22 @@ function enterApp(nome, salon, mode, perfil, permissoes, email, emailVerificado,
   document.getElementById('uname').textContent = nome || 'Admin';
   document.getElementById('tb-salon').textContent = salon || '';
   aplicarPermissoes();
+
+  // Se o usuário não tem permissão de Dashboard, ele nunca deveria nem
+  // ver essa tela — mas o HTML já carrega com o Dashboard marcado como
+  // "página inicial" por padrão, então sem isso a pessoa via a tela dele
+  // (vazia, sem dado nenhum carregando) só porque foi a primeira a
+  // aparecer, mesmo com o botão certinho escondido no menu. Troca pra
+  // primeira página que ele realmente tem acesso.
+  if (USER_PERFIL !== 'admin' && USER_PERMISSOES.indexOf('dashboard') < 0) {
+    var primeiroBotaoVisivel = Array.prototype.find.call(
+      document.querySelectorAll('.sb-item[data-page]'),
+      function(btn){ return btn.style.display !== 'none'; }
+    );
+    if (primeiroBotaoVisivel) {
+      nav(primeiroBotaoVisivel.getAttribute('data-page'), primeiroBotaoVisivel);
+    }
+  }
   var b = document.getElementById('apibadge');
   b.textContent = mode; b.className = 'apibadge ' + (mode==='LIVE'?'live':'demo');
   document.getElementById('ag-dt').value = ''; // vazio = visão de "próximos 3 dias"
@@ -2071,6 +2087,7 @@ function renderDetalhesAgendamento(ag) {
       (ag.status === 'concluido' && USER_PERFIL === 'admin' ? '<button class="btn btns btnsm" onclick="abrirReabrirComanda(\'' + ag.id + '\')">🔓 Reabrir Comanda</button>' : '') +
       '<button class="btn btns btnsm" onclick="closeM(\'m-detalhes-ag\');abrirEditarClientePorId(\'' + (cliente.id||'') + '\')">✏️ Editar Cliente</button>' +
       (podeCancelar ? '<button class="btn btns btnsm" style="color:var(--er)" onclick="cancelarAgendamentoDetalhes(\'' + ag.id + '\')">🗑️ Cancelar Agendamento</button>' : '') +
+      (podeCancelar ? '<button class="btn btns btnsm" style="color:var(--warn)" onclick="marcarFaltaAgendamento(\'' + ag.id + '\')">🚫 Cliente Não Compareceu</button>' : '') +
     '</div>';
 
   // Produtos vendidos nessa comanda vêm separado (outra requisição), pra
@@ -2135,6 +2152,17 @@ function cancelarAgendamentoDetalhes(id) {
   apiFetch('/api/agendamentos/' + id + '/status', { method: 'PATCH', body: { status: 'cancelado' } })
     .then(function(){
       toast('Agendamento cancelado','ok');
+      closeM('m-detalhes-ag');
+      loadDashTl(); loadAgenda(); loadKPIs(); loadFiado();
+    })
+    .catch(function(e){ toast('Erro: ' + (e.message||'tente novamente'), 'er'); });
+}
+
+function marcarFaltaAgendamento(id) {
+  if (!confirm('Marcar que o cliente não compareceu? Se já estava pago, o lançamento financeiro correspondente será removido. Isso fica registrado no histórico de faltas do cliente.')) return;
+  apiFetch('/api/agendamentos/' + id + '/status', { method: 'PATCH', body: { status: 'nao_compareceu' } })
+    .then(function(){
+      toast('Marcado como falta','ok');
       closeM('m-detalhes-ag');
       loadDashTl(); loadAgenda(); loadKPIs(); loadFiado();
     })
@@ -3022,6 +3050,7 @@ function renderAgenda(list, agrupado) {
       '<td><div style="display:flex;gap:3px">' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'em_atendimento\')" title="Iniciar">▶</button>' +
       '<button class="btnic btn btnsm" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'concluido\')" title="Concluir">✅</button>' +
+      '<button class="btnic btn btnsm" style="color:var(--warn)" onclick="event.stopPropagation();marcarFaltaAgendamento(\'' + a.id + '\')" title="Cliente não compareceu">🚫</button>' +
       '<button class="btnic btn btnsm" style="color:var(--er)" onclick="event.stopPropagation();mudaStatus(\'' + a.id + '\',\'cancelado\')" title="Cancelar">✕</button>' +
       '</div></td></tr>';
   }
@@ -6037,6 +6066,7 @@ function openClientModal(tr) {
   document.getElementById('cp-obs').textContent    = c.observacoes    || '—';
   document.getElementById('cp-visitas').textContent = c.historico_count || 0;
   document.getElementById('cp-gasto').textContent   = brl(c.total_gasto || 0);
+  document.getElementById('cp-faltas').textContent  = c.faltas_count || 0;
   document.getElementById('ac-cliente-id').value = c.id;
   document.getElementById('ac-cliente-nome').textContent = c.nome || '—';
   document.getElementById('cp-saldo-credito').textContent = 'Carregando...';
@@ -8943,9 +8973,10 @@ function dispensarBannerPWA() {
         <div><label class="fl">Como conheceu</label><div style="font-size:.85rem;font-weight:600;margin-top:2px" id="cp-orig">—</div></div>
       </div>
       <div class="fg"><label class="fl">Observações</label><div style="font-size:.82rem;color:var(--t2);margin-top:2px" id="cp-obs">—</div></div>
-      <div class="kpis" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
+      <div class="kpis" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:16px">
         <div class="kc c1"><div class="ki c1">📅</div><div><div class="kv" id="cp-visitas">0</div><div class="kl">Visitas</div></div></div>
         <div class="kc c2"><div class="ki c2">💰</div><div><div class="kv" id="cp-gasto">R$ 0,00</div><div class="kl">Total gasto</div></div></div>
+        <div class="kc c3"><div class="ki c3">🚫</div><div><div class="kv" id="cp-faltas">0</div><div class="kl">Faltas</div></div></div>
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:var(--rs);padding:12px 14px;margin-bottom:10px">
