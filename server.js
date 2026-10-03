@@ -491,7 +491,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.86.0-marcar-falta-cliente' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.87.0-dividir-com-fiado' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -2648,12 +2648,24 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
 
   const ehPagamentoDividido = Array.isArray(formas_pagamento) && formas_pagamento.length > 1;
 
+  // Quando divide o pagamento e uma das formas é "Fiado", essa parte não
+  // foi recebida de verdade — fica separada do resto, que continua
+  // marcado como realmente pago. Sem isso, dividir R$50 Dinheiro + R$10
+  // Fiado registrava os R$60 inteiros como recebidos, ou (se marcasse
+  // como não pago) perdia o controle dos R$50 que já entraram de
+  // verdade.
+  const linhaFiadoDividido = ehPagamentoDividido ? formas_pagamento.find(fp => fp.forma === 'Fiado') : null;
+  const valorFiadoDividido = linhaFiadoDividido ? Number(linhaFiadoDividido.valor || 0) : 0;
+  const formasPagasDividido = ehPagamentoDividido ? formas_pagamento.filter(fp => fp.forma !== 'Fiado') : formas_pagamento;
+
   // Se veio pagamento dividido, o "forma_pgto" que se guarda no registro
   // principal vira um resumo textual (ex.: "PIX + Dinheiro") — só pra
   // continuar aparecendo algo legível em telas que só mostram uma forma.
   // O detalhamento de verdade (quem pagou quanto) fica em formas_pagamento.
+  // A parte "Fiado" não entra nesse resumo — ela vira um lançamento
+  // separado, não uma forma de pagamento de verdade.
   const formaPgtoFinal = ehPagamentoDividido
-    ? formas_pagamento.map(fp => fp.forma).join(' + ')
+    ? (formasPagasDividido.length ? formasPagasDividido.map(fp => fp.forma).join(' + ') : 'Fiado')
     : forma_pgto;
 
   const updates = { status };
@@ -2804,9 +2816,23 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
       });
     }
 
-    // Atualiza lancamento — já reflete o valor com desconto (se algum foi aplicado)
-    await supabase.from('lancamentos')
-      .update({ pago: marcarComoPago, forma_pgto: formaPgtoFinal, valor: data.valor_total }).eq('agendamento_id', req.params.id);
+    // Atualiza lancamento — já reflete o valor com desconto (se algum foi
+    // aplicado). Se parte foi dividida como Fiado, o lançamento principal
+    // só leva a parte que entrou de verdade — o resto vira um lançamento
+    // novo, separado, ainda em aberto.
+    const valorPagoDeVerdade = Number((Number(data.valor_total || 0) - valorFiadoDividido).toFixed(2));
+    const { data: lancamentoPrincipal } = await supabase.from('lancamentos')
+      .update({ pago: marcarComoPago, forma_pgto: formaPgtoFinal, valor: valorPagoDeVerdade })
+      .eq('agendamento_id', req.params.id).select().maybeSingle();
+
+    if (valorFiadoDividido > 0 && lancamentoPrincipal) {
+      await supabase.from('lancamentos').insert({
+        salao_id: req.salao_id, cliente_id: data.cliente_id, tipo: lancamentoPrincipal.tipo,
+        categoria: lancamentoPrincipal.categoria, descricao: (lancamentoPrincipal.descricao || 'Atendimento') + ' (parte fiado)',
+        valor: valorFiadoDividido, data: lancamentoPrincipal.data, pago: false,
+        agendamento_id: req.params.id
+      });
+    }
 
     // Aplica o desconto da taxa da maquininha na comissão do profissional
     // (só se o pagamento foi no cartão, o salão configurou uma taxa, E o
