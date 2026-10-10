@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.61.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.62.0-frontend</div>
       </div>
     </div>
 
@@ -4864,6 +4864,7 @@ function toggleRepetirAgendamento() {
 
 // Abre o modal de novo agendamento já com o select de "vender pacote" atualizado
 function abrirNovoAgendamento() {
+  var hm = document.getElementById('ag-h-manual'); if (hm) hm.value = '';
   var sel = document.getElementById('ag-vender-pacote-id');
   if (sel) {
     sel.innerHTML = '<option value="">Selecionar pacote...</option>' +
@@ -5615,7 +5616,8 @@ function saveAg() {
   var cli  = document.getElementById('ag-cli').value;
   var pro  = document.getElementById('ag-pro').value;
   var data = document.getElementById('ag-d').value;
-  var hora = document.getElementById('ag-h').value;
+  var horaManual = (document.getElementById('ag-h-manual')||{}).value;
+  var hora = horaManual || document.getElementById('ag-h').value;
   var svcs = Array.from(document.querySelectorAll('#ag-svcs .svc-pill.on')).map(function(el){ return el.dataset.id; });
   if (!cli || !pro || !svcs.length) { toast('Preencha cliente, profissional e pelo menos 1 serviço','er'); return; }
 
@@ -7958,6 +7960,8 @@ function dispensarBannerPWA() {
             <option>17:00</option><option>17:30</option>
           </select>
           <div style="font-size:.66rem;color:var(--t3);margin-top:4px" id="ag-h-aviso"></div>
+          <div style="margin-top:8px"><label class="fl" style="font-size:.66rem">Ou digite outro horário (ex.: fora da lista ou após o fechamento)</label>
+            <input type="time" class="fc" id="ag-h-manual" step="300"/></div>
         </div>
       </div>
       <div class="fg"><label class="fl">Origem</label>
