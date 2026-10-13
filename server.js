@@ -244,6 +244,20 @@ function profissionalFiltroDoUsuario(user) {
   return user.profissional_id || null;
 }
 
+// Igual a profissionalFiltroDoUsuario, mas respeitando a permissão
+// "ver_todas_comandas": o admin pode liberar pra um profissional enxergar
+// e fechar as comandas dos colegas (ex.: quem fica no caixa).
+async function filtroProfissionalComandas(user) {
+  const filtro = profissionalFiltroDoUsuario(user);
+  if (!filtro) return null;
+  try {
+    const { data: perm } = await supabase.from('usuario_permissoes')
+      .select('permissoes').eq('usuario_id', user.id).maybeSingle();
+    if (perm && Array.isArray(perm.permissoes) && perm.permissoes.includes('ver_todas_comandas')) return null;
+  } catch(e) {}
+  return filtro;
+}
+
 // Bloqueia rotas que só quem é DONO DA PLATAFORMA (não só admin de UM
 // salão) pode acessar — usado no painel de gerenciar todos os clientes
 // (salões) do Beleza Pro. Diferente de "admin", que só enxerga o próprio
@@ -491,7 +505,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.87.0-dividir-com-fiado' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.88.0-credito-faturamento' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1760,19 +1774,33 @@ app.post('/api/clientes/:id/fiado', auth, requirePermissao('clientes'), async (r
 });
 
 app.post('/api/clientes/:id/credito', auth, requirePermissao('clientes'), async (req, res) => {
-  const { valor, motivo } = req.body;
+  const { valor, motivo, forma_pgto } = req.body;
   if (!valor || Number(valor) <= 0) return res.status(422).json({ error: 'Informe um valor maior que zero' });
+  const formasValidas = ['PIX', 'Dinheiro', 'Cartão Débito', 'Cartão Crédito'];
+  if (forma_pgto && !formasValidas.includes(forma_pgto)) return res.status(422).json({ error: 'Forma de pagamento inválida' });
   try {
     const { data: cliente } = await supabase.from('clientes')
       .select('saldo_credito').eq('id', req.params.id).eq('salao_id', req.salao_id).single();
     if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-    const novoSaldo = Number(cliente.saldo_credito || 0) + Number(valor);
+    const novoSaldo = Number((Number(cliente.saldo_credito || 0) + Number(valor)).toFixed(2));
     await supabase.from('clientes').update({ saldo_credito: novoSaldo }).eq('id', req.params.id);
     await supabase.from('movimentacoes_credito_cliente').insert({
       salao_id: req.salao_id, cliente_id: req.params.id, valor: Number(valor),
       tipo: 'adicionado', motivo: motivo || null, criado_por: req.user.id
     });
+
+    // O dinheiro que o cliente deixou como crédito entra no faturamento
+    // NO DIA em que foi recebido, na forma de pagamento usada (PIX,
+    // débito...). Sem comissão pra ninguém — a comissão só nasce quando o
+    // crédito for usado num atendimento.
+    if (forma_pgto) {
+      await supabase.from('lancamentos').insert({
+        salao_id: req.salao_id, cliente_id: req.params.id, tipo: 'entrada', categoria: 'Crédito de cliente',
+        descricao: 'Crédito deixado pelo cliente' + (motivo ? ' — ' + motivo : ''),
+        valor: Number(valor), data: dataAtualBrasil(), pago: true, forma_pgto
+      });
+    }
 
     res.status(201).json({ saldo: novoSaldo });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -1909,7 +1937,7 @@ app.get('/api/agendamentos', auth, async (req, res) => {
 
   // Funcionário vinculado a um profissional só enxerga a própria agenda,
   // mesmo que tente passar outro profissional_id na query string.
-  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  const filtroObrigatorio = await filtroProfissionalComandas(req.user);
   if (filtroObrigatorio) {
     q = q.eq('profissional_id', filtroObrigatorio);
   } else if (req.query.profissional_id) {
@@ -2676,7 +2704,7 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     .eq('id', req.params.id).eq('salao_id', req.salao_id);
 
   // Funcionário vinculado só pode alterar status de agendamentos da própria agenda
-  const filtroObrigatorio = profissionalFiltroDoUsuario(req.user);
+  const filtroObrigatorio = await filtroProfissionalComandas(req.user);
   if (filtroObrigatorio) query = query.eq('profissional_id', filtroObrigatorio);
 
   const { data, error } = await query.select().single();
@@ -2824,6 +2852,24 @@ app.patch('/api/agendamentos/:id/status', auth, async (req, res) => {
     const { data: lancamentoPrincipal } = await supabase.from('lancamentos')
       .update({ pago: marcarComoPago, forma_pgto: formaPgtoFinal, valor: valorPagoDeVerdade })
       .eq('agendamento_id', req.params.id).select().maybeSingle();
+
+    // Parte paga com saldo de crédito: vira lançamento próprio (forma
+    // Credito_Cliente), que não conta como faturamento do dia — o dinheiro
+    // já entrou quando o crédito foi deixado. O principal fica só com o
+    // que entrou de verdade agora.
+    if (ehPagamentoDividido && valorCreditoUsado > 0 && lancamentoPrincipal) {
+      const formasSemCredito = formasPagasDividido.filter(fp => fp.forma !== 'Credito_Cliente').map(fp => fp.forma);
+      await supabase.from('lancamentos').update({
+        valor: Number((valorPagoDeVerdade - valorCreditoUsado).toFixed(2)),
+        forma_pgto: formasSemCredito.length ? formasSemCredito.join(' + ') : 'Credito_Cliente'
+      }).eq('id', lancamentoPrincipal.id);
+      await supabase.from('lancamentos').insert({
+        salao_id: req.salao_id, cliente_id: data.cliente_id, tipo: lancamentoPrincipal.tipo,
+        categoria: lancamentoPrincipal.categoria, descricao: (lancamentoPrincipal.descricao || 'Atendimento') + ' (parte paga com crédito)',
+        valor: valorCreditoUsado, data: lancamentoPrincipal.data, pago: true, forma_pgto: 'Credito_Cliente',
+        agendamento_id: req.params.id
+      });
+    }
 
     if (valorFiadoDividido > 0 && lancamentoPrincipal) {
       await supabase.from('lancamentos').insert({
@@ -2987,7 +3033,7 @@ app.get('/api/dashboard/kpis', auth, async (req, res) => {
 
   const [{ count: agHoje }, { data: lancHoje }, { count: clientes }, { data: novos }] = await Promise.all([
     qAgHoje,
-    supabase.from('lancamentos').select('tipo, valor')
+    supabase.from('lancamentos').select('tipo, valor, forma_pgto')
       .eq('salao_id', req.salao_id).eq('data', hoje).eq('pago', true),
     supabase.from('clientes').select('id', { count: 'exact' })
       .eq('salao_id', req.salao_id).eq('ativo', true),
@@ -2995,7 +3041,7 @@ app.get('/api/dashboard/kpis', auth, async (req, res) => {
       .eq('salao_id', req.salao_id).gte('created_at', inicioMes + 'T03:00:00+00:00'),
   ]);
   const faturamento = (lancHoje || [])
-    .filter(l => l.tipo === 'entrada').reduce((s, l) => s + Number(l.valor), 0);
+    .filter(l => l.tipo === 'entrada' && l.forma_pgto !== 'Credito_Cliente').reduce((s, l) => s + Number(l.valor), 0);
   res.json({ agendamentos_hoje: agHoje || 0, faturamento_hoje: faturamento,
              clientes_ativos: clientes || 0, novos_clientes_mes: novos?.length || 0 });
 });
@@ -3053,7 +3099,8 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       { data: lancamentosEntrada },
       { data: lancamentosSaida },
       { data: agendamentosConcluidos },
-      { data: movimentacoesVenda }
+      { data: movimentacoesVenda },
+      { data: lancamentosFiadoDia }
     ] = await Promise.all([
       // Entradas pagas no dia — usadas pro faturado total e pra separar por forma de pagamento
       supabase.from('lancamentos').select('valor, forma_pgto')
@@ -3073,15 +3120,26 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       // foi vendido, e também pra somar na comissão de cada profissional
       supabase.from('movimentacoes_estoque').select('quantidade, produto_id, comissao_valor, profissional_id, produtos(nome)')
         .eq('salao_id', req.salao_id).eq('tipo', 'venda')
-        .gte('created_at', inicioDia).lte('created_at', fimDia)
+        .gte('created_at', inicioDia).lte('created_at', fimDia),
+      // Fiado lançado no dia (ainda não pago) — só informativo, não é faturamento
+      supabase.from('lancamentos').select('valor')
+        .eq('salao_id', req.salao_id).eq('data', data).eq('tipo', 'entrada').eq('pago', false)
     ]);
 
-    const totalFaturado = (lancamentosEntrada || []).reduce((s, l) => s + Number(l.valor || 0), 0);
+    // Parte paga com saldo de crédito do cliente NÃO é faturamento do dia
+    // (o dinheiro já entrou no dia em que o crédito foi deixado). Fica só
+    // como informação.
+    const entradasCredito = (lancamentosEntrada || []).filter(l => l.forma_pgto === 'Credito_Cliente');
+    const creditoUsadoNoDia = entradasCredito.reduce((s, l) => s + Number(l.valor || 0), 0);
+    const lancamentosEntradaReal = (lancamentosEntrada || []).filter(l => l.forma_pgto !== 'Credito_Cliente');
+    const fiadoDoDia = (lancamentosFiadoDia || []).reduce((s, l) => s + Number(l.valor || 0), 0);
+
+    const totalFaturado = lancamentosEntradaReal.reduce((s, l) => s + Number(l.valor || 0), 0);
 
     // Agrupa por forma de pagamento — junta variações de nome (ex.: "Cartão
     // Débito" e "Débito") só pelo essencial: Pix, Débito, Crédito, Dinheiro, Outros
     const pagamentosPorForma = {};
-    (lancamentosEntrada || []).forEach(l => {
+    lancamentosEntradaReal.forEach(l => {
       const forma = l.forma_pgto || 'Não informado';
       pagamentosPorForma[forma] = (pagamentosPorForma[forma] || 0) + Number(l.valor || 0);
     });
@@ -3153,6 +3211,8 @@ app.get('/api/dashboard/fechamento-caixa', auth, async (req, res) => {
       total_lucro: totalLucro,
       total_faturado: totalFaturado,
       pagamentos_por_forma: pagamentosPorForma,
+      credito_usado_no_dia: creditoUsadoNoDia,
+      fiado_do_dia: fiadoDoDia,
       total_clientes: clientesUnicos,
       comandas_fechadas: comandasFechadas,
       ticket_medio: ticketMedio,
@@ -3174,13 +3234,13 @@ app.get('/api/financeiro/resumo', auth, requirePermissao('financeiro'), async (r
   const y = hoje.getFullYear(), m = hoje.getMonth() + 1;
   const inicio = `${y}-${String(m).padStart(2,'0')}-01`;
   const fim = new Date(y, m, 0).toISOString().split('T')[0];
-  const { data } = await supabase.from('lancamentos').select('tipo, valor, pago')
+  const { data } = await supabase.from('lancamentos').select('tipo, valor, pago, forma_pgto')
     .eq('salao_id', req.salao_id).gte('data', inicio).lte('data', fim);
   // "Receita" só conta o que já foi pago de verdade — fiado em aberto não
   // entra aqui até a pessoa realmente pagar (mesmo que o atendimento em si
   // já tenha acontecido nesse mês). Antes contava fiado como receita na
   // hora, mesmo sem o dinheiro ter entrado ainda.
-  const receita = (data || []).filter(l => l.tipo === 'entrada' && l.pago).reduce((s, l) => s + Number(l.valor), 0);
+  const receita = (data || []).filter(l => l.tipo === 'entrada' && l.pago && l.forma_pgto !== 'Credito_Cliente').reduce((s, l) => s + Number(l.valor), 0);
   const despesa = (data || []).filter(l => l.tipo === 'saida').reduce((s, l) => s + Number(l.valor), 0);
 
   // "A receber" é dívida em aberto de VERDADE — não faz sentido limitar
