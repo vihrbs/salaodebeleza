@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.62.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.64.0-frontend</div>
       </div>
     </div>
 
@@ -2786,6 +2786,25 @@ function loadResumoDiaComandas() {
     .catch(function(){ el.innerHTML = '<div style="font-size:.78rem;font-weight:700;margin-bottom:12px">📊 Resumo do dia</div><div class="empty" style="font-size:.74rem">Erro ao carregar.</div>'; });
 }
 
+// Linhas do resumo por forma de pagamento: PIX, Débito, Crédito, Dinheiro,
+// Fiado (em aberto no dia) e, só como informação, saldo de crédito usado.
+function resumoFormasHtml(r) {
+  var pf = r.pagamentos_por_forma || {};
+  function soma(re) { var t = 0; Object.keys(pf).forEach(function(k){ if (re.test(k)) t += Number(pf[k] || 0); }); return t; }
+  var linhas = [
+    ['💠 PIX', soma(/pix/i)], ['💳 Débito', soma(/d[eé]bito/i)], ['💳 Crédito', soma(/cr[eé]dito/i)],
+    ['💵 Dinheiro', soma(/dinheiro/i)], ['🧾 Fiado (a receber)', Number(r.fiado_do_dia || 0)]
+  ];
+  var html = '<div style="font-size:.66rem;color:var(--t3);margin:8px 0 2px;text-transform:uppercase;letter-spacing:.04em">Por forma de pagamento</div>';
+  linhas.forEach(function(l){
+    html += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.76rem;border-bottom:1px solid var(--bd2)"><span>' + l[0] + '</span><strong>' + brl(l[1]) + '</strong></div>';
+  });
+  if (Number(r.credito_usado_no_dia || 0) > 0) {
+    html += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.72rem;color:var(--t3)"><span>🎁 Saldo de crédito usado (não soma)</span><strong>' + brl(r.credito_usado_no_dia) + '</strong></div>';
+  }
+  return html;
+}
+
 function renderResumoDiaComandas(r) {
   var el = document.getElementById('cmd-resumo-dia');
   if (!el) return;
@@ -2798,6 +2817,7 @@ function renderResumoDiaComandas(r) {
       '<div style="font-size:1.1rem;font-weight:800;color:var(--ok)">' + brl(r.total_lucro) + '</div>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;border-bottom:1px solid var(--bd2)"><span>Faturado</span><strong>' + brl(r.total_faturado) + '</strong></div>' +
+    resumoFormasHtml(r) +
     '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;border-bottom:1px solid var(--bd2)"><span>Comandas</span><strong>' + r.comandas_fechadas + '</strong></div>' +
     '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;border-bottom:1px solid var(--bd2)"><span>Ticket médio</span><strong>' + brl(r.ticket_medio) + '</strong></div>' +
     '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:.78rem;color:var(--warn)"><span>Comissão a pagar</span><strong>' + brl(r.total_comissoes) + '</strong></div>' +
@@ -6106,6 +6126,7 @@ function openClientModal(tr) {
 function abrirAdicionarCredito() {
   document.getElementById('ac-valor').value = '';
   document.getElementById('ac-motivo').value = '';
+  document.getElementById('ac-forma').value = 'PIX';
   openM('m-add-credito');
 }
 
@@ -6144,7 +6165,7 @@ function confirmarAdicionarCredito() {
 
   var btn = document.querySelector('#m-add-credito .btnp');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  apiFetch('/api/clientes/' + clienteId + '/credito', { method: 'POST', body: { valor: valor, motivo: motivo || undefined } })
+  apiFetch('/api/clientes/' + clienteId + '/credito', { method: 'POST', body: { valor: valor, motivo: motivo || undefined, forma_pgto: document.getElementById('ac-forma').value || undefined } })
     .then(function(r){
       toast('Crédito adicionado! Novo saldo: ' + brl(r.saldo), 'ok');
       document.getElementById('cp-saldo-credito').textContent = brl(r.saldo);
@@ -7284,10 +7305,11 @@ function criarUsuario() {
     });
     if (document.getElementById('nu-fechar-comissao').checked) permissoes.push('fechar_comissao');
     if (document.getElementById('nu-estoque-gerenciar').checked) permissoes.push('estoque_gerenciar');
+    if (document.getElementById('nu-ver-todas-comandas').checked) permissoes.push('ver_todas_comandas');
     var profSel = document.getElementById('nu-profissional');
     profissionalId = profSel ? profSel.value : '';
   } else {
-    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','estoque_gerenciar','comissoes','profissionais','servicos','pacotes','config','fechar_comissao'];
+    permissoes = ['dashboard','agenda','clientes','financeiro','estoque','estoque_gerenciar','comissoes','profissionais','servicos','pacotes','config','fechar_comissao','ver_todas_comandas'];
   }
 
   var btn = document.querySelector('#m-novo-user .btnp');
@@ -7425,6 +7447,7 @@ function abrirEditPerms(uid, nome) {
     });
     document.getElementById('ep-fechar-comissao').checked = perms.indexOf('fechar_comissao') >= 0;
     document.getElementById('ep-estoque-gerenciar').checked = perms.indexOf('estoque_gerenciar') >= 0;
+    document.getElementById('ep-ver-todas-comandas').checked = perms.indexOf('ver_todas_comandas') >= 0;
     if (selProf) selProf.value = (u && u.profissional_id) ? u.profissional_id : '';
   }).catch(function() {
     // Se não conseguir buscar, abre com todos desmarcados
@@ -7439,6 +7462,7 @@ function salvarEditPerms() {
   document.querySelectorAll('#ep-checkboxes input[type=checkbox]:checked').forEach(function(cb){ perms.push(cb.value); });
   if (document.getElementById('ep-fechar-comissao').checked) perms.push('fechar_comissao');
   if (document.getElementById('ep-estoque-gerenciar').checked) perms.push('estoque_gerenciar');
+  if (document.getElementById('ep-ver-todas-comandas').checked) perms.push('ver_todas_comandas');
   if (!perms.length) { toast('Selecione pelo menos uma permissão','er'); return; }
   var selProf = document.getElementById('ep-profissional');
   var profissionalId = selProf ? selProf.value : '';
@@ -8673,6 +8697,12 @@ function dispensarBannerPWA() {
         </label>
         <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Sem isso, quem tem acesso a Estoque só vê os produtos e registra consumo — não altera quantidade na mão.</div>
       </div>
+      <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px;margin-top:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="nu-ver-todas-comandas" value="ver_todas_comandas" style="accent-color:var(--warn)"/> 🧾 Pode ver e fechar as comandas de todos os profissionais
+        </label>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Sem isso, o profissional vinculado só vê e fecha as próprias comandas. Comissões e Dashboard continuam só dele.</div>
+      </div>
     </div>
     <div class="mf">
       <button class="btn btns" onclick="closeM('m-novo-user')">Cancelar</button>
@@ -8753,6 +8783,12 @@ function dispensarBannerPWA() {
           <input type="checkbox" id="ep-estoque-gerenciar" value="estoque_gerenciar" style="accent-color:var(--warn)" onchange="if(this.checked)document.getElementById('ep-estoque').checked=true"/> 📦 Pode gerenciar estoque (criar, editar, excluir produto, ajustar quantidade manualmente e vender pro cliente)
         </label>
         <div style="font-size:.68rem;color:var(--t3);margin-top:6px;margin-left:26px">Sem isso marcado, quem tem acesso a Estoque só consegue ver os produtos e registrar consumo (produto usado num atendimento) — não consegue aumentar/diminuir a quantidade na mão.</div>
+      </div>
+      <div class="fg" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:var(--rs);padding:12px;margin-top:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600">
+          <input type="checkbox" id="ep-ver-todas-comandas" value="ver_todas_comandas" style="accent-color:var(--warn)"/> 🧾 Pode ver e fechar as comandas de todos os profissionais
+        </label>
+        <div style="font-size:.7rem;color:var(--t3);margin-top:4px">Sem isso, o profissional vinculado só vê e fecha as próprias comandas. Comissões e Dashboard continuam só dele.</div>
       </div>
     </div>
     <div class="mf">
@@ -9034,7 +9070,14 @@ function dispensarBannerPWA() {
       <div style="font-size:.82rem;color:var(--t2);margin-bottom:14px">Cliente: <strong id="ac-cliente-nome">—</strong></div>
       <div class="fg"><label class="fl">Valor (R$)*</label><input type="number" class="fc" id="ac-valor" step="0.01" placeholder="Ex.: 80,00"/></div>
       <div class="fg"><label class="fl">Motivo (opcional)</label><input class="fc" id="ac-motivo" placeholder="Ex.: Pagou adiantado e não usou tudo"/></div>
-      <div style="font-size:.68rem;color:var(--t3);background:var(--bg3);padding:8px 10px;border-radius:var(--rs)">⚠️ Isso só guarda o saldo pra usar depois — não lança como recebimento no Financeiro. Se esse dinheiro ainda não estiver registrado lá, lança separado.</div>
+      <div class="fg"><label class="fl">Forma de recebimento*</label>
+        <select class="fc" id="ac-forma">
+          <option value="PIX">💠 PIX</option><option value="Dinheiro">💵 Dinheiro</option>
+          <option value="Cartão Débito">💳 Débito</option><option value="Cartão Crédito">💳 Crédito</option>
+          <option value="">Não lançar no Financeiro (já foi lançado antes)</option>
+        </select>
+      </div>
+      <div style="font-size:.68rem;color:var(--t3);background:var(--bg3);padding:8px 10px;border-radius:var(--rs)">💡 O valor entra no faturamento de HOJE, na forma escolhida, sem comissão pra ninguém. Quando o cliente usar o saldo, o profissional é comissionado, mas o valor não soma de novo no faturamento do dia.</div>
     </div>
     <div class="mf"><button class="btn btns" onclick="closeM('m-add-credito')">Cancelar</button><button class="btn btnp" onclick="confirmarAdicionarCredito()">Adicionar</button></div>
   </div>
