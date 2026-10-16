@@ -505,7 +505,7 @@ app.get('/painel-direto', (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.88.0-credito-faturamento' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '4.89.0-cpf-endereco' }));
 
 // ── VERIFICAÇÃO DE E-MAIL ─────────────────────────────
 function emailValido(email) {
@@ -1852,7 +1852,19 @@ app.get('/api/clientes/inativos', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// CPF: guarda só os dígitos e exige 11 (vazio é permitido).
+function normalizarCpfCliente(body) {
+  if (body.cpf === undefined) return null;
+  if (body.cpf === null || String(body.cpf).trim() === '') { body.cpf = null; return null; }
+  const d = String(body.cpf).replace(/\D/g, '');
+  if (d.length !== 11) return 'CPF inválido — precisa ter 11 números';
+  body.cpf = d;
+  return null;
+}
+
 app.post('/api/clientes', auth, async (req, res) => {
+  const erroCpf = normalizarCpfCliente(req.body);
+  if (erroCpf) return res.status(422).json({ error: erroCpf });
   const { data, error } = await supabase
     .from('clientes')
     .insert({ ...req.body, salao_id: req.salao_id })
@@ -1908,6 +1920,8 @@ app.post('/api/clientes/lote', auth, async (req, res) => {
 });
 
 app.put('/api/clientes/:id', auth, async (req, res) => {
+  const erroCpf = normalizarCpfCliente(req.body);
+  if (erroCpf) return res.status(422).json({ error: erroCpf });
   const { data, error } = await supabase
     .from('clientes').update(req.body)
     .eq('id', req.params.id).eq('salao_id', req.salao_id).select().single();
