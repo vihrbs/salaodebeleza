@@ -556,7 +556,7 @@ select.fc option{background:var(--bg2)}
           <button class="sb-logout" onclick="abrirAlterarSenha()" title="Alterar senha" style="margin-right:2px">🔑</button>
           <button class="sb-logout" onclick="doLogout()" title="Sair">⏻</button>
         </div>
-        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.64.0-frontend</div>
+        <div style="text-align:center;font-size:.6rem;color:var(--t3);margin-top:8px;opacity:.6">v4.65.0-frontend</div>
       </div>
     </div>
 
@@ -645,6 +645,7 @@ select.fc option{background:var(--bg2)}
         <select class="fc" id="ag-prf" style="width:auto" onchange="loadAgenda()"><option value="">Todos profissionais</option></select>
         <button class="btn btns btnsm" onclick="document.getElementById('ag-dt').value='';loadAgenda()">Próximos 3 dias</button>
         <button class="btn btns btnsm" id="ag-modo-btn" onclick="alternarModoAgenda()">📋 Ver como lista</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:.74rem;color:var(--t2);cursor:pointer"><input type="checkbox" id="ag-mostrar-cancelados" onchange="alternarMostrarCancelados()"/> Mostrar cancelados</label>
         <button class="btn btnp" style="margin-left:auto" onclick="abrirNovoAgendamento()">+ Novo Agendamento</button>
       </div>
 
@@ -2955,9 +2956,18 @@ function loadAgenda() {
 
 // Decide se mostra a grade (calendário por profissional) ou a lista simples,
 // e guarda o último resultado pra poder alternar sem recarregar da API.
-function exibirAgenda(list, agrupado) {
-  AGENDA_ULTIMA_LISTA = list;
+var AGENDA_MOSTRAR_CANCELADOS = false;
+function alternarMostrarCancelados() {
+  AGENDA_MOSTRAR_CANCELADOS = document.getElementById('ag-mostrar-cancelados').checked;
+  exibirAgenda(AGENDA_ULTIMA_LISTA, AGENDA_ULTIMA_AGRUPADA);
+}
+
+function exibirAgenda(listaCompleta, agrupado) {
+  AGENDA_ULTIMA_LISTA = listaCompleta;
   AGENDA_ULTIMA_AGRUPADA = agrupado;
+  // Cancelado não ocupa horário (o servidor já ignora), então some da
+  // agenda por padrão pra não parecer que o horário continua tomado.
+  var list = (listaCompleta || []).filter(function(a){ return AGENDA_MOSTRAR_CANCELADOS || a.status !== 'cancelado'; });
   var mostrarGrade = !agrupado && AGENDA_MODO === 'grade';
   document.getElementById('ag-grade-card').style.display = mostrarGrade ? 'block' : 'none';
   document.getElementById('ag-lista-card').style.display = mostrarGrade ? 'none' : 'block';
@@ -5705,6 +5715,8 @@ function saveCli() {
   btn.disabled=true; btn.textContent='Salvando...';
   var body = {nome:nome,telefone:document.getElementById('cli-t').value,email:document.getElementById('cli-e').value,observacoes:document.getElementById('cli-o').value,como_conheceu:document.getElementById('cli-k').value};
   if (document.getElementById('cli-nasc').value) body.data_nascimento = document.getElementById('cli-nasc').value;
+  var cpfNovo = document.getElementById('cli-cpf').value.trim(); if (cpfNovo) body.cpf = cpfNovo;
+  var endNovo = document.getElementById('cli-end').value.trim(); if (endNovo) body.endereco = endNovo;
   (DEMO ? Promise.resolve({id:'demo_'+Date.now(),nome:nome,telefone:body.telefone,email:body.email,historico_count:0,total_gasto:0,status:'novo',cor:COLS[Math.floor(Math.random()*COLS.length)]}) : apiFetch('/api/clientes',{method:'POST',body:body}))
   .then(function(r){
     toast('Cliente cadastrado! ✅','ok');
@@ -5713,6 +5725,8 @@ function saveCli() {
     document.getElementById('cli-t').value='';
     document.getElementById('cli-e').value='';
     document.getElementById('cli-o').value='';
+    document.getElementById('cli-cpf').value='';
+    document.getElementById('cli-end').value='';
     if (DEMO && r) { D.clis.push(r); CLIS=D.clis; renderCli(CLIS); } else { loadClientes(); }
     loadKPIs();
   }).catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -6590,6 +6604,10 @@ function editCli(btn) {
   document.getElementById('ecl-t').value    = c.telefone || '';
   document.getElementById('ecl-e').value    = c.email || '';
   document.getElementById('ecl-o').value    = c.observacoes || '';
+  document.getElementById('ecl-cpf').value  = c.cpf || '';
+  document.getElementById('ecl-end').value  = c.endereco || '';
+  document.getElementById('ecl-cpf').dataset.tinha = c.cpf ? '1' : '';
+  document.getElementById('ecl-end').dataset.tinha = c.endereco ? '1' : '';
   document.getElementById('ecl-nasc').value = c.data_nascimento ? c.data_nascimento.split('T')[0] : '';
   document.getElementById('ecl-s').value    = c.status || 'ativo';
   openM('m-edit-cli');
@@ -6610,6 +6628,12 @@ function updateCli() {
   };
   var nasc = document.getElementById('ecl-nasc').value;
   if (nasc) body.data_nascimento = nasc;
+  // Só manda CPF/endereço quando preenchidos (ou quando já existiam e foram apagados),
+  // pra não quebrar quem ainda não rodou a migração das colunas.
+  var cpfEd = document.getElementById('ecl-cpf').value.trim();
+  var endEd = document.getElementById('ecl-end').value.trim();
+  if (cpfEd || document.getElementById('ecl-cpf').dataset.tinha) body.cpf = cpfEd || null;
+  if (endEd || document.getElementById('ecl-end').dataset.tinha) body.endereco = endEd || null;
   apiFetch('/api/clientes/'+id, {method:'PUT', body:body})
   .then(function(){ toast('Cliente atualizado! ✅','ok'); closeM('m-edit-cli'); loadClientes(); })
   .catch(function(e){ toast('Erro: '+(e.message||'tente novamente'),'er'); })
@@ -8210,6 +8234,7 @@ function dispensarBannerPWA() {
     <div class="mb">
       <div class="fr"><div class="fg"><label class="fl">Nome completo*</label><input class="fc" id="cli-n" placeholder="Ana Paula Silva"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="cli-nasc"/></div></div>
       <div class="fr"><div class="fg"><label class="fl">Telefone/WhatsApp</label><input class="fc" id="cli-t" placeholder="(11) 99999-0000"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="cli-e" placeholder="email@email.com"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">CPF</label><input class="fc" id="cli-cpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"/></div><div class="fg"><label class="fl">Endereço</label><input class="fc" id="cli-end" placeholder="Rua, nº, bairro, cidade"/></div></div>
       <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="cli-o" rows="2" placeholder="Alergias, preferências..."></textarea></div>
       <div class="fg"><label class="fl">Como nos conheceu?</label><select class="fc" id="cli-k"><option>Instagram</option><option>Indicação</option><option>Google</option><option>Passante</option><option>Outro</option></select></div>
     </div>
@@ -8543,6 +8568,7 @@ function dispensarBannerPWA() {
       <input type="hidden" id="ecl-id"/>
       <div class="fr"><div class="fg"><label class="fl">Nome*</label><input class="fc" id="ecl-n"/></div><div class="fg"><label class="fl">Nascimento</label><input type="date" class="fc" id="ecl-nasc"/></div></div>
       <div class="fr"><div class="fg"><label class="fl">Telefone</label><input class="fc" id="ecl-t"/></div><div class="fg"><label class="fl">E-mail</label><input type="email" class="fc" id="ecl-e"/></div></div>
+      <div class="fr"><div class="fg"><label class="fl">CPF</label><input class="fc" id="ecl-cpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"/></div><div class="fg"><label class="fl">Endereço</label><input class="fc" id="ecl-end" placeholder="Rua, nº, bairro, cidade"/></div></div>
       <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="ecl-o" rows="2"></textarea></div>
       <div class="fg"><label class="fl">Status</label><select class="fc" id="ecl-s"><option value="ativo">Ativo</option><option value="vip">VIP</option><option value="inativo">Inativo</option><option value="novo">Novo</option></select></div>
     </div>
